@@ -1,6 +1,8 @@
 """Auth endpoints."""
 from __future__ import annotations
 
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -59,11 +61,15 @@ async def login(
             user_name=settings.superadmin_name,
         )
 
-    # Caso 2: viewer en DB
+    # Caso 2: analyst o client en DB
     result = await db.execute(select(User).where(User.email == email))
     user = result.scalar_one_or_none()
     if not user or not user.is_active or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales inválidas")
+
+    # Marca último login (para usage analytics)
+    user.last_login_at = datetime.utcnow()
+    await db.commit()
 
     await record_action(
         db,
@@ -72,6 +78,7 @@ async def login(
         resource_type="auth",
         ip=client_ip(request),
         user_agent=request.headers.get("user-agent"),
+        extra={"role": user.role},
     )
     return TokenPair(
         access_token=create_access_token(user.email, user.role),
@@ -79,6 +86,7 @@ async def login(
         user_email=user.email,
         user_role=user.role,
         user_name=user.full_name,
+        user_photo_url=user.photo_url,
     )
 
 
@@ -117,6 +125,7 @@ async def refresh_token(
         user_email=user.email,
         user_role=user.role,
         user_name=user.full_name,
+        user_photo_url=user.photo_url,
     )
 
 
@@ -127,4 +136,7 @@ async def me(user: CurrentUser = Depends(get_current_user)) -> dict:
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
+        "photo_url": user.photo_url,
+        "can_upload": user.can_upload,
+        "can_manage_publish": user.can_manage_publish,
     }

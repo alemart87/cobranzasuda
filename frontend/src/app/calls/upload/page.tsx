@@ -78,59 +78,58 @@ export default function CallsUploadPage() {
 
   return (
     <AppShell>
-      <h1 className="text-2xl font-bold text-brand-secondary mb-1">Subir Reporte de Llamadas</h1>
-      <p className="text-sm text-brand-neutral-500 mb-6">
-        Archivo Reporte Cobranzas con la hoja <b>Bsse de llamadas</b> (export de Genesys / contact center).
-      </p>
-      <form
-        onSubmit={onSubmit}
-        className="bg-white border border-brand-neutral-200 rounded-lg p-6 max-w-2xl space-y-5"
-      >
+      <div className="mb-6">
+        <h1 className="font-display text-3xl text-brand-ink uppercase">Subir Reporte de Llamadas</h1>
+        <p className="text-sm text-brand-slate mt-1">
+          Archivo Excel del contact center con la hoja <b>Bsse de llamadas</b>. Acepta <code>.xlsx</code> y <code>.xls</code>.
+        </p>
+      </div>
+
+      <form onSubmit={onSubmit} className="card p-7 max-w-3xl space-y-5">
         <div>
-          <label className="block text-sm font-medium text-brand-neutral-700 mb-1">
-            Archivo Excel (.xlsx)
-          </label>
+          <label className="label">Archivo Excel</label>
+          <p className="text-xs text-brand-slate -mt-1 mb-1.5">XLSX o XLS exportado de Genesys / Voicenter</p>
           <input
             type="file"
             accept=".xlsx,.xls"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="block w-full text-sm text-brand-neutral-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-brand-primary file:text-white hover:file:bg-brand-secondary"
+            className="block w-full text-sm text-brand-slate file:mr-4 file:py-2.5 file:px-5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:uppercase file:tracking-wider2 file:bg-brand-ink file:text-white hover:file:bg-brand-primary cursor-pointer"
           />
           {file && (
-            <p className="mt-1 text-xs text-brand-neutral-600">
-              ✓ {file.name} ({(file.size / 1024).toFixed(1)} KB)
+            <p className="mt-1.5 text-xs text-emerald-700 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {file.name} ({(file.size / 1024).toFixed(1)} KB)
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-brand-neutral-700 mb-1">
-            Mes del reporte
-          </label>
+          <label className="label">Mes del reporte</label>
           <input
             type="date"
             value={periodMonth}
             onChange={(e) => setPeriodMonth(e.target.value)}
-            className="px-3 py-2 border border-brand-neutral-300 rounded-md"
+            className="input max-w-xs"
           />
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md p-3">
+          <div className="bg-brand-primary-light border border-brand-primary/30 text-brand-primary-dark text-sm rounded-md p-3">
             {error}
           </div>
         )}
 
         {status && status !== "completed" && !error && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-md p-3">
-            Estado: <b>{status}</b>… (procesando)
+          <div className="bg-brand-cyan/10 border border-brand-cyan/30 text-brand-cyan text-sm rounded-md p-3 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-brand-cyan animate-pulse" />
+            Estado: <b>{status}</b> · procesando…
           </div>
         )}
 
         <button
           type="submit"
           disabled={submitting || !!uploadId}
-          className="bg-brand-primary text-white px-5 py-2 rounded-md font-medium hover:bg-brand-secondary disabled:opacity-60"
+          className="btn-primary text-base"
         >
           {submitting ? "Subiendo…" : "Procesar archivo"}
         </button>

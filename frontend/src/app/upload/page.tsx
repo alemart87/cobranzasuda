@@ -82,38 +82,45 @@ export default function UploadPage() {
 
   return (
     <AppShell>
-      <h1 className="text-2xl font-bold text-brand-secondary mb-1">Subir archivos del mes</h1>
-      <p className="text-sm text-brand-neutral-500 mb-6">
-        Cargar los 3 archivos requeridos: DXP Voicenter, Boca de Cobranzas y Cobrado 186.
-      </p>
-      <form onSubmit={onSubmit} className="bg-white border border-brand-neutral-200 rounded-lg p-6 max-w-2xl space-y-5">
-        <FileInput label="DXP Voicenter (XLSX)" file={dxp} onChange={setDxp} />
-        <FileInput label="Boca de Cobranzas (XLSX)" file={boca} onChange={setBoca} />
-        <FileInput label="Cobrado 186 Voicenter (XLSX)" file={cobrado} onChange={setCobrado} />
+      <div className="mb-6">
+        <h1 className="font-display text-3xl text-brand-ink uppercase">Subir Cobranzas</h1>
+        <p className="text-sm text-brand-slate mt-1">
+          Cargar los 3 archivos requeridos del mes: DXP Voicenter, Boca de Cobranzas y Cobrado 186.
+        </p>
+      </div>
+
+      <form onSubmit={onSubmit} className="card p-7 max-w-3xl space-y-5">
+        <FileInput label="DXP Voicenter" hint="Archivo XLSX exportado de DXP" file={dxp} onChange={setDxp} />
+        <FileInput label="Boca de Cobranzas" hint="Pagos del mes en XLSX" file={boca} onChange={setBoca} />
+        <FileInput label="Cobrado 186 Voicenter" hint="Pagos cobrados directamente" file={cobrado} onChange={setCobrado} />
+
         <div>
-          <label className="block text-sm font-medium text-brand-neutral-700 mb-1">Mes del reporte</label>
+          <label className="label">Mes del reporte</label>
           <input
             type="date"
             value={periodMonth}
             onChange={(e) => setPeriodMonth(e.target.value)}
-            className="px-3 py-2 border border-brand-neutral-300 rounded-md"
+            className="input max-w-xs"
           />
         </div>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md p-3">{error}</div>
+          <div className="bg-brand-primary-light border border-brand-primary/30 text-brand-primary-dark text-sm rounded-md p-3">
+            {error}
+          </div>
         )}
 
         {status && status !== "completed" && !error && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 text-sm rounded-md p-3">
-            Estado: <b>{status}</b>… (procesando en segundo plano)
+          <div className="bg-brand-cyan/10 border border-brand-cyan/30 text-brand-cyan text-sm rounded-md p-3 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-brand-cyan animate-pulse" />
+            Estado: <b>{status}</b> · procesando en segundo plano…
           </div>
         )}
 
         <button
           type="submit"
           disabled={submitting || !!uploadId}
-          className="bg-brand-primary text-white px-5 py-2 rounded-md font-medium hover:bg-brand-secondary disabled:opacity-60"
+          className="btn-primary text-base"
         >
           {submitting ? "Subiendo…" : "Procesar archivos"}
         </button>
@@ -124,25 +131,29 @@ export default function UploadPage() {
 
 function FileInput({
   label,
+  hint,
   file,
   onChange,
 }: {
   label: string;
+  hint?: string;
   file: File | null;
   onChange: (f: File | null) => void;
 }) {
   return (
     <div>
-      <label className="block text-sm font-medium text-brand-neutral-700 mb-1">{label}</label>
+      <label className="label">{label}</label>
+      {hint && <p className="text-xs text-brand-slate -mt-1 mb-1.5">{hint}</p>}
       <input
         type="file"
         accept=".xlsx,.xls"
         onChange={(e) => onChange(e.target.files?.[0] ?? null)}
-        className="block w-full text-sm text-brand-neutral-700 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-brand-primary file:text-white hover:file:bg-brand-secondary"
+        className="block w-full text-sm text-brand-slate file:mr-4 file:py-2.5 file:px-5 file:rounded-md file:border-0 file:text-xs file:font-semibold file:uppercase file:tracking-wider2 file:bg-brand-ink file:text-white hover:file:bg-brand-primary cursor-pointer"
       />
       {file && (
-        <p className="mt-1 text-xs text-brand-neutral-600">
-          ✓ {file.name} ({(file.size / 1024).toFixed(1)} KB)
+        <p className="mt-1.5 text-xs text-emerald-700 flex items-center gap-1.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+          {file.name} ({(file.size / 1024).toFixed(1)} KB)
         </p>
       )}
     </div>

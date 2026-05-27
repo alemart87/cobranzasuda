@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, date
 from typing import Optional
 
-from sqlalchemy import DateTime, Date, Integer, Numeric, String, JSON, func
+from sqlalchemy import Boolean, DateTime, Date, Integer, Numeric, String, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.database import Base
@@ -31,5 +31,10 @@ class CallReport(Base):
     dias_operativos: Mapped[int] = mapped_column(Integer, default=0)
     efectivas_total: Mapped[int] = mapped_column(Integer, default=0)
     aht_seg: Mapped[float] = mapped_column(Numeric(10, 2), default=0)
+
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    published_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     data: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)

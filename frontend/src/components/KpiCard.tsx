@@ -2,22 +2,27 @@ interface KpiCardProps {
   label: string;
   value: string;
   hint?: string;
-  accent?: "primary" | "secondary" | "danger" | "neutral";
+  accent?: "primary" | "secondary" | "danger" | "neutral" | "cyan" | "purple" | "orange";
 }
 
 const ACCENT_CLS: Record<NonNullable<KpiCardProps["accent"]>, string> = {
-  primary: "border-brand-primary",
-  secondary: "border-brand-secondary",
-  danger: "border-brand-accent",
-  neutral: "border-brand-neutral-300",
+  primary: "border-l-brand-primary",
+  secondary: "border-l-brand-ink",
+  danger: "border-l-brand-primary",
+  neutral: "border-l-brand-mist",
+  cyan: "border-l-brand-cyan",
+  purple: "border-l-brand-purple",
+  orange: "border-l-brand-orange",
 };
 
 export function KpiCard({ label, value, hint, accent = "neutral" }: KpiCardProps) {
   return (
-    <div className={`bg-white rounded-lg p-4 border-l-4 shadow-sm ${ACCENT_CLS[accent]}`}>
-      <div className="text-xs uppercase tracking-wide text-brand-neutral-500">{label}</div>
-      <div className="mt-1 text-2xl font-bold text-brand-secondary">{value}</div>
-      {hint && <div className="mt-1 text-xs text-brand-neutral-600">{hint}</div>}
+    <div className={`card p-5 border-l-[3px] ${ACCENT_CLS[accent]}`}>
+      <div className="text-[10px] uppercase tracking-wider2 font-semibold text-brand-slate">
+        {label}
+      </div>
+      <div className="mt-1.5 font-display text-3xl text-brand-ink">{value}</div>
+      {hint && <div className="mt-1.5 text-xs text-brand-slate">{hint}</div>}
     </div>
   );
 }

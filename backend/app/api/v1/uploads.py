@@ -26,7 +26,7 @@ from ...jobs.runner import process_upload
 from ...models.upload import Upload
 from ...schemas.upload import UploadList, UploadRead
 from ...services.audit_service import record_action
-from ..deps import CurrentUser, client_ip, get_current_user
+from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
@@ -63,7 +63,7 @@ async def create_upload(
     boca: UploadFile = File(..., description="Boca de Cobranzas XLSX"),
     cobrado: UploadFile = File(..., description="Cobrado 186 Voicenter XLSX"),
     period_month: Optional[str] = Form(None, description="YYYY-MM-01 (opcional)"),
-    user: CurrentUser = Depends(get_current_user),
+    user: CurrentUser = Depends(require_analyst_or_admin),
     db: AsyncSession = Depends(get_db),
 ) -> Upload:
     period_date = None

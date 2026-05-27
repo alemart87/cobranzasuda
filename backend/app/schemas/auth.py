@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, EmailStr
 
 
@@ -13,6 +15,7 @@ class TokenPair(BaseModel):
     user_email: str
     user_role: str
     user_name: str
+    user_photo_url: Optional[str] = None
 
 
 class TokenRefresh(BaseModel):

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
-import { apiFetch } from "@/lib/api";
-import { formatGs, formatInt, formatDate } from "@/lib/format";
+import { apiFetch, getUser } from "@/lib/api";
+import { formatDate, formatGs, formatInt } from "@/lib/format";
 
 interface ReportSummary {
   id: string;
@@ -18,81 +18,97 @@ interface ReportSummary {
   asegurados_en_mora: number;
   recupero_total: number;
   recupero_sobre_mora: number;
+  is_published: boolean;
+}
+
+interface CallSummary {
+  id: string;
+  period_month: string | null;
+  total_llamadas: number;
+  total_talk_seg: number;
+  asesores_activos: number;
+  is_published: boolean;
 }
 
 export default function DashboardPage() {
-  const [latest, setLatest] = useState<ReportSummary | null>(null);
+  const [report, setReport] = useState<ReportSummary | null>(null);
+  const [calls, setCalls] = useState<CallSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
-    apiFetch<{ items: ReportSummary[] }>("/api/v1/reports")
-      .then((data) => setLatest(data.items[0] ?? null))
-      .finally(() => setLoading(false));
+    setUser(getUser());
+    Promise.all([
+      apiFetch<{ items: ReportSummary[] }>("/api/v1/reports").then((d) => setReport(d.items[0] ?? null)),
+      apiFetch<{ items: CallSummary[] }>("/api/v1/calls/reports").then((d) => setCalls(d.items[0] ?? null)),
+    ]).finally(() => setLoading(false));
   }, []);
+
+  const isClient = user?.role === "client";
 
   return (
     <AppShell>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-brand-secondary">Dashboard</h1>
-        <p className="text-sm text-brand-neutral-500">Resumen del reporte más reciente</p>
+      <div className="mb-8">
+        <h1 className="font-display text-4xl text-brand-ink uppercase">
+          Hola, <span className="text-brand-primary">{user?.full_name?.split(" ")[0] ?? ""}</span>
+        </h1>
+        <p className="text-sm text-brand-slate mt-1">
+          {isClient
+            ? "Reportes más recientes publicados para visualización."
+            : "Resumen ejecutivo de los reportes más recientes."}
+        </p>
       </div>
 
-      {loading && <div className="text-brand-neutral-500">Cargando…</div>}
+      {loading && <div className="text-brand-slate">Cargando…</div>}
 
-      {!loading && !latest && (
-        <div className="bg-white border border-brand-neutral-200 rounded-lg p-8 text-center">
-          <p className="text-brand-neutral-600 mb-4">
-            No hay reportes generados todavía.
+      {!loading && !report && !calls && (
+        <div className="card p-12 text-center">
+          <p className="text-brand-slate mb-4">
+            {isClient ? "Aún no hay reportes publicados." : "No hay reportes generados todavía."}
           </p>
-          <Link
-            href="/upload"
-            className="inline-block bg-brand-primary text-white px-4 py-2 rounded-md font-medium hover:bg-brand-secondary"
-          >
-            Subir primer archivo
-          </Link>
+          {!isClient && (
+            <Link href="/upload" className="btn-primary">+ Subir primer archivo</Link>
+          )}
         </div>
       )}
 
-      {!loading && latest && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <KpiCard label="Asegurados únicos" value={formatInt(latest.asegurados_total)} accent="primary" />
-            <KpiCard label="Pólizas" value={formatInt(latest.polizas_total)} accent="neutral" />
-            <KpiCard label="Saldo total cartera" value={formatGs(latest.saldo_total)} accent="secondary" />
-            <KpiCard label="Saldo en mora" value={formatGs(latest.vencido_total)} accent="danger" />
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <KpiCard
-              label="Asegurados en mora"
-              value={formatInt(latest.asegurados_en_mora)}
-              accent="danger"
-            />
-            <KpiCard
-              label="Recupero del mes"
-              value={formatGs(latest.recupero_total)}
-              accent="primary"
-            />
-            <KpiCard
-              label="Recupero efectivo sobre mora"
-              value={formatGs(latest.recupero_sobre_mora)}
-              accent="primary"
-            />
-          </div>
-          <div className="bg-white border border-brand-neutral-200 rounded-lg p-6">
-            <div className="flex items-baseline justify-between mb-3">
-              <h2 className="text-lg font-semibold text-brand-secondary">Último reporte</h2>
-              <span className="text-xs text-brand-neutral-500">
-                Generado: {formatDate(latest.generated_at)}
-              </span>
-            </div>
-            <Link
-              href={`/reports/${latest.id}`}
-              className="inline-block bg-brand-primary text-white px-4 py-2 rounded-md font-medium hover:bg-brand-secondary"
-            >
+      {/* Cobranzas */}
+      {report && (
+        <section className="mb-10">
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="font-display text-2xl text-brand-ink uppercase">
+              Cobranzas <span className="text-brand-slate text-base ml-2">· {report.period_month}</span>
+            </h2>
+            <Link href={`/reports/${report.id}`} className="text-sm font-semibold text-brand-primary hover:underline">
               Ver reporte completo →
             </Link>
           </div>
-        </>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KpiCard label="Asegurados" value={formatInt(report.asegurados_total)} accent="primary" />
+            <KpiCard label="Saldo total" value={formatGs(report.saldo_total)} accent="secondary" />
+            <KpiCard label="Saldo en mora" value={formatGs(report.vencido_total)} hint={`${report.asegurados_en_mora} asegurados`} accent="danger" />
+            <KpiCard label="Recupero del mes" value={formatGs(report.recupero_total)} accent="cyan" />
+          </div>
+        </section>
+      )}
+
+      {/* Llamadas */}
+      {calls && (
+        <section className="mb-10">
+          <div className="flex items-baseline justify-between mb-4">
+            <h2 className="font-display text-2xl text-brand-ink uppercase">
+              Llamadas <span className="text-brand-slate text-base ml-2">· {calls.period_month}</span>
+            </h2>
+            <Link href={`/calls/reports/${calls.id}`} className="text-sm font-semibold text-brand-primary hover:underline">
+              Ver reporte completo →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <KpiCard label="Total llamadas" value={formatInt(calls.total_llamadas)} accent="cyan" />
+            <KpiCard label="Talk time" value={`${(calls.total_talk_seg / 3600).toFixed(1)} hs`} accent="purple" />
+            <KpiCard label="Asesores activos" value={`${calls.asesores_activos}`} accent="orange" />
+          </div>
+        </section>
       )}
     </AppShell>
   );

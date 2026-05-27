@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Brand } from "@/components/Brand";
 import { setSession } from "@/lib/api";
 
 export default function LoginPage() {
@@ -31,6 +30,7 @@ export default function LoginPage() {
         email: data.user_email,
         role: data.user_role,
         full_name: data.user_name,
+        photo_url: data.user_photo_url ?? null,
       });
       router.push("/dashboard");
     } catch (err: any) {
@@ -41,48 +41,106 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-brand-neutral-50 px-4">
-      <div className="w-full max-w-md bg-white rounded-lg shadow-md p-8 border border-brand-neutral-200">
-        <div className="flex justify-center mb-6"><Brand /></div>
-        <h1 className="text-2xl font-bold text-brand-secondary text-center mb-1">Iniciar sesión</h1>
-        <p className="text-sm text-brand-neutral-500 text-center mb-6">
-          Acceso protegido — solicite credenciales al administrador.
-        </p>
-        <form onSubmit={onSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-brand-neutral-700 mb-1">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full px-3 py-2 border border-brand-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
-              placeholder="admin@voicenter.com.py"
-            />
+    <div className="min-h-screen grid lg:grid-cols-2">
+      {/* Lado izquierdo: panel de marca */}
+      <div className="hidden lg:flex flex-col justify-between p-12 text-white relative overflow-hidden"
+           style={{
+             background: "linear-gradient(135deg, #B81F18 0%, #E6332A 55%, #F39200 100%)",
+           }}>
+        <div className="flex items-center gap-4">
+          <div className="bg-white rounded-lg px-4 py-2.5 shadow-elevated">
+            <img src="/logo-voicenter-color.png" alt="Voicenter" className="h-9 w-auto block" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-brand-neutral-700 mb-1">Contraseña</label>
-            <input
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-brand-neutral-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-primary"
-            />
-          </div>
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-md p-3">
-              {error}
+        </div>
+
+        <div className="space-y-6 max-w-md">
+          <h1 className="font-display text-5xl uppercase leading-tight">
+            Cobranzas<br />
+            <span className="text-white/90">Sudameris Seguros</span>
+          </h1>
+          <p className="text-white/90 text-base leading-relaxed">
+            Plataforma de gestión y análisis mensual de cartera. Procesamos los datos de DXP, Boca de Cobranzas y reportes de contact center para entregar dashboards listos para decisión.
+          </p>
+          <div className="flex gap-6 pt-4">
+            <div>
+              <div className="font-display text-3xl">3</div>
+              <div className="text-[11px] uppercase tracking-wider2 text-white/70">Archivos</div>
             </div>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-brand-primary text-white py-2 rounded-md font-medium hover:bg-brand-secondary transition-colors disabled:opacity-60"
-          >
-            {loading ? "Verificando…" : "Ingresar"}
-          </button>
-        </form>
+            <div className="border-l border-white/20 pl-6">
+              <div className="font-display text-3xl">5+</div>
+              <div className="text-[11px] uppercase tracking-wider2 text-white/70">Dashboards</div>
+            </div>
+            <div className="border-l border-white/20 pl-6">
+              <div className="font-display text-3xl">1</div>
+              <div className="text-[11px] uppercase tracking-wider2 text-white/70">Clic</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="text-[11px] text-white/70 uppercase tracking-wider2">
+          Operado por Voicenter S.A.
+        </div>
+
+        {/* decorativo */}
+        <div className="absolute -right-32 -bottom-32 w-96 h-96 rounded-full bg-white/5 blur-3xl" />
+        <div className="absolute -right-20 top-20 w-48 h-48 rounded-full bg-white/5 blur-2xl" />
+      </div>
+
+      {/* Lado derecho: formulario */}
+      <div className="flex items-center justify-center px-6 py-12 bg-brand-bg-soft">
+        <div className="w-full max-w-md">
+          {/* logo mobile */}
+          <div className="lg:hidden flex justify-center mb-8">
+            <img src="/logo-voicenter-color.png" alt="Voicenter" className="h-12 w-auto" />
+          </div>
+
+          <div className="mb-8">
+            <h2 className="font-display text-3xl text-brand-ink uppercase">Iniciar sesión</h2>
+            <p className="text-sm text-brand-slate mt-2">
+              Acceso protegido. Solicite credenciales al administrador.
+            </p>
+          </div>
+
+          <form onSubmit={onSubmit} className="space-y-5">
+            <div>
+              <label htmlFor="email" className="label">Correo electrónico</label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input"
+                placeholder="usuario@sudameris.com.py"
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label htmlFor="password" className="label">Contraseña</label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                autoComplete="current-password"
+              />
+            </div>
+            {error && (
+              <div className="bg-brand-primary-light border border-brand-primary/30 text-brand-primary-dark text-sm rounded-md px-3 py-2.5">
+                {error}
+              </div>
+            )}
+            <button type="submit" disabled={loading} className="btn-primary w-full text-base py-3">
+              {loading ? "Verificando…" : "Ingresar a la plataforma"}
+            </button>
+          </form>
+
+          <div className="mt-10 pt-6 border-t border-brand-border text-center text-[11px] text-brand-slate uppercase tracking-wider2">
+            © {new Date().getFullYear()} Voicenter S.A.
+          </div>
+        </div>
       </div>
     </div>
   );

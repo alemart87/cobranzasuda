@@ -28,10 +28,27 @@ class CurrentUser:
     email: str
     role: str
     full_name: str
+    photo_url: Optional[str] = None
 
     @property
     def is_superadmin(self) -> bool:
         return self.role == "superadmin"
+
+    @property
+    def is_analyst(self) -> bool:
+        return self.role == "analyst"
+
+    @property
+    def is_client(self) -> bool:
+        return self.role == "client"
+
+    @property
+    def can_upload(self) -> bool:
+        return self.role in ("superadmin", "analyst")
+
+    @property
+    def can_manage_publish(self) -> bool:
+        return self.role in ("superadmin", "analyst")
 
 
 async def get_current_user(
@@ -62,18 +79,28 @@ async def get_current_user(
             full_name=settings.superadmin_name,
         )
 
-    # Viewer en DB
+    # Analyst o Client en DB
     result = await db.execute(select(User).where(User.email == subject))
     user = result.scalar_one_or_none()
     if not user or not user.is_active:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Usuario inválido o inactivo")
 
-    return CurrentUser(id=user.id, email=user.email, role=user.role, full_name=user.full_name)
+    return CurrentUser(
+        id=user.id, email=user.email, role=user.role,
+        full_name=user.full_name, photo_url=user.photo_url,
+    )
 
 
 async def require_superadmin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
     if not user.is_superadmin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Se requiere rol superadmin")
+    return user
+
+
+async def require_analyst_or_admin(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Para acciones de carga / publicación / eliminación: superadmin o analyst."""
+    if user.role not in ("superadmin", "analyst"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Requiere rol analista o superadmin")
     return user
 
 

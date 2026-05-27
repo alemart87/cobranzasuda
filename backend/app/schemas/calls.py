@@ -36,6 +36,9 @@ class CallReportSummary(BaseModel):
     dias_operativos: int
     efectivas_total: int
     aht_seg: float
+    is_published: bool = False
+    published_at: Optional[datetime] = None
+    title: Optional[str] = None
 
 
 class CallReportDetail(CallReportSummary):

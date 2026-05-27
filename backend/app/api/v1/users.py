@@ -1,14 +1,18 @@
-"""User management — only superadmin can manage viewers."""
+"""User management — only superadmin can manage analysts/clients."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+import hashlib
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.config import settings
 from ...core.database import get_db
 from ...core.security import hash_password
 from ...models.user import User
-from ...schemas.user import UserCreate, UserRead, UserUpdate
+from ...schemas.user import PasswordReset, UserCreate, UserRead, UserUpdate
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, require_superadmin
 
@@ -83,6 +87,9 @@ async def update_user(
     if payload.password is not None:
         target.hashed_password = hash_password(payload.password)
         changes["password_changed"] = True
+    if payload.photo_url is not None:
+        target.photo_url = payload.photo_url
+        changes["photo_url"] = payload.photo_url
 
     await db.commit()
     await db.refresh(target)
@@ -99,6 +106,81 @@ async def update_user(
     return target
 
 
+@router.post("/{user_id}/reset-password", response_model=UserRead)
+async def reset_password(
+    user_id: str,
+    payload: PasswordReset,
+    request: Request,
+    user: CurrentUser = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado")
+    target.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+    await db.refresh(target)
+    await record_action(
+        db,
+        user_id=user.id,
+        action="reset_password",
+        resource_type="user",
+        resource_id=user_id,
+        ip=client_ip(request),
+        extra={"target_email": target.email},
+    )
+    return target
+
+
+@router.post("/{user_id}/photo", response_model=UserRead)
+async def upload_user_photo(
+    user_id: str,
+    request: Request,
+    file: UploadFile = File(...),
+    user: CurrentUser = Depends(require_superadmin),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    target = await db.get(User, user_id)
+    if not target:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado")
+
+    if file.content_type not in ("image/png", "image/jpeg", "image/webp"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Solo PNG, JPEG o WEBP")
+
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "Máximo 5 MB")
+
+    ext = (file.filename or "").split(".")[-1].lower() or "png"
+    photos_dir = settings.upload_path / "photos"
+    photos_dir.mkdir(parents=True, exist_ok=True)
+    sha = hashlib.sha256(content).hexdigest()[:16]
+    fname = f"{user_id}_{sha}.{ext}"
+    (photos_dir / fname).write_bytes(content)
+
+    photo_url = f"/api/v1/users/{user_id}/photo/{fname}"
+    target.photo_url = photo_url
+    await db.commit()
+    await db.refresh(target)
+
+    await record_action(
+        db, user_id=user.id, action="upload_user_photo", resource_type="user",
+        resource_id=user_id, ip=client_ip(request),
+    )
+    return target
+
+
+@router.get("/{user_id}/photo/{fname}")
+async def get_user_photo(user_id: str, fname: str):
+    """Sirve la foto del usuario desde el disco persistente."""
+    from fastapi.responses import FileResponse
+    photos_dir = settings.upload_path / "photos"
+    full = photos_dir / fname
+    if not full.exists():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Foto no encontrada")
+    return FileResponse(str(full))
+
+
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: str,
@@ -109,14 +191,10 @@ async def delete_user(
     target = await db.get(User, user_id)
     if not target:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado")
-    target.is_active = False  # soft delete
+    target.is_active = False
     await db.commit()
     await record_action(
-        db,
-        user_id=user.id,
-        action="delete_user",
-        resource_type="user",
-        resource_id=user_id,
-        ip=client_ip(request),
+        db, user_id=user.id, action="delete_user", resource_type="user",
+        resource_id=user_id, ip=client_ip(request),
     )
     return {"status": "deactivated", "user_id": user_id}

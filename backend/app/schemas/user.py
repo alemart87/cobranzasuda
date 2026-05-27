@@ -8,13 +8,18 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: str = Field(min_length=2, max_length=255)
-    role: str = Field(default="viewer", pattern="^(viewer|superadmin)$")
+    role: str = Field(default="analyst", pattern="^(analyst|client)$")
 
 
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     is_active: Optional[bool] = None
     password: Optional[str] = Field(default=None, min_length=8)
+    photo_url: Optional[str] = None
+
+
+class PasswordReset(BaseModel):
+    new_password: str = Field(min_length=8)
 
 
 class UserRead(BaseModel):
@@ -25,4 +30,6 @@ class UserRead(BaseModel):
     full_name: str
     role: str
     is_active: bool
+    photo_url: Optional[str] = None
     created_at: datetime
+    last_login_at: Optional[datetime] = None

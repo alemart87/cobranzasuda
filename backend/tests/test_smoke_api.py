@@ -43,7 +43,7 @@ async def test_health():
 
 
 @pytest.mark.asyncio
-async def test_login_superadmin_and_create_viewer():
+async def test_login_superadmin_and_create_users():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         token = await _login_admin(ac)
@@ -53,36 +53,63 @@ async def test_login_superadmin_and_create_viewer():
         assert r.status_code == 200
         assert r.json()["role"] == "superadmin"
 
+        # Crear analista
         r = await ac.post(
             "/api/v1/users",
             json={
-                "email": "viewer@voicenter.com.py",
-                "password": "Viewer1234!",
-                "full_name": "Viewer Demo",
-                "role": "viewer",
+                "email": "analyst@voicenter.com.py",
+                "password": "Analyst1234!",
+                "full_name": "Analista Demo",
+                "role": "analyst",
             },
             headers=headers,
         )
         assert r.status_code == 201, r.text
 
-        r = await ac.post(
-            "/api/v1/auth/login",
-            json={"email": "viewer@voicenter.com.py", "password": "Viewer1234!"},
-        )
-        assert r.status_code == 200
-        viewer_token = r.json()["access_token"]
-        assert r.json()["user_role"] == "viewer"
-
-        # Viewer no puede crear usuarios
+        # Crear cliente
         r = await ac.post(
             "/api/v1/users",
             json={
-                "email": "x@x.com",
-                "password": "Xxxxxxxx1!",
-                "full_name": "X",
-                "role": "viewer",
+                "email": "client@sudameris.com.py",
+                "password": "Client1234!",
+                "full_name": "Cliente Demo",
+                "role": "client",
             },
-            headers={"Authorization": f"Bearer {viewer_token}"},
+            headers=headers,
+        )
+        assert r.status_code == 201, r.text
+
+        # Login analista
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": "analyst@voicenter.com.py", "password": "Analyst1234!"},
+        )
+        assert r.status_code == 200
+        analyst_token = r.json()["access_token"]
+        assert r.json()["user_role"] == "analyst"
+
+        # Analista NO puede crear usuarios
+        r = await ac.post(
+            "/api/v1/users",
+            json={"email": "x@x.com", "password": "Xxxxxxxx1!", "full_name": "X", "role": "client"},
+            headers={"Authorization": f"Bearer {analyst_token}"},
+        )
+        assert r.status_code == 403
+
+        # Cliente NO puede subir archivos
+        r = await ac.post(
+            "/api/v1/auth/login",
+            json={"email": "client@sudameris.com.py", "password": "Client1234!"},
+        )
+        client_token = r.json()["access_token"]
+        r = await ac.post(
+            "/api/v1/uploads",
+            headers={"Authorization": f"Bearer {client_token}"},
+            files={
+                "dxp": ("d.xlsx", b"x", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                "boca": ("b.xlsx", b"x", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                "cobrado": ("c.xlsx", b"x", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            },
         )
         assert r.status_code == 403
 

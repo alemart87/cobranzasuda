@@ -19,6 +19,9 @@ class ReportSummary(BaseModel):
     recupero_total: float
     recupero_sobre_mora: float
     asegurados_pagaron: int
+    is_published: bool = False
+    published_at: Optional[datetime] = None
+    title: Optional[str] = None
 
 
 class ReportDetail(ReportSummary):

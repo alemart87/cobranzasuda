@@ -7,6 +7,7 @@ export interface CurrentUserInfo {
   email: string;
   role: string;
   full_name: string;
+  photo_url?: string | null;
 }
 
 export function setSession(token: string, refreshToken: string, user: CurrentUserInfo) {
