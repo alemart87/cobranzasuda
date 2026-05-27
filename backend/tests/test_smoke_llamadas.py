@@ -27,6 +27,17 @@ def test_parse_volume(llamadas_rows):
     assert "duracion_seg" in sample
 
 
+def test_load_xls_format():
+    """Smoke: el loader debe abrir archivos .xls antiguos (xlrd)."""
+    from app.services.parsers._excel_loader import load_excel
+    f = FIXTURES / "reporte_abril.xls"
+    if not f.exists():
+        pytest.skip("Fixture .xls no disponible")
+    sheets = load_excel(f)
+    assert len(sheets) > 0
+    assert any(len(rows) > 100 for rows in sheets.values())
+
+
 def test_analyze_kpis(llamadas_rows):
     result = analyze_llamadas(llamadas_rows)
     k = result["kpis"]

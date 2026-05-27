@@ -1,7 +1,6 @@
 """Parse 'Bsse de llamadas' sheet from Reporte Cobranzas.
 
-Cada fila es una llamada con: usuario, fecha, duración, dirección.
-La duración viene como string `HH:MM:SS.mmm` o como time/timedelta de Excel.
+Soporta tanto .xls como .xlsx — el loader detecta el formato por magic bytes.
 """
 from __future__ import annotations
 
@@ -10,7 +9,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
 
-import openpyxl
+from ._excel_loader import load_excel
 
 
 SHEET_CANDIDATES = ["Bsse de llamadas", "Base de llamadas", "Bsse_de_llamadas"]
@@ -20,6 +19,8 @@ DUR_RE = re.compile(r"(\d+):(\d+):(\d+(?:\.\d+)?)")
 def _parse_duration(value: Any) -> float:
     """Returns duration in seconds (float)."""
     if value is None or value == "":
+        return 0.0
+    if isinstance(value, bool):
         return 0.0
     if isinstance(value, (int, float)):
         # Excel almacena duración como fracción de día
@@ -52,26 +53,30 @@ def _parse_fecha(value: Any) -> datetime | None:
 
 
 def parse_llamadas(path: str | Path) -> list[dict[str, Any]]:
-    wb = openpyxl.load_workbook(path, data_only=True)
-    sheet_name = next((s for s in SHEET_CANDIDATES if s in wb.sheetnames), None)
-    if sheet_name is None:
-        # buscar cualquier hoja que tenga >100 filas y columna "Usuarios" o similar
-        for s in wb.sheetnames:
-            ws = wb[s]
-            if ws.max_row > 100:
-                headers = [str(ws.cell(1, c).value or "") for c in range(1, ws.max_column + 1)]
-                if any("usuario" in h.lower() or "operador" in h.lower() for h in headers):
-                    sheet_name = s
+    sheets = load_excel(path)
+
+    # Buscar la hoja correcta
+    sheet_rows: list[list[Any]] | None = None
+    for name in SHEET_CANDIDATES:
+        if name in sheets:
+            sheet_rows = sheets[name]
+            break
+    if sheet_rows is None:
+        # Fallback: cualquier hoja con >100 filas y columna "Usuario/Operador"
+        for name, rows in sheets.items():
+            if len(rows) > 100 and rows:
+                headers = [str(h or "").lower() for h in rows[0]]
+                if any("usuario" in h or "operador" in h for h in headers):
+                    sheet_rows = rows
                     break
-    if sheet_name is None:
+
+    if sheet_rows is None or len(sheet_rows) < 2:
         raise ValueError(
-            f"No se encontró hoja con datos de llamadas. Hojas disponibles: {wb.sheetnames}"
+            f"No se encontró hoja con datos de llamadas. Hojas disponibles: {list(sheets.keys())}"
         )
 
-    ws = wb[sheet_name]
-    headers = [str(ws.cell(1, c).value or "").strip() for c in range(1, ws.max_column + 1)]
+    headers = [str(h or "").strip() for h in sheet_rows[0]]
 
-    # Encontrar columnas (los headers vienen mal codificados a veces: DuraciÃ³n, DirecciÃ³n)
     def col_idx(*keywords: str) -> int | None:
         for i, h in enumerate(headers):
             low = h.lower()
@@ -92,19 +97,25 @@ def parse_llamadas(path: str | Path) -> list[dict[str, Any]]:
         )
 
     rows: list[dict[str, Any]] = []
-    for r in range(2, ws.max_row + 1):
-        usuario = ws.cell(r, idx_user + 1).value
+    for raw in sheet_rows[1:]:
+        # Asegurar índices válidos
+        def get(i: int | None) -> Any:
+            if i is None or i >= len(raw):
+                return None
+            return raw[i]
+
+        usuario = get(idx_user)
         if not usuario:
             continue
-        fecha = _parse_fecha(ws.cell(r, idx_fecha + 1).value)
-        dur_sec = _parse_duration(ws.cell(r, idx_dur + 1).value)
+        fecha = _parse_fecha(get(idx_fecha))
+        dur_sec = _parse_duration(get(idx_dur))
         rows.append({
             "usuario": str(usuario).strip(),
             "fecha": fecha,
             "duracion_seg": dur_sec,
-            "direccion": (str(ws.cell(r, idx_dir + 1).value).strip() if idx_dir is not None else "Saliente"),
-            "cola": (str(ws.cell(r, idx_cola + 1).value).strip() if idx_cola is not None and ws.cell(r, idx_cola + 1).value else ""),
-            "conclusion": (str(ws.cell(r, idx_concl + 1).value).strip() if idx_concl is not None and ws.cell(r, idx_concl + 1).value else ""),
+            "direccion": (str(get(idx_dir)).strip() if get(idx_dir) else "Saliente"),
+            "cola": (str(get(idx_cola)).strip() if get(idx_cola) else ""),
+            "conclusion": (str(get(idx_concl)).strip() if get(idx_concl) else ""),
         })
 
     return rows
