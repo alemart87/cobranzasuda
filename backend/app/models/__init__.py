@@ -5,5 +5,11 @@ from .report import Report
 from .audit import AuditLog
 from .call_upload import CallUpload
 from .call_report import CallReport
+from .gestion_upload import GestionUpload
+from .gestion_report import GestionReport
 
-__all__ = ["User", "Upload", "Report", "AuditLog", "CallUpload", "CallReport"]
+__all__ = [
+    "User", "Upload", "Report", "AuditLog",
+    "CallUpload", "CallReport",
+    "GestionUpload", "GestionReport",
+]

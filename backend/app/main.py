@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.v1 import audit, auth, calls, reports, uploads, users
+from .api.v1 import audit, auth, calls, gestiones, reports, uploads, users
 from .core.config import settings
 from .core.database import Base, engine
 from .core.logging import configure_logging, logger
@@ -29,6 +29,11 @@ MIGRATIONS_IDEMPOTENT = [
     "ALTER TABLE call_reports ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE",
     "ALTER TABLE call_reports ADD COLUMN IF NOT EXISTS published_by VARCHAR(36)",
     "ALTER TABLE call_reports ADD COLUMN IF NOT EXISTS title VARCHAR(255)",
+    # gestion_reports: publish workflow (las tablas se crean via create_all)
+    "ALTER TABLE gestion_reports ADD COLUMN IF NOT EXISTS is_published BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE gestion_reports ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE",
+    "ALTER TABLE gestion_reports ADD COLUMN IF NOT EXISTS published_by VARCHAR(36)",
+    "ALTER TABLE gestion_reports ADD COLUMN IF NOT EXISTS title VARCHAR(255)",
 ]
 
 
@@ -83,5 +88,6 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(uploads.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(calls.router, prefix="/api/v1")
+app.include_router(gestiones.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
