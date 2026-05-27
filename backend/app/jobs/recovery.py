@@ -7,22 +7,30 @@ from sqlalchemy import select
 
 from ..core.database import session_scope
 from ..core.logging import logger
+from ..models.call_upload import CallUpload
 from ..models.upload import Upload
+from .call_runner import process_call_upload
 from .runner import process_upload
 
 
 async def resume_pending_jobs() -> int:
+    total = 0
     async with session_scope() as db:
-        result = await db.execute(
-            select(Upload).where(Upload.status.in_(["pending", "processing"]))
-        )
-        stuck = result.scalars().all()
+        cobranzas = (
+            await db.execute(select(Upload).where(Upload.status.in_(["pending", "processing"])))
+        ).scalars().all()
+        calls = (
+            await db.execute(select(CallUpload).where(CallUpload.status.in_(["pending", "processing"])))
+        ).scalars().all()
 
-    if not stuck:
-        return 0
+    for u in cobranzas:
+        logger.info(f"[recovery] re-queuing cobranzas {u.id} (status={u.status})")
+        asyncio.create_task(process_upload(u.id))
+        total += 1
 
-    for upload in stuck:
-        logger.info(f"[recovery] re-queuing {upload.id} (status={upload.status})")
-        asyncio.create_task(process_upload(upload.id))
+    for u in calls:
+        logger.info(f"[recovery] re-queuing calls {u.id} (status={u.status})")
+        asyncio.create_task(process_call_upload(u.id))
+        total += 1
 
-    return len(stuck)
+    return total

@@ -8,8 +8,10 @@ import { CurrentUserInfo, clearSession, getToken, getUser } from "@/lib/api";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard" },
-  { href: "/upload", label: "Subir archivos" },
-  { href: "/reports", label: "Reportes" },
+  { href: "/upload", label: "Subir Cobranzas" },
+  { href: "/reports", label: "Reportes Cobranzas" },
+  { href: "/calls/upload", label: "Subir Llamadas" },
+  { href: "/calls/reports", label: "Reportes Llamadas" },
 ];
 
 const ADMIN_NAV = [

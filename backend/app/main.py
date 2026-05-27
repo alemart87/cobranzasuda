@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.v1 import audit, auth, reports, uploads, users
+from .api.v1 import audit, auth, calls, reports, uploads, users
 from .core.config import settings
 from .core.database import Base, engine
 from .core.logging import configure_logging, logger
@@ -51,5 +51,6 @@ async def health() -> dict[str, str]:
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(uploads.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+app.include_router(calls.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
