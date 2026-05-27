@@ -1,0 +1,34 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: cobranzasegurossuda
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/cobranzasegurossuda
+      SECRET_KEY: dev-secret-1234567890
+      SUPERADMIN_EMAIL: admin@voicenter.com.py
+      SUPERADMIN_PASSWORD_HASH: ${SUPERADMIN_PASSWORD_HASH}
+      SUPERADMIN_NAME: Administrador Voicenter
+      UPLOAD_DIR: /var/data/uploads
+      ENV: development
+      BACKEND_URL: http://127.0.0.1:8000
+    ports:
+      - "8080:8080"
+    volumes:
+      - uploads:/var/data
+
+volumes:
+  pgdata:
+  uploads:

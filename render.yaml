@@ -1,0 +1,49 @@
+databases:
+  - name: cobranzasegurossuda-db
+    plan: starter
+    region: oregon
+
+services:
+  - type: web
+    name: cobranzasegurossuda
+    runtime: docker
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cobranzasegurossuda-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: SUPERADMIN_EMAIL
+        sync: false
+      - key: SUPERADMIN_PASSWORD_HASH
+        sync: false
+      - key: SUPERADMIN_NAME
+        value: Administrador Voicenter
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: ENV
+        value: production
+      - key: BACKEND_URL
+        value: http://127.0.0.1:8000
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_ACCESS_EXPIRE_MINUTES
+        value: "60"
+      - key: JWT_REFRESH_EXPIRE_DAYS
+        value: "7"
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "20"
+      - key: LOG_LEVEL
+        value: INFO
+      - key: BRAND_PRIMARY_COLOR
+        value: "#0066B3"
+    disk:
+      name: uploads
+      mountPath: /var/data
+      sizeGB: 10
