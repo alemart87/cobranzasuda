@@ -23,6 +23,19 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./local.db"
 
+    @field_validator("database_url")
+    @classmethod
+    def normalize_database_url(cls, v: str) -> str:
+        """Render gives `postgresql://` — convertir a `postgresql+asyncpg://` para SQLAlchemy async."""
+        if v.startswith("postgres://"):
+            v = v.replace("postgres://", "postgresql://", 1)
+        if v.startswith("postgresql://"):
+            v = v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        # Render incluye `?sslmode=require` que asyncpg no entiende; lo removemos
+        if "?sslmode=" in v and "+asyncpg" in v:
+            v = v.split("?sslmode=")[0]
+        return v
+
     superadmin_email: str = "admin@voicenter.com.py"
     superadmin_password_hash: str = ""
     superadmin_name: str = "Administrador Voicenter"

@@ -56,3 +56,7 @@ backend/tests/fixtures/*.xls
 
 # Virtualenv local
 .venv/
+
+# Test artifacts
+backend/test_uploads/
+backend/test_smoke.db

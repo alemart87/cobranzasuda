@@ -1,7 +1,28 @@
-databases:
-  - name: cobranzasegurossuda-db
-    plan: starter
-    region: oregon
+# Blueprint mínimo SOLO para el web service.
+# La base de datos PostgreSQL se crea ANTES, manualmente en el dashboard de Render,
+# y luego se pega el connection string como envvar DATABASE_URL.
+#
+# Flujo de deploy:
+#   1) Render Dashboard → New + → PostgreSQL
+#      - Name: cobranzasegurossuda-db
+#      - Plan: Starter ($7/mes) ó Free para pruebas
+#      - Region: oregon (misma que el web service)
+#      - Copiar "Internal Database URL" después de creada
+#
+#   2) Render Dashboard → New + → Web Service → Build & deploy from Git repo
+#      - Repo: https://github.com/alemart87/cobranzasuda
+#      - Region: oregon (misma que la DB)
+#      - Runtime: Docker (toma el Dockerfile)
+#      - Auto-Deploy: Yes
+#      - Disk: name=uploads, mount=/var/data, size=10GB
+#
+#   3) Setear env vars del web service:
+#      - DATABASE_URL  = (Internal Database URL del paso 1)
+#      - SECRET_KEY    = openssl rand -hex 32
+#      - SUPERADMIN_EMAIL          = admin@voicenter.com.py
+#      - SUPERADMIN_PASSWORD_HASH  = (bcrypt — ver README)
+#      - SUPERADMIN_NAME           = Administrador Voicenter
+#      - resto: ver lista abajo
 
 services:
   - type: web
@@ -13,16 +34,16 @@ services:
     healthCheckPath: /health
     dockerfilePath: ./Dockerfile
     envVars:
+      # Secretos — setear manualmente en el dashboard
       - key: DATABASE_URL
-        fromDatabase:
-          name: cobranzasegurossuda-db
-          property: connectionString
+        sync: false
       - key: SECRET_KEY
-        generateValue: true
+        sync: false
       - key: SUPERADMIN_EMAIL
         sync: false
       - key: SUPERADMIN_PASSWORD_HASH
         sync: false
+      # Valores fijos
       - key: SUPERADMIN_NAME
         value: Administrador Voicenter
       - key: UPLOAD_DIR

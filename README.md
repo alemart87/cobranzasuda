@@ -63,12 +63,30 @@ cd backend
 ../.venv/Scripts/python -m pytest tests/ -v
 ```
 
-## Deploy Render
-1. Push a `https://github.com/alemart87/cobranzasuda`
-2. En Render: New → Blueprint → conectar repo → autodetect `render.yaml`
-3. Provisionar Postgres + Web service + Disk (10 GB)
-4. Setear envvars secretos: `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD_HASH`
-5. Deploy
+## Deploy Render (flujo manual, igual que Chatia)
+
+**Resumen** — guía detallada en [`docs/deployment-render.md`](docs/deployment-render.md).
+
+1. **Crear PostgreSQL primero** en Render Dashboard → `New +` → PostgreSQL.
+   - Name: `cobranzasegurossuda-db` · Region: `oregon` · Plan: Starter
+   - Copiar el **Internal Database URL** cuando esté disponible.
+
+2. **Generar credenciales superadmin:**
+   ```bash
+   python -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('TuPwd'))"
+   python -c "import secrets; print(secrets.token_hex(32))"  # SECRET_KEY
+   ```
+
+3. **Crear Web Service** → `New +` → Web Service → conectar `alemart87/cobranzasuda`.
+   - Runtime: Docker · Region: oregon · Plan: Starter
+   - Disk: `uploads` montado en `/var/data` (10 GB)
+   - Env vars (todas obligatorias): `DATABASE_URL`, `SECRET_KEY`, `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD_HASH`, etc. (ver doc).
+
+4. **Validar:** `GET /health` → `{"status":"ok"}` · login en `/login` → dashboard.
+
+> El backend auto-convierte `postgresql://` (formato Render) a `postgresql+asyncpg://` y limpia `?sslmode=require` automáticamente.
+>
+> Sin Redis = un solo web service + Postgres + disco = **~$16.50/mes** total.
 
 ## Endpoints principales
 - `POST /api/v1/auth/login`
