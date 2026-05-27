@@ -43,15 +43,33 @@ def test_parse_volume(gestiones_rows):
 def test_analyze_kpis(gestiones_rows):
     r = analyze_gestiones(gestiones_rows)
     k = r["kpis"]
-    assert k["total_gestiones"] >= 2900
+    assert k["total_gestiones"] == 2976
     assert k["asesores_activos"] == 3
     assert k["promesas_totales"] == 707
     assert k["cobros_totales"] == 271
-    # Promesas cumplidas: leads con promesa y luego cobrado
-    assert k["promesas_cumplidas"] >= 0
-    assert k["pct_promesas_cumplidas"] >= 0
+
+    # Funnel del equipo: cada % se calcula sobre el paso anterior
+    f = r["funnel_equipo"]
+    assert f["gestiones"] == 2976
+    # Contactos = gestiones - No contesta - Inubicables = 2976 - 1452 - 254 = 1270
+    assert f["contactos_efectivos"] == 1270
+    assert f["pct_contactos_efectivos"] == 42.7
+    assert f["promesas"] == 707
+    assert f["pct_promesas_sobre_contactos"] == 55.7
+    assert f["promesas_cumplidas"] == 271
+    assert f["pct_promesas_cumplidas"] == 38.3
+
     assert len(r["asesores"]) == 3
-    assert len(r["subestados"]) >= 5
+    for a in r["asesores"]:
+        assert "pct_contactos_efectivos" in a
+        assert "pct_promesas_sobre_contactos" in a
+        assert "pct_promesas_cumplidas" in a
+
+    # Por base de datos (campañas)
+    assert len(r["campanas"]) > 0
+    for c in r["campanas"]:
+        assert "campana" in c
+        assert "pct_contactos_efectivos" in c
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,15 @@
-"""Analyze gestiones data: totales, subestados, breakdown por operador, KPIs.
+"""Analyze gestiones data — funnel operativo.
 
-Métricas clave por asesor:
-- Promesas obtenidas (count subestado == 'Promesa de pago')
-- % de promesas cumplidas: porcentaje de leads (asegurados) que recibieron una
-  promesa Y luego fueron Cobrados. Si un lead nunca recibió promesa pero
-  está Cobrado no cuenta como "promesa cumplida".
-- Cobros directos (count subestado == 'Cobrado')
-- % de cobros sobre contactos efectivos
+Funnel (por equipo / por asesor / por base de datos):
+    Total gestiones
+       ↓ % contactos efectivos = contactos / gestiones
+    Contactos efectivos
+       ↓ % promesas obtenidas = promesas / contactos efectivos
+    Promesas obtenidas
+       ↓ % promesas cumplidas = cobrados / promesas
+    Promesas cumplidas (= cobrados)
+
+Una "promesa cumplida" se cuenta como cada gestión con subestado 'Cobrado'.
 """
 from __future__ import annotations
 
@@ -15,88 +18,93 @@ from datetime import datetime
 from typing import Any
 
 
-# Subestados que cuentan como "contacto efectivo" (el cliente atendió)
-NO_CONTACTO = {"No contesta", "Inubicables"}
+# Subestados que NO son contacto efectivo (no se llegó a hablar con el cliente)
+NO_CONTACTO_SUBESTADOS = {"No contesta", "Inubicables"}
+
+
+def _pct(num: float, den: float, digits: int = 1) -> float:
+    return round(num / den * 100, digits) if den else 0.0
+
+
+def _funnel_metrics(gestiones: int, contactos: int, promesas: int, cobrados: int) -> dict[str, Any]:
+    """Construye los % del funnel para un agregado (equipo, asesor o campaña)."""
+    return {
+        "gestiones": gestiones,
+        "contactos_efectivos": contactos,
+        "pct_contactos_efectivos": _pct(contactos, gestiones),
+        "promesas": promesas,
+        "pct_promesas_sobre_contactos": _pct(promesas, contactos),
+        "promesas_cumplidas": cobrados,  # cada Cobrado = una promesa cumplida
+        "pct_promesas_cumplidas": _pct(cobrados, promesas),
+    }
 
 
 def analyze_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(rows)
 
-    # --- 1. Conteos globales por subestado ---
+    # --- Conteos globales por subestado y estado ---
     subestados_count = Counter(r["subestado"] for r in rows if r["subestado"])
     estados_count = Counter(r["estado"] for r in rows if r["estado"])
 
-    # --- 2. Por usuario ---
-    usuarios_set = sorted({r["usuario"] for r in rows if r["usuario"]})
+    # --- Por usuario ---
     by_user_sub: dict[str, Counter] = defaultdict(Counter)
-    by_user_lead_sub: dict[str, dict[str, set]] = defaultdict(lambda: defaultdict(set))
     by_user_total: Counter = Counter()
     for r in rows:
         u = r["usuario"]
         s = r["subestado"]
-        lead = r["lead"]
         by_user_total[u] += 1
         if s:
             by_user_sub[u][s] += 1
-            if lead:
-                by_user_lead_sub[u][s].add(lead)
 
-    # --- 3. Métricas por asesor ---
+    usuarios_set = sorted(by_user_total.keys(), key=lambda x: -by_user_total[x])
+
+    # --- Por campaña (base de datos) ---
+    by_camp_sub: dict[str, Counter] = defaultdict(Counter)
+    by_camp_total: Counter = Counter()
+    for r in rows:
+        c = r.get("campana") or "Sin campaña"
+        s = r["subestado"]
+        by_camp_total[c] += 1
+        if s:
+            by_camp_sub[c][s] += 1
+
+    # --- Funnel por equipo ---
+    no_contacto = sum(subestados_count.get(s, 0) for s in NO_CONTACTO_SUBESTADOS)
+    contactos_equipo = total - no_contacto
+    promesas_equipo = subestados_count.get("Promesa de pago", 0)
+    cobrados_equipo = subestados_count.get("Cobrado", 0)
+    funnel_equipo = _funnel_metrics(total, contactos_equipo, promesas_equipo, cobrados_equipo)
+
+    # --- Funnel por asesor ---
     asesores: list[dict[str, Any]] = []
-    for u in sorted(usuarios_set, key=lambda x: -by_user_total[x]):
+    for u in usuarios_set:
         subs = by_user_sub[u]
-        leads_promesa = by_user_lead_sub[u].get("Promesa de pago", set())
-        leads_cobrado = by_user_lead_sub[u].get("Cobrado", set())
-        total_gest = by_user_total[u]
+        tot = by_user_total[u]
+        no_cont = sum(subs.get(s, 0) for s in NO_CONTACTO_SUBESTADOS)
+        contactos = tot - no_cont
         promesas = subs.get("Promesa de pago", 0)
         cobrados = subs.get("Cobrado", 0)
-        contactos_efectivos = total_gest - subs.get("No contesta", 0) - subs.get("Inubicables", 0)
-
-        # Promesas cumplidas: leads con promesa que también fueron cobrados
-        promesas_cumplidas = len(leads_promesa & leads_cobrado)
-        pct_cumplidas = (
-            round(promesas_cumplidas / len(leads_promesa) * 100, 1) if leads_promesa else 0
-        )
-
-        pct_promesas_sobre_contactos = (
-            round(promesas / contactos_efectivos * 100, 1) if contactos_efectivos else 0
-        )
-        pct_cobros_sobre_contactos = (
-            round(cobrados / contactos_efectivos * 100, 1) if contactos_efectivos else 0
-        )
-        pct_cierre = round(cobrados / total_gest * 100, 2) if total_gest else 0
-
         asesores.append({
             "usuario": u,
-            "gestiones": total_gest,
-            "contactos_efectivos": contactos_efectivos,
-            "promesas": promesas,
-            "promesas_cumplidas": promesas_cumplidas,
-            "pct_promesas_cumplidas": pct_cumplidas,
-            "cobrados": cobrados,
-            "pct_promesas_sobre_contactos": pct_promesas_sobre_contactos,
-            "pct_cobros_sobre_contactos": pct_cobros_sobre_contactos,
-            "pct_cierre": pct_cierre,
+            **_funnel_metrics(tot, contactos, promesas, cobrados),
             "subestados": dict(subs),
         })
 
-    # --- 4. KPIs equipo ---
-    leads_promesa_global = set()
-    leads_cobrado_global = set()
-    for r in rows:
-        if r["subestado"] == "Promesa de pago" and r["lead"]:
-            leads_promesa_global.add(r["lead"])
-        elif r["subestado"] == "Cobrado" and r["lead"]:
-            leads_cobrado_global.add(r["lead"])
-    promesas_cumplidas_global = len(leads_promesa_global & leads_cobrado_global)
-    pct_cumplidas_global = (
-        round(promesas_cumplidas_global / len(leads_promesa_global) * 100, 1)
-        if leads_promesa_global else 0
-    )
+    # --- Funnel por base de datos (campaña) — top 30 ---
+    campanas: list[dict[str, Any]] = []
+    for c in sorted(by_camp_total.keys(), key=lambda x: -by_camp_total[x])[:30]:
+        subs = by_camp_sub[c]
+        tot = by_camp_total[c]
+        no_cont = sum(subs.get(s, 0) for s in NO_CONTACTO_SUBESTADOS)
+        contactos = tot - no_cont
+        promesas = subs.get("Promesa de pago", 0)
+        cobrados = subs.get("Cobrado", 0)
+        campanas.append({
+            "campana": c,
+            **_funnel_metrics(tot, contactos, promesas, cobrados),
+        })
 
-    contactos_global = total - subestados_count.get("No contesta", 0) - subestados_count.get("Inubicables", 0)
-
-    # --- 5. Serie diaria de gestiones ---
+    # --- Serie diaria ---
     by_day: Counter = Counter()
     for r in rows:
         f = r["fecha"]
@@ -104,7 +112,7 @@ def analyze_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
             by_day[f.date().isoformat()] += 1
     serie_diaria = [{"fecha": d, "gestiones": by_day[d]} for d in sorted(by_day.keys())]
 
-    # --- 6. Subestados x asesor (matrix para gráfico apilado) ---
+    # --- Matrix subestados x asesor (gráfico apilado) ---
     subestados_top = [s for s, _ in subestados_count.most_common(10)]
     matrix = []
     for u in usuarios_set:
@@ -118,24 +126,24 @@ def analyze_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "total_gestiones": total,
             "asesores_activos": len(usuarios_set),
             "subestados_unicos": len(subestados_count),
-            "promesas_totales": subestados_count.get("Promesa de pago", 0),
-            "cobros_totales": subestados_count.get("Cobrado", 0),
-            "contactos_efectivos": contactos_global,
-            "leads_unicos_con_promesa": len(leads_promesa_global),
-            "leads_unicos_cobrados": len(leads_cobrado_global),
-            "promesas_cumplidas": promesas_cumplidas_global,
-            "pct_promesas_cumplidas": pct_cumplidas_global,
-            "pct_cobros_sobre_contactos": (
-                round(subestados_count.get("Cobrado", 0) / contactos_global * 100, 2)
-                if contactos_global else 0
-            ),
+            "campanas_unicas": len(by_camp_total),
+            # Funnel del equipo
+            **{f"equipo_{k}": v for k, v in funnel_equipo.items()},
+            # Alias mantenidos para compatibilidad de modelos
+            "promesas_totales": promesas_equipo,
+            "cobros_totales": cobrados_equipo,
+            "contactos_efectivos": contactos_equipo,
+            "promesas_cumplidas": cobrados_equipo,
+            "pct_promesas_cumplidas": funnel_equipo["pct_promesas_cumplidas"],
         },
+        "funnel_equipo": funnel_equipo,
         "subestados": [
-            {"subestado": s, "cantidad": n, "pct": round(n / total * 100, 2) if total else 0}
+            {"subestado": s, "cantidad": n, "pct": _pct(n, total, 2)}
             for s, n in subestados_count.most_common()
         ],
         "estados": [{"estado": s, "cantidad": n} for s, n in estados_count.most_common()],
         "asesores": asesores,
+        "campanas": campanas,
         "matrix_subestados": {
             "subestados": subestados_top,
             "data": matrix,
