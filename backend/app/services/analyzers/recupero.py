@@ -1,4 +1,9 @@
-"""Recupero analysis: cross DXP × Boca × Cobrado, total + sobre mora."""
+"""Recupero analysis: cross DXP × Boca × Cobrado.
+
+Reporta el recupero total del mes (todos los pagos cruzados con la cartera
+asignada). NO segmenta entre "pagos de asegurados en mora" vs "cuotas
+vigentes" — ese criterio fue revisado y removido.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -25,18 +30,19 @@ def analyze_recupero(
     dxp_aseg_set = {norm(r.get("Asegurado")) for r in dxp_rows if r.get("Asegurado")}
     policy_index = build_policy_index(dxp_rows)
 
-    # vencido por asegurado
-    vencido_por_aseg: dict[str, float] = {}
+    # Total en mora (para contexto en el funnel/KPIs)
+    vencido_total = 0.0
+    asegurados_en_mora: set[str] = set()
     for r in dxp_rows:
         a = norm(r.get("Asegurado"))
         if not a:
             continue
         venc = sum(num(r.get(t)) for t in TRAMOS)
-        vencido_por_aseg[a] = vencido_por_aseg.get(a, 0.0) + venc
+        if venc > 0:
+            asegurados_en_mora.add(a)
+            vencido_total += venc
 
-    aseg_en_mora = {a: v for a, v in vencido_por_aseg.items() if v > 0}
-
-    # unique payments
+    # Unique payments — cruzados con la cartera DXP
     recibos_vistos: set[tuple[str, float]] = set()
     pagos: list[dict[str, Any]] = []
 
@@ -85,60 +91,15 @@ def analyze_recupero(
     aseg_pagaron = {p["aseg"] for p in pagos}
     monto_total = sum(p["monto"] for p in pagos)
 
-    # Segmentación: pagos de asegurados que estaban en mora
-    pagos_en_mora = [p for p in pagos if p["aseg"] in aseg_en_mora]
-    pagos_no_mora = [p for p in pagos if p["aseg"] not in aseg_en_mora]
-    monto_en_mora = sum(p["monto"] for p in pagos_en_mora)
-    monto_no_mora = sum(p["monto"] for p in pagos_no_mora)
-    aseg_pagaron_en_mora = {p["aseg"] for p in pagos_en_mora}
-
-    # por tramo
-    tramo_recup = {t: {"venc_total": 0.0, "venc_pag": 0.0} for t in TRAMOS}
-    for r in dxp_rows:
-        a = norm(r.get("Asegurado"))
-        if not a:
-            continue
-        for t in TRAMOS:
-            v = num(r.get(t))
-            if v > 0:
-                tramo_recup[t]["venc_total"] += v
-                if a in aseg_pagaron_en_mora:
-                    tramo_recup[t]["venc_pag"] += v
-
-    tramos_list = [
-        {
-            "tramo": t,
-            "monto_en_mora": round(tramo_recup[t]["venc_total"], 2),
-            "monto_recuperado": round(tramo_recup[t]["venc_pag"], 2),
-            "pct_regularizado": (
-                round(tramo_recup[t]["venc_pag"] / tramo_recup[t]["venc_total"] * 100, 2)
-                if tramo_recup[t]["venc_total"]
-                else 0
-            ),
-        }
-        for t in TRAMOS
-    ]
-
-    vencido_total = sum(aseg_en_mora.values())
-
     return {
         "kpis": {
             "vencido_total": round(vencido_total, 2),
-            "asegurados_en_mora": len(aseg_en_mora),
+            "asegurados_en_mora": len(asegurados_en_mora),
             "recupero_total": round(monto_total, 2),
-            "recupero_sobre_mora": round(monto_en_mora, 2),
-            "recupero_cuotas_vigentes": round(monto_no_mora, 2),
             "asegurados_pagaron": len(aseg_pagaron),
-            "asegurados_pagaron_en_mora": len(aseg_pagaron_en_mora),
             "total_pagos": len(pagos),
-            "pagos_en_mora": len(pagos_en_mora),
-            "pagos_cuotas_vigentes": len(pagos_no_mora),
             "pct_recupero_total_vs_vencido": (
                 round(monto_total / vencido_total * 100, 2) if vencido_total else 0
             ),
-            "pct_recupero_sobre_mora": (
-                round(monto_en_mora / vencido_total * 100, 2) if vencido_total else 0
-            ),
         },
-        "tramos_recupero": tramos_list,
     }

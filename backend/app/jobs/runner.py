@@ -46,11 +46,6 @@ async def process_upload(upload_id: str) -> None:
             dias_transcurridos,
             period,
         )
-        proyeccion_mora = project_recupero(
-            recupero["kpis"]["recupero_sobre_mora"],
-            dias_transcurridos,
-            period,
-        )
 
         async with session_scope() as db:
             report = Report(
@@ -62,13 +57,11 @@ async def process_upload(upload_id: str) -> None:
                 vencido_total=cartera["kpis"]["vencido_total"],
                 asegurados_en_mora=cartera["kpis"]["asegurados_en_mora"],
                 recupero_total=recupero["kpis"]["recupero_total"],
-                recupero_sobre_mora=recupero["kpis"]["recupero_sobre_mora"],
                 asegurados_pagaron=recupero["kpis"]["asegurados_pagaron"],
                 data={
                     "cartera": cartera,
                     "recupero": recupero,
                     "proyeccion_total": proyeccion_total,
-                    "proyeccion_mora": proyeccion_mora,
                 },
             )
             db.add(report)

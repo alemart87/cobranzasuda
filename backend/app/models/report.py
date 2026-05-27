@@ -36,6 +36,8 @@ class Report(Base):
     asegurados_en_mora: Mapped[int] = mapped_column(Integer, default=0)
 
     recupero_total: Mapped[float] = mapped_column(Numeric(18, 2), default=0)
+    # NOTA: recupero_sobre_mora removido del cálculo. La columna se conserva en DB
+    # por compatibilidad con reportes históricos (default 0); no se popula en uploads nuevos.
     recupero_sobre_mora: Mapped[float] = mapped_column(Numeric(18, 2), default=0)
     asegurados_pagaron: Mapped[int] = mapped_column(Integer, default=0)
 

@@ -5,19 +5,19 @@ import { formatGs } from "@/lib/format";
 interface Props {
   vencidoTotal: number;
   recuperoTotal: number;
-  recuperoSobreMora: number;
   pctRecuperoTotal: number;
-  pctSobreMora: number;
+  asegPagaron: number;
+  asegEnMora: number;
 }
 
 export function RecuperoFunnel({
   vencidoTotal,
   recuperoTotal,
-  recuperoSobreMora,
   pctRecuperoTotal,
-  pctSobreMora,
+  asegPagaron,
+  asegEnMora,
 }: Props) {
-  const max = Math.max(vencidoTotal, recuperoTotal, recuperoSobreMora);
+  const max = Math.max(vencidoTotal, recuperoTotal, 1);
   const w = (val: number) => `${Math.max((val / max) * 100, 8)}%`;
 
   return (
@@ -26,21 +26,15 @@ export function RecuperoFunnel({
         label="Saldo en mora"
         value={vencidoTotal}
         width={w(vencidoTotal)}
-        color="bg-brand-neutral-400"
+        color="bg-brand-mist"
+        hint={`${asegEnMora} asegurados`}
       />
       <FunnelRow
         label="Recupero total del mes"
         value={recuperoTotal}
         width={w(recuperoTotal)}
         color="bg-brand-primary"
-        hint={`${pctRecuperoTotal.toFixed(1)}% del vencido`}
-      />
-      <FunnelRow
-        label="Recupero efectivo sobre mora"
-        value={recuperoSobreMora}
-        width={w(recuperoSobreMora)}
-        color="bg-brand-accent"
-        hint={`${pctSobreMora.toFixed(2)}% del vencido`}
+        hint={`${pctRecuperoTotal.toFixed(1)} % vs vencido · ${asegPagaron} pagaron`}
       />
     </div>
   );
@@ -62,11 +56,14 @@ function FunnelRow({
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1">
-        <span className="text-sm font-medium text-brand-neutral-700">{label}</span>
-        <span className="text-sm font-bold text-brand-secondary">{formatGs(value)}</span>
+        <span className="text-sm font-medium text-brand-graphite">{label}</span>
+        <span className="text-sm font-bold text-brand-ink">{formatGs(value)}</span>
       </div>
-      <div className="h-7 bg-brand-neutral-100 rounded">
-        <div className={`h-full rounded flex items-center justify-end px-3 text-xs text-white ${color}`} style={{ width }}>
+      <div className="h-7 bg-brand-bg rounded">
+        <div
+          className={`h-full rounded flex items-center justify-end px-3 text-xs text-white ${color}`}
+          style={{ width }}
+        >
           {hint}
         </div>
       </div>

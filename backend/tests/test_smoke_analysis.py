@@ -54,11 +54,12 @@ def test_recupero_kpis(files):
     cobrado = parse_cobrado(cobrado_path)
     result = analyze_recupero(dxp, boca, cobrado)
     k = result["kpis"]
-    # Validamos los valores del documento .md ya validado
+    # Validamos los valores del documento ya validado
     assert k["asegurados_pagaron"] >= 250
     assert k["recupero_total"] > 80_000_000
-    assert k["recupero_sobre_mora"] > 10_000_000
-    assert k["recupero_sobre_mora"] < 25_000_000
+    # recupero_sobre_mora ya no se calcula
+    assert "recupero_sobre_mora" not in k
+    assert "tramos_recupero" not in result
 
 
 def test_proyeccion_basic():

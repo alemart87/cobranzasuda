@@ -17,7 +17,6 @@ class ReportSummary(BaseModel):
     vencido_total: float
     asegurados_en_mora: int
     recupero_total: float
-    recupero_sobre_mora: float
     asegurados_pagaron: int
     is_published: bool = False
     published_at: Optional[datetime] = None
