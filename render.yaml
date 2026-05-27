@@ -41,7 +41,7 @@ services:
         sync: false
       - key: SUPERADMIN_EMAIL
         sync: false
-      - key: SUPERADMIN_PASSWORD_HASH
+      - key: SUPERADMIN_PASSWORD
         sync: false
       # Valores fijos
       - key: SUPERADMIN_NAME

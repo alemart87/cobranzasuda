@@ -37,6 +37,9 @@ class Settings(BaseSettings):
         return v
 
     superadmin_email: str = "admin@voicenter.com.py"
+    # Opción simple: setear password en plano (Render Env > SUPERADMIN_PASSWORD)
+    superadmin_password: str = ""
+    # Opción avanzada: setear directamente el hash bcrypt
     superadmin_password_hash: str = ""
     superadmin_name: str = "Administrador Voicenter"
 

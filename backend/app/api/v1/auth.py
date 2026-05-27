@@ -32,9 +32,16 @@ async def login(
 
     # Caso 1: superadmin desde .env
     if email == settings.superadmin_email.lower().strip():
-        if not settings.superadmin_password_hash or not verify_password(
-            payload.password, settings.superadmin_password_hash
-        ):
+        # Aceptar password en plano (SUPERADMIN_PASSWORD) o hash (SUPERADMIN_PASSWORD_HASH)
+        password_ok = False
+        if settings.superadmin_password:
+            # Comparación constante para evitar timing attacks
+            import secrets
+            password_ok = secrets.compare_digest(payload.password, settings.superadmin_password)
+        elif settings.superadmin_password_hash:
+            password_ok = verify_password(payload.password, settings.superadmin_password_hash)
+
+        if not password_ok:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Credenciales inválidas")
         await record_action(
             db,
