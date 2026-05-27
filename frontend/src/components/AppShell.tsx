@@ -94,7 +94,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Footer */}
       <footer className="border-t border-brand-border bg-white px-6 py-3 text-[11px] text-brand-slate flex items-center justify-between">
         <span>© {new Date().getFullYear()} Voicenter S.A.</span>
-        <span className="font-display tracking-wider2 uppercase">Cobranzas · Sudameris Seguros</span>
+        <span className="font-display tracking-wider2 uppercase">Operaciones · Sudameris Seguros</span>
       </footer>
     </div>
   );

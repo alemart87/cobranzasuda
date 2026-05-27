@@ -55,24 +55,40 @@ export default function LoginPage() {
 
         <div className="space-y-6 max-w-md">
           <h1 className="font-display text-5xl uppercase leading-tight">
-            Cobranzas<br />
+            Operaciones<br />
             <span className="text-white/90">Sudameris Seguros</span>
           </h1>
           <p className="text-white/90 text-base leading-relaxed">
-            Plataforma de gestión y análisis mensual de cartera. Procesamos los datos de DXP, Boca de Cobranzas y reportes de contact center para entregar dashboards listos para decisión.
+            Plataforma que disponibiliza información útil para la gestión de Cobranzas, Atención al Cliente, Ventas y procesos operativos.
           </p>
-          <div className="flex gap-6 pt-4">
-            <div>
-              <div className="font-display text-3xl">3</div>
-              <div className="text-[11px] uppercase tracking-wider2 text-white/70">Archivos</div>
+          <div className="grid grid-cols-2 gap-3 pt-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-1.5 h-8 bg-white/60 rounded-full" />
+              <div>
+                <div className="font-display text-sm uppercase tracking-wider2">Cobranzas</div>
+                <div className="text-[11px] text-white/70">Cartera y recupero</div>
+              </div>
             </div>
-            <div className="border-l border-white/20 pl-6">
-              <div className="font-display text-3xl">5+</div>
-              <div className="text-[11px] uppercase tracking-wider2 text-white/70">Dashboards</div>
+            <div className="flex items-center gap-2.5">
+              <div className="w-1.5 h-8 bg-white/60 rounded-full" />
+              <div>
+                <div className="font-display text-sm uppercase tracking-wider2">Atención</div>
+                <div className="text-[11px] text-white/70">Servicio y NPS</div>
+              </div>
             </div>
-            <div className="border-l border-white/20 pl-6">
-              <div className="font-display text-3xl">1</div>
-              <div className="text-[11px] uppercase tracking-wider2 text-white/70">Clic</div>
+            <div className="flex items-center gap-2.5">
+              <div className="w-1.5 h-8 bg-white/60 rounded-full" />
+              <div>
+                <div className="font-display text-sm uppercase tracking-wider2">Ventas</div>
+                <div className="text-[11px] text-white/70">Gestión comercial</div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2.5">
+              <div className="w-1.5 h-8 bg-white/60 rounded-full" />
+              <div>
+                <div className="font-display text-sm uppercase tracking-wider2">Operativos</div>
+                <div className="text-[11px] text-white/70">KPIs y trazabilidad</div>
+              </div>
             </div>
           </div>
         </div>

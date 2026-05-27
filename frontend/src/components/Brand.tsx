@@ -21,7 +21,7 @@ export function Brand({ withTagline = true, logoHeight = 38, variant = "default"
       {withTagline && (
         <div className="leading-tight border-l border-brand-border pl-4">
           <div className={`font-display text-base ${variant === "light" ? "text-white" : "text-brand-ink"} uppercase tracking-wide`}>
-            Cobranzas <span className="text-brand-primary">Sudameris Seguros</span>
+            Operaciones <span className="text-brand-primary">Sudameris Seguros</span>
           </div>
           <div className={`text-[11px] ${variant === "light" ? "text-white/70" : "text-brand-slate"} mt-0.5`}>
             Plataforma operada por Voicenter S.A.
