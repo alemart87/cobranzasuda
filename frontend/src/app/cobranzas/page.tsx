@@ -7,20 +7,56 @@ import { KpiCard } from "@/components/KpiCard";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
 
-interface ReportSummary {
-  id: string;
-  period_month: string | null;
+interface CarteraItem {
+  nombre: string;
+  fuente: string;
+  polizas: number;
+  asegurados: number;
   saldo_total: number;
-  vencido_total: number;
-  asegurados_en_mora: number;
-  recupero_total: number;
+  saldo_mora: number;
+  asegurados_mora: number;
+  recibe_pagos: boolean;
 }
-interface CallSummary {
-  id: string;
+interface Overview {
   period_month: string | null;
-  total_llamadas: number;
-  total_talk_seg: number;
-  asesores_activos: number;
+  carteras: {
+    items: CarteraItem[];
+    polizas: number;
+    asegurados: number;
+    saldo_total: number;
+    saldo_mora: number;
+    asegurados_mora: number;
+  } | null;
+  llamadas: {
+    total_llamadas: number;
+    total_talk_seg: number;
+    aht_seg: number;
+    efectivas_total: number;
+    asesores_activos: number;
+  } | null;
+  gestiones: {
+    total_gestiones: number;
+    promesas_totales: number;
+    cobros_totales: number;
+    pct_promesas_cumplidas: number;
+    asesores_activos: number;
+  } | null;
+  rendimiento: { pct: number; gestiones: number; polizas: number } | null;
+}
+
+const MONTH_NAMES = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+];
+function monthLabel(iso: string): string {
+  const [y, m] = iso.split("-");
+  const name = MONTH_NAMES[Number(m) - 1];
+  return name ? `${name} ${y}` : iso;
+}
+function fmtMinSeg(seg: number): string {
+  const m = Math.floor(seg / 60);
+  const s = Math.round(seg % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 type Variant = "primary" | "cyan" | "purple" | "orange";
@@ -208,15 +244,16 @@ function SectionLabel({ children }: { children: ReactNode }) {
 }
 
 export default function CobranzasHubPage() {
-  const [report, setReport] = useState<ReportSummary | null>(null);
-  const [calls, setCalls] = useState<CallSummary | null>(null);
+  const [overview, setOverview] = useState<Overview | null>(null);
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
     setUser(getUser());
-    apiFetch<{ items: ReportSummary[] }>("/api/v1/reports").then((d) => setReport(d.items[0] ?? null));
-    apiFetch<{ items: CallSummary[] }>("/api/v1/calls/reports").then((d) => setCalls(d.items[0] ?? null));
+    apiFetch<Overview>("/api/v1/overview").then(setOverview).catch(() => {});
   }, []);
+
+  const ov = overview;
+  const hasOverview = !!(ov && (ov.carteras || ov.llamadas || ov.gestiones));
 
   const role = user?.role;
   const viewActions = VIEW_ACTIONS.filter((a) => !role || a.forRoles.includes(role));
@@ -236,26 +273,119 @@ export default function CobranzasHubPage() {
         </p>
       </div>
 
-      {/* KPIs del último reporte */}
-      {(report || calls) && (
+      {/* Resumen gerencial (datos publicados del mes) */}
+      {hasOverview && ov && (
         <section className="mb-10">
-          <SectionLabel>Último período cargado</SectionLabel>
+          <div className="flex items-baseline justify-between mb-3">
+            <SectionLabel>
+              Resumen gerencial{ov.period_month ? ` · ${monthLabel(ov.period_month)}` : ""}
+            </SectionLabel>
+            <span className="text-[11px] text-brand-mist">Solo datos publicados</span>
+          </div>
+
+          {/* Fila 1: Rendimiento estimativo + totales de cartera */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div className="card p-5 relative overflow-hidden">
+              <div className="absolute top-0 bottom-0 left-0 w-1 bg-brand-primary" />
+              <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold">
+                Rendimiento estimativo
+              </div>
+              <div className="font-display text-4xl text-brand-primary mt-1 leading-none">
+                {ov.rendimiento ? `${ov.rendimiento.pct}%` : "—"}
+              </div>
+              <div className="text-[11px] text-brand-slate mt-2 leading-snug">
+                {ov.rendimiento
+                  ? `${formatInt(ov.rendimiento.gestiones)} gestiones ÷ ${formatInt(ov.rendimiento.polizas)} pólizas`
+                  : "faltan datos de cartera o gestiones"}
+              </div>
+            </div>
+            <KpiCard
+              label="Pólizas totales"
+              value={formatInt(ov.carteras?.polizas ?? 0)}
+              hint={`${ov.carteras?.items.length ?? 0} carteras · ${formatInt(ov.carteras?.asegurados ?? 0)} asegurados`}
+              accent="secondary"
+            />
+            <KpiCard
+              label="Saldo total operado"
+              value={formatGs(ov.carteras?.saldo_total ?? 0)}
+              accent="cyan"
+            />
+            <KpiCard
+              label="Saldo en mora"
+              value={formatGs(ov.carteras?.saldo_mora ?? 0)}
+              hint={`${formatInt(ov.carteras?.asegurados_mora ?? 0)} clientes en mora`}
+              accent="orange"
+            />
+          </div>
+
+          {/* Fila 2: operación (llamadas + gestiones) */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {report && (
-              <>
-                <KpiCard label="Saldo cartera" value={formatGs(report.saldo_total)} accent="secondary" />
-                <KpiCard label="Saldo en mora" value={formatGs(report.vencido_total)} hint={`${report.asegurados_en_mora} aseg.`} accent="primary" />
-                <KpiCard label="Recupero del mes" value={formatGs(report.recupero_total)} accent="cyan" />
-              </>
-            )}
-            {calls && (
-              <KpiCard
-                label="Llamadas operativo"
-                value={formatInt(calls.total_llamadas)}
-                hint={`${(calls.total_talk_seg / 3600).toFixed(1)} hs talk · ${calls.asesores_activos} asesores`}
-                accent="purple"
-              />
-            )}
+            <KpiCard
+              label="Llamadas del mes"
+              value={ov.llamadas ? formatInt(ov.llamadas.total_llamadas) : "—"}
+              hint={ov.llamadas ? `${formatInt(ov.llamadas.efectivas_total)} efectivas · ${ov.llamadas.asesores_activos} asesores` : "sin reporte publicado"}
+              accent="purple"
+            />
+            <KpiCard
+              label="Total hablado"
+              value={ov.llamadas ? `${(ov.llamadas.total_talk_seg / 3600).toFixed(1)} hs` : "—"}
+              accent="cyan"
+            />
+            <KpiCard
+              label="Prom. conversación"
+              value={ov.llamadas ? `${fmtMinSeg(ov.llamadas.aht_seg)} min` : "—"}
+              hint="por contacto (AHT)"
+              accent="secondary"
+            />
+            <KpiCard
+              label="Gestiones del mes"
+              value={ov.gestiones ? formatInt(ov.gestiones.total_gestiones) : "—"}
+              hint={ov.gestiones ? `${formatInt(ov.gestiones.promesas_totales)} promesas · ${formatInt(ov.gestiones.cobros_totales)} cobros` : "sin reporte publicado"}
+              accent="primary"
+            />
+          </div>
+
+          {/* Desglose de carteras */}
+          {ov.carteras && ov.carteras.items.length > 0 && (
+            <div className="mt-4 grid md:grid-cols-3 gap-4">
+              {ov.carteras.items.map((c) => (
+                <div key={c.fuente} className="card p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="font-display text-base text-brand-ink uppercase leading-tight">{c.nombre}</h4>
+                    <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${c.recibe_pagos ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {c.recibe_pagos ? "Recibe pagos" : "Sin pagos"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3">
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">Pólizas</div>
+                      <div className="font-display text-lg text-brand-ink">{formatInt(c.polizas)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">Saldo</div>
+                      <div className="font-display text-lg text-brand-ink">{formatGs(c.saldo_total)}</div>
+                    </div>
+                    <div className="col-span-2">
+                      <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">En mora</div>
+                      <div className="font-display text-lg text-brand-orange">
+                        {formatGs(c.saldo_mora)} <span className="text-xs text-brand-slate font-sans">· {formatInt(c.asegurados_mora)} clientes</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {!hasOverview && overview !== null && (
+        <section className="mb-10">
+          <div className="card p-6 text-center">
+            <p className="text-brand-slate text-sm">
+              Aún no hay datos publicados del mes para el resumen gerencial.
+              Publicá los reportes desde el Centro de Publicaciones.
+            </p>
           </div>
         </section>
       )}
