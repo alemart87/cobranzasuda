@@ -97,7 +97,10 @@ async def update_user(
     if payload.photo_url is not None:
         target.photo_url = payload.photo_url
         changes["photo_url"] = payload.photo_url
-    if payload.allowed_modules is not None and target.role == "client":
+    # Distinguir "no enviado" de "enviado como null".
+    # null = "acceso a todas" (queremos poder volver a este estado desde una lista).
+    # [] = sin operativas, ["cobranzas", ...] = solo esas.
+    if "allowed_modules" in payload.model_fields_set and target.role == "client":
         target.allowed_modules = filter_valid_slugs(payload.allowed_modules)
         changes["allowed_modules"] = target.allowed_modules
 
