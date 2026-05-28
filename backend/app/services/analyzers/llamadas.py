@@ -1,4 +1,10 @@
-"""Analyze llamadas data: team totals + per-agent + daily series."""
+"""Analyze llamadas data: team totals + per-agent + daily series.
+
+Umbrales:
+- EFFECTIVE_THRESHOLD_SEC = 30 → llamadas >= 30s se cuentan como "efectivas"
+- AHT_THRESHOLD_SEC = 45 → el AHT se calcula SOLO sobre llamadas >= 45s
+  (descarta llamadas cortas de transición que distorsionan el promedio).
+"""
 from __future__ import annotations
 
 from collections import defaultdict
@@ -6,7 +12,8 @@ from datetime import datetime
 from typing import Any
 
 
-EFFECTIVE_THRESHOLD_SEC = 30  # llamadas > 30s = "efectivas" (estándar telemarketing)
+EFFECTIVE_THRESHOLD_SEC = 30  # llamadas >= 30s = "efectivas"
+AHT_THRESHOLD_SEC = 45        # AHT se calcula solo sobre llamadas >= 45s
 
 
 def _sec_to_hms(seconds: float) -> str:
@@ -25,6 +32,9 @@ def analyze_llamadas(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "talk_seg": 0.0,
         "efectivas": 0,
         "no_efectivas": 0,
+        # Para AHT (>= 45s)
+        "aht_count": 0,
+        "aht_talk": 0.0,
     })
 
     by_user_day: dict[tuple[str, str], dict[str, Any]] = defaultdict(lambda: {
@@ -44,6 +54,10 @@ def analyze_llamadas(rows: list[dict[str, Any]]) -> dict[str, Any]:
     efectivas_total = 0
     no_efectivas_total = 0
 
+    # Acumuladores para AHT (solo llamadas >= 45s)
+    aht_count_total = 0
+    aht_talk_total = 0.0
+
     for r in rows:
         user = r["usuario"]
         dur = r["duracion_seg"]
@@ -51,12 +65,20 @@ def analyze_llamadas(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
         by_user[user]["llamadas"] += 1
         by_user[user]["talk_seg"] += dur
+
         if dur >= EFFECTIVE_THRESHOLD_SEC:
             by_user[user]["efectivas"] += 1
             efectivas_total += 1
         else:
             by_user[user]["no_efectivas"] += 1
             no_efectivas_total += 1
+
+        # AHT solo sobre llamadas >= 45s
+        if dur >= AHT_THRESHOLD_SEC:
+            by_user[user]["aht_count"] += 1
+            by_user[user]["aht_talk"] += dur
+            aht_count_total += 1
+            aht_talk_total += dur
 
         if fecha is not None:
             day_str = fecha.date().isoformat()
@@ -70,8 +92,8 @@ def analyze_llamadas(rows: list[dict[str, Any]]) -> dict[str, Any]:
     dias_operativos = len(fechas_set)
     asesores_activos = len(by_user)
 
-    # KPIs de equipo
-    aht = (total_talk / efectivas_total) if efectivas_total else 0
+    # AHT global: solo llamadas >= 45s
+    aht = (aht_talk_total / aht_count_total) if aht_count_total else 0
     promedio_diario = (total_calls / dias_operativos) if dias_operativos else 0
 
     # Ranking por asesor
@@ -80,7 +102,8 @@ def analyze_llamadas(rows: list[dict[str, Any]]) -> dict[str, Any]:
         efect = data["efectivas"]
         nef = data["no_efectivas"]
         total = data["llamadas"]
-        aht_user = (data["talk_seg"] / efect) if efect else 0
+        # AHT del asesor: solo sobre sus llamadas >= 45s
+        aht_user = (data["aht_talk"] / data["aht_count"]) if data["aht_count"] else 0
         asesores.append({
             "usuario": user,
             "llamadas": total,
@@ -106,15 +129,14 @@ def analyze_llamadas(rows: list[dict[str, Any]]) -> dict[str, Any]:
         row["_talk_seg"] = round(by_day[day]["talk_seg"], 1)
         serie_diaria.append(row)
 
-    # Talk time por día por asesor
+    # Talk time por día por asesor (minutos)
     serie_talk_diaria: list[dict[str, Any]] = []
     for day in dias_ordenados:
         row: dict[str, Any] = {"fecha": day}
         for user in usuarios_ordenados:
-            row[user] = round(by_user_day.get((user, day), {}).get("talk_seg", 0) / 60, 1)  # minutos
+            row[user] = round(by_user_day.get((user, day), {}).get("talk_seg", 0) / 60, 1)
         serie_talk_diaria.append(row)
 
-    # Distribución horaria
     franja_horaria = [{"hora": h, "llamadas": by_hour.get(h, 0)} for h in range(24)]
 
     return {
