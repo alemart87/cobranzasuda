@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { getUser } from "@/lib/api";
+import { apiFetch, getUser } from "@/lib/api";
 
 interface ModuleCard {
   slug: string;
@@ -58,10 +58,39 @@ export default function OperativasPage() {
   const [role, setRole] = useState<string>("");
 
   useEffect(() => {
+    // 1) Pintar rápido con los datos del localStorage para evitar flash.
     const u = getUser();
     setUserName(u?.full_name?.split(" ")[0] ?? "");
     setAllowed(u?.allowed_modules ?? null);
     setRole(u?.role ?? "");
+    // 2) Refrescar contra /auth/me para que cambios del superadmin
+    //    se reflejen sin necesidad de re-login.
+    apiFetch<{ full_name: string; role: string; allowed_modules: string[] | null }>(
+      "/api/v1/auth/me",
+    )
+      .then((me) => {
+        setUserName(me.full_name?.split(" ")[0] ?? "");
+        setAllowed(me.allowed_modules ?? null);
+        setRole(me.role ?? "");
+        // Sincronizar el localStorage para que otras pantallas vean lo mismo.
+        if (typeof window !== "undefined") {
+          const raw = localStorage.getItem("vc_user");
+          if (raw) {
+            try {
+              const stored = JSON.parse(raw);
+              stored.full_name = me.full_name;
+              stored.role = me.role;
+              stored.allowed_modules = me.allowed_modules ?? null;
+              localStorage.setItem("vc_user", JSON.stringify(stored));
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      })
+      .catch(() => {
+        /* si falla /me, dejamos lo del localStorage */
+      });
   }, []);
 
   // Para cliente, filtrar módulos según allowed_modules.
