@@ -87,6 +87,7 @@ async def login(
         user_role=user.role,
         user_name=user.full_name,
         user_photo_url=user.photo_url,
+        user_allowed_modules=user.allowed_modules,
     )
 
 
@@ -126,6 +127,7 @@ async def refresh_token(
         user_role=user.role,
         user_name=user.full_name,
         user_photo_url=user.photo_url,
+        user_allowed_modules=user.allowed_modules,
     )
 
 
@@ -137,6 +139,7 @@ async def me(user: CurrentUser = Depends(get_current_user)) -> dict:
         "full_name": user.full_name,
         "role": user.role,
         "photo_url": user.photo_url,
+        "allowed_modules": user.allowed_modules,
         "can_upload": user.can_upload,
         "can_manage_publish": user.can_manage_publish,
     }

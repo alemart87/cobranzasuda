@@ -28,6 +28,8 @@ async def list_reports(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ReportList:
+    if user.is_client and not user.has_module("cobranzas"):
+        return ReportList(items=[], total=0)
     stmt = select(Report).order_by(Report.generated_at.desc()).limit(100)
     if user.is_client:
         stmt = select(Report).where(Report.is_published == True).order_by(Report.generated_at.desc()).limit(100)  # noqa: E712

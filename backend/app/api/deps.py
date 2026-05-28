@@ -29,6 +29,8 @@ class CurrentUser:
     role: str
     full_name: str
     photo_url: Optional[str] = None
+    # Solo aplica a clientes. None = acceso a todos los módulos. Lista = restringido.
+    allowed_modules: Optional[list[str]] = None
 
     @property
     def is_superadmin(self) -> bool:
@@ -49,6 +51,14 @@ class CurrentUser:
     @property
     def can_manage_publish(self) -> bool:
         return self.role in ("superadmin", "analyst")
+
+    def has_module(self, slug: str) -> bool:
+        """Superadmin y analistas tienen acceso a todo. Cliente respeta allowed_modules."""
+        if self.role in ("superadmin", "analyst"):
+            return True
+        if self.allowed_modules is None:
+            return True  # cliente sin restricción explícita
+        return slug in self.allowed_modules
 
 
 async def get_current_user(
@@ -88,6 +98,7 @@ async def get_current_user(
     return CurrentUser(
         id=user.id, email=user.email, role=user.role,
         full_name=user.full_name, photo_url=user.photo_url,
+        allowed_modules=user.allowed_modules,
     )
 
 

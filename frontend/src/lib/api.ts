@@ -8,6 +8,7 @@ export interface CurrentUserInfo {
   role: string;
   full_name: string;
   photo_url?: string | null;
+  allowed_modules?: string[] | null; // null = acceso a todos
 }
 
 export function setSession(token: string, refreshToken: string, user: CurrentUserInfo) {

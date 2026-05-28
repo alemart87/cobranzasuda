@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { getUser } from "@/lib/api";
 
 interface ModuleCard {
+  slug: string;
   href: string;
   title: string;
   description: string;
@@ -17,6 +18,7 @@ interface ModuleCard {
 
 const MODULES: ModuleCard[] = [
   {
+    slug: "cobranzas",
     href: "/cobranzas",
     title: "Cobranzas",
     description:
@@ -27,6 +29,7 @@ const MODULES: ModuleCard[] = [
     badges: ["Reportes de cartera", "Reportes de llamadas", "Proyecciones"],
   },
   {
+    slug: "atencion",
     href: "/atencion",
     title: "Atención al Cliente",
     description:
@@ -37,6 +40,7 @@ const MODULES: ModuleCard[] = [
     badges: ["NPS", "Detractores", "Calidad"],
   },
   {
+    slug: "ventas",
     href: "/ventas",
     title: "Ventas",
     description:
@@ -50,11 +54,23 @@ const MODULES: ModuleCard[] = [
 
 export default function OperativasPage() {
   const [userName, setUserName] = useState<string>("");
+  const [allowed, setAllowed] = useState<string[] | null>(null);
+  const [role, setRole] = useState<string>("");
 
   useEffect(() => {
     const u = getUser();
     setUserName(u?.full_name?.split(" ")[0] ?? "");
+    setAllowed(u?.allowed_modules ?? null);
+    setRole(u?.role ?? "");
   }, []);
+
+  // Para cliente, filtrar módulos según allowed_modules.
+  // null = acceso a todos; lista = solo los listados.
+  const visibleModules = MODULES.filter((m) => {
+    if (role !== "client") return true;
+    if (allowed === null) return true;
+    return allowed.includes(m.slug);
+  });
 
   return (
     <AppShell>
@@ -70,8 +86,16 @@ export default function OperativasPage() {
         </p>
       </div>
 
+      {visibleModules.length === 0 && (
+        <div className="card p-12 text-center">
+          <p className="text-brand-slate">
+            No tenés operativas habilitadas. Solicitá al administrador el acceso a los módulos correspondientes.
+          </p>
+        </div>
+      )}
+
       <div className="grid md:grid-cols-3 gap-6">
-        {MODULES.map((m) => (
+        {visibleModules.map((m) => (
           <ModuleTile key={m.href} module={m} />
         ))}
       </div>

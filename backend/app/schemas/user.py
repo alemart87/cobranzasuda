@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
@@ -9,6 +9,8 @@ class UserCreate(BaseModel):
     password: str = Field(min_length=8)
     full_name: str = Field(min_length=2, max_length=255)
     role: str = Field(default="analyst", pattern="^(analyst|client)$")
+    # Solo aplica a clientes; null = acceso total
+    allowed_modules: Optional[List[str]] = None
 
 
 class UserUpdate(BaseModel):
@@ -16,6 +18,7 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = Field(default=None, min_length=8)
     photo_url: Optional[str] = None
+    allowed_modules: Optional[List[str]] = None
 
 
 class PasswordReset(BaseModel):
@@ -31,5 +34,6 @@ class UserRead(BaseModel):
     role: str
     is_active: bool
     photo_url: Optional[str] = None
+    allowed_modules: Optional[List[str]] = None
     created_at: datetime
     last_login_at: Optional[datetime] = None

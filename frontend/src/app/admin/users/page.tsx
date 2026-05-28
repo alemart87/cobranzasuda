@@ -13,8 +13,17 @@ interface UserRow {
   role: string;
   is_active: boolean;
   photo_url: string | null;
+  allowed_modules: string[] | null;
   created_at: string;
   last_login_at: string | null;
+}
+
+interface ModuleInfo {
+  slug: string;
+  name: string;
+  description: string;
+  available: boolean;
+  color: string;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -22,17 +31,32 @@ const ROLE_LABELS: Record<string, string> = {
   client: "Cliente (Sudameris — solo lectura)",
 };
 
+interface FormState {
+  email: string;
+  password: string;
+  full_name: string;
+  role: string;
+  // null = acceso total; array = solo los slugs marcados
+  allowed_modules: string[] | null;
+}
+
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
-  const [form, setForm] = useState({ email: "", password: "", full_name: "", role: "analyst" });
+  const [modules, setModules] = useState<ModuleInfo[]>([]);
+  const [form, setForm] = useState<FormState>({
+    email: "", password: "", full_name: "", role: "analyst", allowed_modules: null,
+  });
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [resetUserId, setResetUserId] = useState<string | null>(null);
   const [resetPwd, setResetPwd] = useState("");
+  const [editingModulesUser, setEditingModulesUser] = useState<UserRow | null>(null);
+  const [editingModules, setEditingModules] = useState<string[] | null>(null);
 
   const load = () => apiFetch<UserRow[]>("/api/v1/users").then(setUsers);
   useEffect(() => {
     load();
+    apiFetch<ModuleInfo[]>("/api/v1/modules").then(setModules);
   }, []);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -40,13 +64,64 @@ export default function AdminUsersPage() {
     setError(null);
     setOk(null);
     try {
-      await apiFetch("/api/v1/users", { method: "POST", body: JSON.stringify(form) });
+      // Para analista, no enviar allowed_modules (siempre tiene todo)
+      const payload: any = {
+        email: form.email,
+        password: form.password,
+        full_name: form.full_name,
+        role: form.role,
+      };
+      if (form.role === "client") payload.allowed_modules = form.allowed_modules;
+
+      await apiFetch("/api/v1/users", { method: "POST", body: JSON.stringify(payload) });
       setOk(`Usuario "${form.email}" creado como ${ROLE_LABELS[form.role]}`);
-      setForm({ email: "", password: "", full_name: "", role: "analyst" });
+      setForm({ email: "", password: "", full_name: "", role: "analyst", allowed_modules: null });
       load();
     } catch (e: any) {
       setError(e.message);
     }
+  };
+
+  const toggleFormModule = (slug: string) => {
+    if (form.allowed_modules === null) {
+      // estaba en "todos" → pasar a lista con solo este desmarcado
+      setForm({ ...form, allowed_modules: modules.filter((m) => m.slug !== slug).map((m) => m.slug) });
+      return;
+    }
+    const has = form.allowed_modules.includes(slug);
+    setForm({
+      ...form,
+      allowed_modules: has
+        ? form.allowed_modules.filter((s) => s !== slug)
+        : [...form.allowed_modules, slug],
+    });
+  };
+
+  const setFormAllAccess = () => setForm({ ...form, allowed_modules: null });
+
+  const openEditModules = (u: UserRow) => {
+    setEditingModulesUser(u);
+    setEditingModules(u.allowed_modules ?? null);
+  };
+
+  const saveEditModules = async () => {
+    if (!editingModulesUser) return;
+    await apiFetch(`/api/v1/users/${editingModulesUser.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ allowed_modules: editingModules }),
+    });
+    setEditingModulesUser(null);
+    setEditingModules(null);
+    load();
+  };
+
+  const toggleEditingModule = (slug: string) => {
+    if (editingModules === null) {
+      setEditingModules(modules.filter((m) => m.slug !== slug).map((m) => m.slug));
+      return;
+    }
+    const has = editingModules.includes(slug);
+    setEditingModules(has ? editingModules.filter((s) => s !== slug) : [...editingModules, slug]);
   };
 
   const toggleActive = async (u: UserRow) => {
@@ -122,6 +197,57 @@ export default function AdminUsersPage() {
             </div>
           </div>
 
+          {/* Selector de módulos visible solo para clientes */}
+          {form.role === "client" && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="label !mb-0">Operativas habilitadas</label>
+                <button
+                  type="button"
+                  onClick={setFormAllAccess}
+                  className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-1 rounded ${
+                    form.allowed_modules === null
+                      ? "bg-brand-cyan text-white"
+                      : "bg-brand-bg text-brand-slate hover:bg-brand-border"
+                  }`}
+                >
+                  Acceso a todas
+                </button>
+              </div>
+              <p className="text-xs text-brand-slate mb-2">
+                Seleccioná las operativas que este cliente podrá visualizar.
+              </p>
+              <div className="space-y-2">
+                {modules.map((m) => {
+                  const checked = form.allowed_modules === null || form.allowed_modules.includes(m.slug);
+                  return (
+                    <label
+                      key={m.slug}
+                      className={`flex items-start gap-2.5 p-2.5 rounded-md border cursor-pointer transition-colors ${
+                        checked ? "border-brand-primary bg-brand-primary-light/30" : "border-brand-border"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleFormModule(m.slug)}
+                        className="mt-0.5 accent-brand-primary"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: m.color }} />
+                          <span className="text-sm font-semibold text-brand-ink">{m.name}</span>
+                          {!m.available && <span className="badge-neutral">Próximamente</span>}
+                        </div>
+                        <div className="text-[11px] text-brand-slate mt-0.5">{m.description}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="label">Email</label>
             <input
@@ -182,14 +308,76 @@ export default function AdminUsersPage() {
               <UserListItem
                 key={u.id}
                 user={u}
+                modules={modules}
                 onToggle={toggleActive}
                 onResetPwd={() => setResetUserId(u.id)}
                 onUploadPhoto={onUploadPhoto}
+                onEditModules={() => openEditModules(u)}
               />
             ))}
           </ul>
         </div>
       </div>
+
+      {/* Modal editar módulos del cliente */}
+      {editingModulesUser && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="card p-6 max-w-lg w-full space-y-4">
+            <div>
+              <h3 className="font-display text-xl text-brand-ink uppercase">Operativas habilitadas</h3>
+              <p className="text-xs text-brand-slate mt-1">
+                Cliente: <b>{editingModulesUser.full_name}</b> · {editingModulesUser.email}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setEditingModules(null)}
+              className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-1 rounded ${
+                editingModules === null ? "bg-brand-cyan text-white" : "bg-brand-bg text-brand-slate hover:bg-brand-border"
+              }`}
+            >
+              Acceso a todas
+            </button>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {modules.map((m) => {
+                const checked = editingModules === null || editingModules.includes(m.slug);
+                return (
+                  <label
+                    key={m.slug}
+                    className={`flex items-start gap-2.5 p-2.5 rounded-md border cursor-pointer ${
+                      checked ? "border-brand-primary bg-brand-primary-light/30" : "border-brand-border"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleEditingModule(m.slug)}
+                      className="mt-0.5 accent-brand-primary"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ background: m.color }} />
+                        <span className="text-sm font-semibold text-brand-ink">{m.name}</span>
+                        {!m.available && <span className="badge-neutral">Próximamente</span>}
+                      </div>
+                      <div className="text-[11px] text-brand-slate mt-0.5">{m.description}</div>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t border-brand-border">
+              <button
+                onClick={() => { setEditingModulesUser(null); setEditingModules(null); }}
+                className="btn-secondary"
+              >
+                Cancelar
+              </button>
+              <button onClick={saveEditModules} className="btn-primary">Guardar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal reset password */}
       {resetUserId && (
@@ -224,14 +412,18 @@ export default function AdminUsersPage() {
 
 function UserListItem({
   user,
+  modules,
   onToggle,
   onResetPwd,
   onUploadPhoto,
+  onEditModules,
 }: {
   user: UserRow;
+  modules: ModuleInfo[];
   onToggle: (u: UserRow) => void;
   onResetPwd: () => void;
   onUploadPhoto: (u: UserRow, f: File) => void;
+  onEditModules: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   return (
@@ -272,8 +464,39 @@ function UserListItem({
           Alta {formatDate(user.created_at)} ·
           {user.last_login_at ? ` Últ. acceso ${formatDate(user.last_login_at)}` : " Sin acceso aún"}
         </div>
+        {user.role === "client" && (
+          <div className="flex flex-wrap gap-1 mt-1.5">
+            {user.allowed_modules === null ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-cyan/10 text-brand-cyan font-semibold uppercase tracking-wider2">
+                Todas las operativas
+              </span>
+            ) : user.allowed_modules.length === 0 ? (
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-bg text-brand-slate font-semibold uppercase tracking-wider2">
+                Sin operativas
+              </span>
+            ) : (
+              user.allowed_modules.map((s) => {
+                const m = modules.find((mm) => mm.slug === s);
+                return (
+                  <span
+                    key={s}
+                    className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider2 text-white"
+                    style={{ background: m?.color ?? "#5B6275" }}
+                  >
+                    {m?.name ?? s}
+                  </span>
+                );
+              })
+            )}
+          </div>
+        )}
       </div>
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 flex-col">
+        {user.role === "client" && (
+          <button onClick={onEditModules} className="text-xs px-2.5 py-1 rounded border border-brand-border hover:border-brand-cyan hover:text-brand-cyan">
+            Operativas
+          </button>
+        )}
         <button onClick={onResetPwd} className="text-xs px-2.5 py-1 rounded border border-brand-border hover:border-brand-cyan hover:text-brand-cyan">
           Resetear PWD
         </button>

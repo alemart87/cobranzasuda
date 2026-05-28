@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import settings
 from ...core.database import get_db
+from ...core.modules import MODULES, filter_valid_slugs
 from ...core.security import hash_password
 from ...models.user import User
 from ...schemas.user import PasswordReset, UserCreate, UserRead, UserUpdate
@@ -42,11 +43,17 @@ async def create_user(
     if existing.scalar_one_or_none():
         raise HTTPException(status.HTTP_409_CONFLICT, "Email ya registrado")
 
+    # allowed_modules: solo aplica a clientes; analistas siempre tienen acceso completo
+    allowed = None
+    if payload.role == "client" and payload.allowed_modules is not None:
+        allowed = filter_valid_slugs(payload.allowed_modules)
+
     new_user = User(
         email=email,
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
         role=payload.role,
+        allowed_modules=allowed,
         created_by=user.id if user.id != "superadmin" else None,
     )
     db.add(new_user)
@@ -60,7 +67,7 @@ async def create_user(
         resource_type="user",
         resource_id=new_user.id,
         ip=client_ip(request),
-        extra={"new_user_email": email, "role": payload.role},
+        extra={"new_user_email": email, "role": payload.role, "allowed_modules": allowed},
     )
     return new_user
 
@@ -90,6 +97,9 @@ async def update_user(
     if payload.photo_url is not None:
         target.photo_url = payload.photo_url
         changes["photo_url"] = payload.photo_url
+    if payload.allowed_modules is not None and target.role == "client":
+        target.allowed_modules = filter_valid_slugs(payload.allowed_modules)
+        changes["allowed_modules"] = target.allowed_modules
 
     await db.commit()
     await db.refresh(target)
