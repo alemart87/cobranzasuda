@@ -16,6 +16,7 @@ interface Cartera {
   polizas: number;
   asegurados: number;
   saldo_total: number;
+  saldo_mora: number;
   tramos: {
     a_vencer: number; h_30: number; h_60: number; h_90: number;
     h_120: number; h_150: number; m_150: number;
@@ -30,7 +31,7 @@ interface Response {
   period_month: string | null;
   carteras: Cartera[];
   totales: {
-    polizas: number; asegurados: number; saldo_total: number;
+    polizas: number; asegurados: number; saldo_total: number; saldo_mora: number;
     a_vencer: number; h_30: number; h_60: number; h_90: number;
     h_120: number; h_150: number; m_150: number;
   };
@@ -141,7 +142,7 @@ export default function CarterasTotalesPage() {
         <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold mb-3">
           Totales consolidados
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KpiCard
             label="Pólizas totales"
             value={formatInt(data.totales.polizas)}
@@ -158,6 +159,16 @@ export default function CarterasTotalesPage() {
             label="Saldo total operado"
             value={formatGs(data.totales.saldo_total)}
             accent="primary"
+          />
+          <KpiCard
+            label="Saldo en mora"
+            value={formatGs(data.totales.saldo_mora)}
+            hint={
+              data.totales.saldo_total > 0
+                ? `${((data.totales.saldo_mora / data.totales.saldo_total) * 100).toFixed(1)}% del total`
+                : "vencido (excl. a vencer)"
+            }
+            accent="orange"
           />
         </div>
       </section>
@@ -204,9 +215,15 @@ export default function CarterasTotalesPage() {
                   <div className="font-display text-2xl text-brand-ink">{formatInt(c.asegurados)}</div>
                 </div>
               </div>
-              <div className="mt-3">
-                <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">Saldo total</div>
-                <div className="font-display text-2xl text-brand-primary">{formatGs(c.saldo_total)}</div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">Saldo total</div>
+                  <div className="font-display text-2xl text-brand-primary">{formatGs(c.saldo_total)}</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">En mora</div>
+                  <div className="font-display text-2xl text-brand-orange">{formatGs(c.saldo_mora)}</div>
+                </div>
               </div>
               {c.report_id && (
                 <div className="mt-3 pt-3 border-t border-brand-border">
@@ -292,6 +309,17 @@ export default function CarterasTotalesPage() {
                 </tr>
               );
             })}
+            <tr className="border-t border-brand-border bg-brand-bg-soft/60">
+              <td className="px-4 py-2.5 font-semibold text-brand-orange">Saldo en mora</td>
+              {data.carteras.map((c) => (
+                <td key={c.fuente} className="px-4 py-2.5 text-right font-semibold text-brand-orange">
+                  {formatGs(c.saldo_mora)}
+                </td>
+              ))}
+              <td className="px-4 py-2.5 text-right font-bold text-brand-orange">
+                {formatGs(data.totales.saldo_mora)}
+              </td>
+            </tr>
             <tr className="border-t-2 border-brand-ink bg-brand-bg-soft">
               <td className="px-4 py-3 font-display uppercase text-brand-ink">Saldo total</td>
               {data.carteras.map((c) => (

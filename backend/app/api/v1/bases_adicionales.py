@@ -281,6 +281,14 @@ def _tramos_from_report_data(data: dict) -> dict[str, float]:
     return out
 
 
+# Tramos que cuentan como "vencido" (en mora) — todos menos "a vencer".
+_MORA_KEYS = ("h_30", "h_60", "h_90", "h_120", "h_150", "m_150")
+
+
+def _vencido_from_tramos(tramos: dict[str, float]) -> float:
+    return float(sum(tramos.get(k, 0.0) for k in _MORA_KEYS))
+
+
 @router.get("/carteras-totales", response_model=CarterasTotalesResponse,
             tags=["carteras-totales"])
 async def get_carteras_totales(
@@ -314,13 +322,23 @@ async def get_carteras_totales(
 
     carteras: list[CarteraResumen] = []
     if dxp_report:
-        tramos = _tramos_from_report_data(dxp_report.data or {})
+        data = dxp_report.data or {}
+        # polizas/asegurados viven en el JSON (no son columnas del modelo Report)
+        cartera_kpis = (data.get("cartera") or {}).get("kpis") or {}
+        tramos = _tramos_from_report_data(data)
+        saldo_total = float(dxp_report.saldo_total or cartera_kpis.get("saldo_total", 0) or 0)
+        vencido = float(dxp_report.vencido_total or cartera_kpis.get("vencido_total", 0) or 0)
+        # El analyzer de cartera DXP no trackea "A vencer" por separado:
+        # lo derivamos como saldo_total - vencido para que el desglose cierre.
+        if not tramos.get("a_vencer"):
+            tramos["a_vencer"] = max(saldo_total - vencido, 0.0)
         carteras.append(CarteraResumen(
             nombre="Cartera DXP",
             fuente="dxp",
-            polizas=int(getattr(dxp_report, "polizas", 0) or 0),
-            asegurados=int(getattr(dxp_report, "asegurados", 0) or 0),
-            saldo_total=float(getattr(dxp_report, "saldo_total", 0) or 0),
+            polizas=int(cartera_kpis.get("polizas", 0) or 0),
+            asegurados=int(cartera_kpis.get("asegurados", 0) or 0),
+            saldo_total=saldo_total,
+            saldo_mora=vencido,
             tramos=tramos,
             recibe_pagos=True,
             period_month=dxp_report.period_month,
@@ -350,6 +368,7 @@ async def get_carteras_totales(
             polizas=int(rep.polizas or 0),
             asegurados=int(rep.asegurados or 0),
             saldo_total=float(rep.saldo_total or 0),
+            saldo_mora=_vencido_from_tramos(tramos),
             tramos=tramos,
             recibe_pagos=False,
             period_month=rep.period_month,
@@ -361,6 +380,7 @@ async def get_carteras_totales(
         "polizas": float(sum(c.polizas for c in carteras)),
         "asegurados": float(sum(c.asegurados for c in carteras)),
         "saldo_total": float(sum(c.saldo_total for c in carteras)),
+        "saldo_mora": float(sum(c.saldo_mora for c in carteras)),
         "a_vencer": float(sum(c.tramos.get("a_vencer", 0) for c in carteras)),
         "h_30": float(sum(c.tramos.get("h_30", 0) for c in carteras)),
         "h_60": float(sum(c.tramos.get("h_60", 0) for c in carteras)),

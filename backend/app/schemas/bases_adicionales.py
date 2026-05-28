@@ -57,6 +57,7 @@ class CarteraResumen(BaseModel):
     polizas: int
     asegurados: int
     saldo_total: float
+    saldo_mora: float  # vencido = suma de todos los tramos excepto "a vencer"
     tramos: dict[str, float]  # a_vencer, h_30, h_60, h_90, h_120, h_150, m_150
     recibe_pagos: bool
     period_month: Optional[date] = None
