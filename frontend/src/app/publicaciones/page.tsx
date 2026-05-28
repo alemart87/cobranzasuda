@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 
@@ -69,6 +70,9 @@ export default function PublicacionesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<Publication | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [kindFilter, setKindFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [user, setUser] = useState<any>(null);
@@ -86,6 +90,7 @@ export default function PublicacionesPage() {
 
   const togglePublish = async (p: Publication) => {
     setBusyId(p.id);
+    setActionError(null);
     try {
       await apiFetch(`${KIND_ROUTES[p.kind].api}/${p.id}/publish`, {
         method: "POST",
@@ -93,23 +98,25 @@ export default function PublicacionesPage() {
       });
       await load();
     } catch (e: any) {
-      alert(e.message);
+      setActionError(e.message);
     } finally {
       setBusyId(null);
     }
   };
 
-  const remove = async (p: Publication) => {
-    const label = p.title || p.period_month || p.kind_label;
-    if (!confirm(`¿Eliminar definitivamente "${p.kind_label} · ${label}"? Esta acción no se puede deshacer.`)) return;
-    setBusyId(p.id);
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    const p = pendingDelete;
+    setDeleting(true);
+    setActionError(null);
     try {
       await apiFetch(`${KIND_ROUTES[p.kind].api}/${p.id}`, { method: "DELETE" });
+      setPendingDelete(null);
       await load();
     } catch (e: any) {
-      alert(e.message);
+      setActionError(e.message);
     } finally {
-      setBusyId(null);
+      setDeleting(false);
     }
   };
 
@@ -155,6 +162,19 @@ export default function PublicacionesPage() {
       {error && (
         <div className="card p-4 mb-4">
           <p className="text-brand-primary text-sm">{error}</p>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-md border border-brand-primary/30 bg-brand-primary-light px-4 py-3">
+          <p className="text-sm text-brand-primary-dark">{actionError}</p>
+          <button
+            onClick={() => setActionError(null)}
+            className="text-brand-primary-dark/60 hover:text-brand-primary-dark text-lg leading-none"
+            aria-label="Cerrar"
+          >
+            ×
+          </button>
         </div>
       )}
 
@@ -234,7 +254,7 @@ export default function PublicacionesPage() {
                       {p.is_published ? "Despublicar" : "Publicar"}
                     </button>
                     <button
-                      onClick={() => remove(p)}
+                      onClick={() => setPendingDelete(p)}
                       disabled={busyId === p.id}
                       className="text-xs px-2.5 py-1 mr-1 rounded border border-brand-border hover:border-brand-primary hover:text-brand-primary disabled:opacity-50"
                     >
@@ -250,6 +270,27 @@ export default function PublicacionesPage() {
           </table>
         </div>
       )}
+      <ConfirmDialog
+        open={!!pendingDelete}
+        variant="danger"
+        title="Eliminar reporte"
+        confirmLabel="Eliminar definitivamente"
+        cancelLabel="Cancelar"
+        loading={deleting}
+        onCancel={() => !deleting && setPendingDelete(null)}
+        onConfirm={confirmDelete}
+        message={
+          pendingDelete && (
+            <>
+              Vas a eliminar{" "}
+              <b className="text-brand-ink">
+                {pendingDelete.kind_label} · {pendingDelete.title || pendingDelete.period_month || "sin período"}
+              </b>
+              . Esta acción no se puede deshacer.
+            </>
+          )
+        }
+      />
     </AppShell>
   );
 }
