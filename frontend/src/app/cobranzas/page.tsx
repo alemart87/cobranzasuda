@@ -36,13 +36,12 @@ interface Overview {
   } | null;
   gestiones: {
     total_gestiones: number;
-    clientes_unicos: number;
     promesas_totales: number;
     cobros_totales: number;
     pct_promesas_cumplidas: number;
     asesores_activos: number;
   } | null;
-  rendimiento: { pct: number; clientes_gestionados: number; asegurados: number } | null;
+  rendimiento: { pct: number; gestiones: number; asegurados: number } | null;
 }
 
 const MONTH_NAMES = [
@@ -318,10 +317,10 @@ export default function CobranzasHubPage() {
               </div>
             </div>
             <div className="text-sm text-brand-slate">
-              Cobertura estimada de gestión <b className="text-brand-ink">por cliente</b> sobre la cartera del mes.
+              Indicador estimativo del <b className="text-brand-ink">avance de gestión sobre los clientes</b> de la cartera del mes.
               <div className="text-brand-ink font-semibold mt-1">
                 {ov.rendimiento
-                  ? `${formatInt(ov.rendimiento.clientes_gestionados)} clientes gestionados ÷ ${formatInt(ov.rendimiento.asegurados)} asegurados`
+                  ? `${formatInt(ov.rendimiento.gestiones)} gestiones ÷ ${formatInt(ov.rendimiento.asegurados)} asegurados`
                   : "Faltan datos de cartera o de gestiones publicados."}
               </div>
             </div>
@@ -342,7 +341,7 @@ export default function CobranzasHubPage() {
             <KpiCard label="Llamadas" value={ov.llamadas ? formatInt(ov.llamadas.total_llamadas) : "—"} hint={ov.llamadas ? `${formatInt(ov.llamadas.efectivas_total)} efectivas · ${ov.llamadas.asesores_activos} asesores` : "sin reporte publicado"} accent="purple" />
             <KpiCard label="Total hablado" value={ov.llamadas ? `${(ov.llamadas.total_talk_seg / 3600).toFixed(1)} hs` : "—"} accent="cyan" />
             <KpiCard label="Prom. conversación" value={ov.llamadas ? `${fmtMinSeg(ov.llamadas.aht_seg)} min` : "—"} hint="por contacto (AHT)" accent="secondary" />
-            <KpiCard label="Gestiones" value={ov.gestiones ? formatInt(ov.gestiones.total_gestiones) : "—"} hint={ov.gestiones ? `${formatInt(ov.gestiones.clientes_unicos)} clientes · ${formatInt(ov.gestiones.promesas_totales)} promesas` : "sin reporte publicado"} accent="primary" />
+            <KpiCard label="Gestiones" value={ov.gestiones ? formatInt(ov.gestiones.total_gestiones) : "—"} hint={ov.gestiones ? `${formatInt(ov.gestiones.promesas_totales)} promesas · ${formatInt(ov.gestiones.cobros_totales)} cobros` : "sin reporte publicado"} accent="primary" />
           </div>
 
           {/* Detalle por cartera */}
