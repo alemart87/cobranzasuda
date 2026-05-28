@@ -37,15 +37,84 @@ MIGRATIONS_IDEMPOTENT = [
 ]
 
 
-async def _run_migrations() -> dict[str, list[str]]:
-    """Corre cada ALTER de forma idempotente. Cada uno en su propia transacción
-    para que un error no abort'ee toda la cola en PostgreSQL.
-    Devuelve {'ok': [...], 'skipped': [...]} para diagnóstico.
+# Columnas críticas que TIENEN que existir para que el ORM no rompa.
+# Si falta alguna, se agrega con un ALTER explícito (sin IF NOT EXISTS para soportar PG viejos).
+REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
+    # (table, column, datatype)
+    ("users", "photo_url", "VARCHAR(500)"),
+    ("users", "last_login_at", "TIMESTAMP WITH TIME ZONE"),
+    ("users", "allowed_modules", "JSON"),
+    ("reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("reports", "published_by", "VARCHAR(36)"),
+    ("reports", "title", "VARCHAR(255)"),
+    ("call_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("call_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("call_reports", "published_by", "VARCHAR(36)"),
+    ("call_reports", "title", "VARCHAR(255)"),
+    ("gestion_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("gestion_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("gestion_reports", "published_by", "VARCHAR(36)"),
+    ("gestion_reports", "title", "VARCHAR(255)"),
+]
+
+
+async def _ensure_required_columns() -> dict[str, list[str]]:
+    """Verifica con information_schema qué columnas existen y agrega las faltantes.
+    Es 100 % seguro: solo agrega lo que falta, no toca nada existente.
     """
     from sqlalchemy import text
+
+    is_postgres = "postgresql" in str(engine.url)
+    if not is_postgres:
+        # SQLite (tests/local) no soporta information_schema. create_all ya hizo el trabajo.
+        return {"added": [], "already_exists": ["sqlite: skipped"]}
+
+    added: list[str] = []
+    already: list[str] = []
+
+    async with engine.begin() as conn:
+        # 1) Listar tablas existentes
+        r = await conn.execute(text(
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
+        ))
+        existing_tables = {row[0] for row in r}
+
+        # 2) Para cada (tabla, columna), verificar existencia y agregar si falta
+        for table, col, dtype in REQUIRED_COLUMNS:
+            if table not in existing_tables:
+                # La tabla aún no existe; create_all la va a generar con el schema completo
+                continue
+            r = await conn.execute(text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name=:t AND column_name=:c"
+            ), {"t": table, "c": col})
+            exists = r.scalar() is not None
+            if exists:
+                already.append(f"{table}.{col}")
+                continue
+            # Agregar la columna en su propia subtransacción (savepoint)
+            try:
+                await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {dtype}"))
+                added.append(f"{table}.{col} ({dtype})")
+                logger.warning(f"[schema-heal] Added missing column: {table}.{col} {dtype}")
+            except Exception as exc:
+                logger.error(f"[schema-heal] FAILED to add {table}.{col}: {exc}")
+                # NO romper el boot por una sola columna; pero loguear claro
+    return {"added": added, "already_exists": already}
+
+
+async def _run_migrations() -> dict[str, list[str]]:
+    """Corre statements DML adicionales (UPDATEs) idempotentes.
+    Cada uno en su propia transacción para no contaminar la siguiente.
+    """
+    from sqlalchemy import text
+    extras = [
+        "UPDATE users SET role = 'analyst' WHERE role = 'viewer'",
+    ]
     ok: list[str] = []
     skipped: list[str] = []
-    for stmt in MIGRATIONS_IDEMPOTENT:
+    for stmt in extras:
         try:
             async with engine.begin() as conn:
                 await conn.execute(text(stmt))
@@ -60,10 +129,20 @@ async def _run_migrations() -> dict[str, list[str]]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
-    logger.info("Boot: ensuring DB schema")
+    logger.info("Boot: ensuring DB schema (create_all)")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("Boot: running idempotent migrations")
+
+    # AUTO-HEALING: detecta columnas faltantes via information_schema y las agrega
+    logger.info("Boot: schema self-heal")
+    heal = await _ensure_required_columns()
+    logger.warning(
+        f"Boot: schema heal added={len(heal['added'])} existed={len(heal['already_exists'])}"
+    )
+    for col in heal["added"]:
+        logger.warning(f"[schema-heal] + {col}")
+
+    logger.info("Boot: running DML migrations")
     result = await _run_migrations()
     logger.info(f"Boot: migrations ok={len(result['ok'])} skipped={len(result['skipped'])}")
     logger.info("Boot: resuming pending jobs")
@@ -96,20 +175,21 @@ async def health() -> dict[str, str]:
 
 @app.post("/api/v1/admin/migrate")
 async def trigger_migrations(token: str | None = None) -> dict:
-    """Endpoint de emergencia para re-correr las migraciones idempotentes.
+    """Endpoint de emergencia: corre el auto-healing del schema + migraciones DML.
 
-    Auth simple: hay que pasar ?token=<SECRET_KEY> para evitar abuso.
-    Devuelve cuáles ALTER pasaron y cuáles se saltaron (con el motivo).
+    Auth simple: ?token=<SECRET_KEY> (la env var de Render, no requiere login).
+    Útil cuando algún boot anterior no aplicó las columnas.
     """
     from fastapi import HTTPException, status
     if token != settings.secret_key:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Token invalido")
+    heal = await _ensure_required_columns()
     result = await _run_migrations()
     return {
-        "ok_count": len(result["ok"]),
-        "skipped_count": len(result["skipped"]),
-        "ok": result["ok"],
-        "skipped": result["skipped"],
+        "schema_added": heal["added"],
+        "schema_already_existed": heal["already_exists"],
+        "dml_ok": result["ok"],
+        "dml_skipped": result["skipped"],
     }
 
 
