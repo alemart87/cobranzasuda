@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.v1 import audit, auth, calls, gestiones, reports, uploads, users
+from .api.v1 import audit, auth, calls, gestiones, modules, reports, uploads, users
 from .core.config import settings
 from .core.database import Base, engine
 from .core.logging import configure_logging, logger
@@ -220,3 +220,4 @@ app.include_router(calls.router, prefix="/api/v1")
 app.include_router(gestiones.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
+app.include_router(modules.router, prefix="/api/v1")
