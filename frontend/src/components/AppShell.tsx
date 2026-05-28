@@ -19,16 +19,18 @@ const ADMIN_NAV: NavItem[] = [
   { href: "/admin/audit", label: "Auditoría", roles: ["superadmin"] },
 ];
 
-// Navegación interna del módulo Cobranzas (aparece SOLO cuando estás dentro)
-const COBRANZAS_NAV: NavItem[] = [
-  { href: "/cobranzas", label: "Inicio", roles: ["superadmin", "analyst", "client"] },
-  { href: "/reports", label: "Reportes de Cartera", roles: ["superadmin", "analyst", "client"] },
-  { href: "/calls/reports", label: "Reportes de Llamadas", roles: ["superadmin", "analyst", "client"] },
-  { href: "/gestiones/reports", label: "Reportes de Gestiones", roles: ["superadmin", "analyst", "client"] },
-  { href: "/publicaciones", label: "Publicaciones", roles: ["superadmin", "analyst"] },
-  { href: "/upload", label: "Subir Cartera", roles: ["superadmin", "analyst"] },
-  { href: "/calls/upload", label: "Subir Llamadas", roles: ["superadmin", "analyst"] },
-  { href: "/gestiones/upload", label: "Subir Gestiones", roles: ["superadmin", "analyst"] },
+// Navegación interna del módulo Cobranzas (aparece SOLO cuando estás dentro),
+// organizada en grupos para no saturar la barra.
+const NAV_INICIO = { href: "/cobranzas", label: "Inicio" };
+const NAV_REPORTS = [
+  { href: "/reports", label: "Cartera" },
+  { href: "/calls/reports", label: "Llamadas" },
+  { href: "/gestiones/reports", label: "Gestiones" },
+];
+const NAV_UPLOADS = [
+  { href: "/upload", label: "Cartera" },
+  { href: "/calls/upload", label: "Llamadas" },
+  { href: "/gestiones/upload", label: "Gestiones" },
 ];
 
 const COBRANZAS_PREFIXES = ["/cobranzas", "/reports", "/upload", "/calls", "/gestiones", "/publicaciones"];
@@ -43,6 +45,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<CurrentUserInfo | null>(null);
+  const [uploadsOpen, setUploadsOpen] = useState(false);
 
   useEffect(() => {
     const t = getToken();
@@ -53,6 +56,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setUser(getUser());
   }, [router]);
 
+  // Cerrar el menú "Cargar" al navegar.
+  useEffect(() => {
+    setUploadsOpen(false);
+  }, [pathname]);
+
   const onLogout = () => {
     clearSession();
     router.push("/login");
@@ -62,7 +70,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const adminItems = ADMIN_NAV.filter((n) => n.roles.includes(user.role));
   const inCobranzas = COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
-  const cobranzasItems = COBRANZAS_NAV.filter((n) => n.roles.includes(user.role));
+  const canManage = user.role === "superadmin" || user.role === "analyst";
+
+  const isActive = (href: string) =>
+    pathname === href || (href !== "/cobranzas" && (pathname?.startsWith(href) ?? false));
+  const pill = (active: boolean) =>
+    `px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap ${
+      active ? "bg-brand-primary text-white" : "text-white/70 hover:bg-white/10 hover:text-white"
+    }`;
+  const uploadsActive = NAV_UPLOADS.some((u) => isActive(u.href));
+  const navDivider = <span className="w-px h-4 bg-white/15 mx-1.5 flex-shrink-0" aria-hidden />;
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-bg">
@@ -110,37 +127,86 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {/* Nav del módulo Cobranzas: SOLO cuando estás dentro del módulo */}
         {inCobranzas && (
           <div className="bg-brand-ink text-white">
-            <div className="px-6 py-2 flex items-center gap-2 overflow-x-auto">
+            <div className="px-6 py-2 flex items-center gap-1 flex-wrap">
               <Link
                 href="/operativas"
-                className="text-[10px] uppercase tracking-wider2 font-semibold text-white/60 hover:text-white mr-3 flex-shrink-0"
+                className="text-[10px] uppercase tracking-wider2 font-semibold text-white/55 hover:text-white flex-shrink-0"
               >
                 ← Operativas
               </Link>
-              <span className="text-white/30 mr-2 flex-shrink-0">·</span>
-              <span className="text-[10px] uppercase tracking-wider2 font-bold text-white/80 mr-3 flex-shrink-0">
+              {navDivider}
+              <span className="text-[10px] uppercase tracking-wider2 font-bold text-white/80 flex-shrink-0">
                 Cobranzas
               </span>
-              <div className="flex items-center gap-1 ml-2">
-                {cobranzasItems.map((item) => {
-                  const active =
-                    pathname === item.href ||
-                    (item.href !== "/cobranzas" && pathname?.startsWith(item.href));
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap ${
-                        active
-                          ? "bg-brand-primary text-white"
-                          : "text-white/70 hover:bg-white/10 hover:text-white"
-                      }`}
+              {navDivider}
+
+              {/* Inicio */}
+              <Link href={NAV_INICIO.href} className={pill(isActive(NAV_INICIO.href))}>
+                {NAV_INICIO.label}
+              </Link>
+
+              {navDivider}
+
+              {/* Grupo: Reportes */}
+              <span className="text-[10px] uppercase tracking-wider2 font-semibold text-white/40 px-1.5 flex-shrink-0">
+                Reportes
+              </span>
+              {NAV_REPORTS.map((item) => (
+                <Link key={item.href} href={item.href} className={pill(isActive(item.href))}>
+                  {item.label}
+                </Link>
+              ))}
+
+              {canManage && (
+                <>
+                  {navDivider}
+                  <Link href="/publicaciones" className={pill(isActive("/publicaciones"))}>
+                    Publicaciones
+                  </Link>
+
+                  {navDivider}
+                  {/* Menú Cargar (colapsa los 3 "subir") */}
+                  <div className="relative flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setUploadsOpen((o) => !o)}
+                      className={`${pill(uploadsActive)} inline-flex items-center gap-1.5`}
                     >
-                      {item.label}
-                    </Link>
-                  );
-                })}
-              </div>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <path d="m17 8-5-5-5 5" />
+                        <path d="M12 3v12" />
+                      </svg>
+                      Cargar
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${uploadsOpen ? "rotate-180" : ""}`}>
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                    {uploadsOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setUploadsOpen(false)} />
+                        <div className="absolute left-0 top-full mt-1.5 z-40 min-w-[180px] bg-white text-brand-ink rounded-md shadow-elevated border border-brand-border py-1 overflow-hidden">
+                          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider2 text-brand-mist font-semibold">
+                            Procesar archivos
+                          </div>
+                          {NAV_UPLOADS.map((item) => (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => setUploadsOpen(false)}
+                              className={`block px-3 py-2 text-sm font-medium hover:bg-brand-bg ${
+                                isActive(item.href) ? "text-brand-primary" : "text-brand-graphite"
+                              }`}
+                            >
+                              {item.label}
+                            </Link>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
