@@ -34,20 +34,6 @@ export default function ReportsListPage() {
       .then((d) => setItems(d.items))
       .finally(() => setLoading(false));
 
-  const togglePublish = async (r: ReportSummary) => {
-    await apiFetch(`/api/v1/reports/${r.id}/publish`, {
-      method: "POST",
-      body: JSON.stringify({ is_published: !r.is_published }),
-    });
-    load();
-  };
-
-  const deleteReport = async (r: ReportSummary) => {
-    if (!confirm(`¿Eliminar reporte de ${r.period_month ?? "sin período"}?`)) return;
-    await apiFetch(`/api/v1/reports/${r.id}`, { method: "DELETE" });
-    load();
-  };
-
   const canManage = user && (user.role === "superadmin" || user.role === "analyst");
 
   return (
@@ -62,7 +48,10 @@ export default function ReportsListPage() {
           </p>
         </div>
         {canManage && (
-          <Link href="/upload" className="btn-primary">+ Subir nuevo</Link>
+          <div className="flex items-center gap-2">
+            <Link href="/publicaciones" className="btn-ghost">Gestionar publicaciones</Link>
+            <Link href="/upload" className="btn-primary">+ Subir nuevo</Link>
+          </div>
         )}
       </div>
 
@@ -106,16 +95,6 @@ export default function ReportsListPage() {
                   <td className="px-4 py-3 text-right text-brand-cyan font-semibold">{formatGs(r.recupero_total)}</td>
                   <td className="px-4 py-3 text-xs text-brand-slate">{formatDate(r.generated_at)}</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    {canManage && (
-                      <>
-                        <button onClick={() => togglePublish(r)} className="text-xs px-2.5 py-1 mr-1 rounded border border-brand-border hover:border-brand-cyan hover:text-brand-cyan">
-                          {r.is_published ? "Despublicar" : "Publicar"}
-                        </button>
-                        <button onClick={() => deleteReport(r)} className="text-xs px-2.5 py-1 mr-1 rounded border border-brand-border hover:border-brand-primary hover:text-brand-primary">
-                          Eliminar
-                        </button>
-                      </>
-                    )}
                     <Link href={`/reports/${r.id}`} className="text-brand-primary font-semibold hover:underline">
                       Ver →
                     </Link>

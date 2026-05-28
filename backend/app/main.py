@@ -7,8 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1 import (
-    audit, auth, bases_adicionales, calls, gestiones, modules, reports,
-    uploads, users,
+    audit, auth, bases_adicionales, calls, gestiones, modules, publications,
+    reports, uploads, users,
 )
 from .core.config import settings
 from .core.database import Base, engine
@@ -230,3 +230,4 @@ app.include_router(users.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(modules.router, prefix="/api/v1")
 app.include_router(bases_adicionales.router, prefix="/api/v1")
+app.include_router(publications.router, prefix="/api/v1")

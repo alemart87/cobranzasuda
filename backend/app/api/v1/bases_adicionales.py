@@ -401,3 +401,34 @@ async def get_carteras_totales(
         carteras=carteras,
         totales=totales,
     )
+
+
+@router.get("/carteras-totales/periods", tags=["carteras-totales"])
+async def get_carteras_periods(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, list[str]]:
+    """Períodos (period_month) disponibles entre DXP + Bases Adicionales, desc.
+
+    Sirve para el selector de fecha de Carteras Totales. Cliente solo ve
+    períodos con al menos un reporte publicado.
+    """
+    only_published = user.is_client
+    periods: set = set()
+
+    dxp_stmt = select(Report.period_month).where(Report.period_month.is_not(None))
+    if only_published:
+        dxp_stmt = dxp_stmt.where(Report.is_published == True)  # noqa: E712
+    for (pm,) in (await db.execute(dxp_stmt)).all():
+        periods.add(pm)
+
+    b_stmt = select(BaseAdicionalReport.period_month).where(
+        BaseAdicionalReport.period_month.is_not(None)
+    )
+    if only_published:
+        b_stmt = b_stmt.where(BaseAdicionalReport.is_published == True)  # noqa: E712
+    for (pm,) in (await db.execute(b_stmt)).all():
+        periods.add(pm)
+
+    ordered = sorted(periods, reverse=True)
+    return {"periods": [p.isoformat() for p in ordered]}

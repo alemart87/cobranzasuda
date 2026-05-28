@@ -33,20 +33,6 @@ export default function GestionReportsListPage() {
       .then((d) => setItems(d.items))
       .finally(() => setLoading(false));
 
-  const togglePublish = async (r: GestionReportSummary) => {
-    await apiFetch(`/api/v1/gestiones/reports/${r.id}/publish`, {
-      method: "POST",
-      body: JSON.stringify({ is_published: !r.is_published }),
-    });
-    load();
-  };
-
-  const del = async (r: GestionReportSummary) => {
-    if (!confirm(`¿Eliminar reporte de gestiones de ${r.period_month ?? "sin período"}?`)) return;
-    await apiFetch(`/api/v1/gestiones/reports/${r.id}`, { method: "DELETE" });
-    load();
-  };
-
   const canManage = user && (user.role === "superadmin" || user.role === "analyst");
 
   return (
@@ -58,7 +44,12 @@ export default function GestionReportsListPage() {
             Operativo del CRM: gestiones, promesas, cobros y cumplimiento por asesor.
           </p>
         </div>
-        {canManage && <Link href="/gestiones/upload" className="btn-primary">+ Subir nuevo</Link>}
+        {canManage && (
+          <div className="flex items-center gap-2">
+            <Link href="/publicaciones" className="btn-ghost">Gestionar publicaciones</Link>
+            <Link href="/gestiones/upload" className="btn-primary">+ Subir nuevo</Link>
+          </div>
+        )}
       </div>
 
       {loading && <div className="text-brand-slate">Cargando…</div>}
@@ -97,16 +88,6 @@ export default function GestionReportsListPage() {
                   <td className="px-4 py-3 text-right text-brand-primary font-semibold">{formatInt(r.cobros_totales)}</td>
                   <td className="px-4 py-3 text-right font-mono">{r.pct_promesas_cumplidas.toFixed(1)} %</td>
                   <td className="px-4 py-3 text-right whitespace-nowrap">
-                    {canManage && (
-                      <>
-                        <button onClick={() => togglePublish(r)} className="text-xs px-2.5 py-1 mr-1 rounded border border-brand-border hover:border-brand-cyan hover:text-brand-cyan">
-                          {r.is_published ? "Despublicar" : "Publicar"}
-                        </button>
-                        <button onClick={() => del(r)} className="text-xs px-2.5 py-1 mr-1 rounded border border-brand-border hover:border-brand-primary hover:text-brand-primary">
-                          Eliminar
-                        </button>
-                      </>
-                    )}
                     <Link href={`/gestiones/reports/${r.id}`} className="text-brand-primary font-semibold hover:underline">
                       Ver →
                     </Link>

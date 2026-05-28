@@ -66,13 +66,44 @@ export default function CarterasTotalesPage() {
   const [data, setData] = useState<Response | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [periods, setPeriods] = useState<string[]>([]);
+  const [period, setPeriod] = useState<string>(""); // "" = último cargado por cartera
 
   useEffect(() => {
-    apiFetch<Response>("/api/v1/bases-adicionales/carteras-totales")
+    apiFetch<{ periods: string[] }>("/api/v1/bases-adicionales/carteras-totales/periods")
+      .then((d) => setPeriods(d.periods))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    const qs = period ? `?period_month=${encodeURIComponent(period)}` : "";
+    apiFetch<Response>(`/api/v1/bases-adicionales/carteras-totales${qs}`)
       .then(setData)
       .catch((e: any) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [period]);
+
+  // Selector de período: la fecha elegida acá decide qué reporte toma cada
+  // cartera. "" = el último cargado por cada cartera (puede mezclar meses).
+  const periodSelector = (
+    <div className="flex items-center gap-2 mt-3">
+      <label className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold">
+        Período
+      </label>
+      <select
+        value={period}
+        onChange={(e) => setPeriod(e.target.value)}
+        className="text-sm border border-brand-border rounded px-3 py-1.5 bg-white"
+      >
+        <option value="">Último cargado por cartera</option>
+        {periods.map((p) => (
+          <option key={p} value={p}>{p}</option>
+        ))}
+      </select>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -102,10 +133,13 @@ export default function CarterasTotalesPage() {
           <span className="mx-2">/</span>
           <span className="text-brand-ink font-semibold">Carteras Totales</span>
         </div>
-        <h1 className="font-display text-4xl text-brand-ink uppercase mb-3">Carteras Totales</h1>
-        <div className="card p-8 text-center">
+        <h1 className="font-display text-4xl text-brand-ink uppercase mb-1">Carteras Totales</h1>
+        {periods.length > 0 && periodSelector}
+        <div className="card p-8 text-center mt-4">
           <p className="text-brand-slate">
-            No hay reportes cargados aún. Subí al menos un reporte de DXP, Débitos Automáticos o Bancard.
+            {period
+              ? `No hay reportes para el período ${period}. Elegí otro período.`
+              : "No hay reportes cargados aún. Subí al menos un reporte de DXP, Débitos Automáticos o Bancard."}
           </p>
         </div>
       </AppShell>
@@ -137,6 +171,7 @@ export default function CarterasTotalesPage() {
           Vista gerencial consolidada de todas las carteras gestionadas. Cada cartera
           se reporta por separado; sin mezclar números.
         </p>
+        {periods.length > 0 && periodSelector}
       </div>
 
       {/* Totales agregados */}

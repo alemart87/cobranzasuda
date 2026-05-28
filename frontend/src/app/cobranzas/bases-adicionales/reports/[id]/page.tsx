@@ -49,18 +49,6 @@ export default function BaseAdicionalReportDetail() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  const togglePublish = async () => {
-    if (!report) return;
-    const updated = await apiFetch<ReportDetail>(
-      `/api/v1/bases-adicionales/reports/${id}/publish`,
-      {
-        method: "POST",
-        body: JSON.stringify({ is_published: !report.is_published }),
-      },
-    );
-    setReport({ ...report, is_published: updated.is_published });
-  };
-
   if (loading) {
     return (
       <AppShell>
@@ -79,7 +67,6 @@ export default function BaseAdicionalReportDetail() {
     );
   }
 
-  const canManage = user && (user.role === "superadmin" || user.role === "analyst");
   const tipoLabel = TIPO_LABELS[report.tipo] ?? report.tipo;
   const tramoChart = (report.data.tramos || []).map((t) => ({
     tramo: t.tramo,
@@ -115,10 +102,8 @@ export default function BaseAdicionalReportDetail() {
           ) : (
             <span className="badge-neutral">Borrador</span>
           )}
-          {canManage && (
-            <button onClick={togglePublish} className="btn-secondary">
-              {report.is_published ? "Despublicar" : "Publicar"}
-            </button>
+          {(user?.role === "superadmin" || user?.role === "analyst") && (
+            <Link href="/publicaciones" className="btn-ghost">Gestionar</Link>
           )}
         </div>
       </div>

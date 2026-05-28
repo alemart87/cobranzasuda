@@ -25,12 +25,13 @@ const COBRANZAS_NAV: NavItem[] = [
   { href: "/reports", label: "Reportes de Cartera", roles: ["superadmin", "analyst", "client"] },
   { href: "/calls/reports", label: "Reportes de Llamadas", roles: ["superadmin", "analyst", "client"] },
   { href: "/gestiones/reports", label: "Reportes de Gestiones", roles: ["superadmin", "analyst", "client"] },
+  { href: "/publicaciones", label: "Publicaciones", roles: ["superadmin", "analyst"] },
   { href: "/upload", label: "Subir Cartera", roles: ["superadmin", "analyst"] },
   { href: "/calls/upload", label: "Subir Llamadas", roles: ["superadmin", "analyst"] },
   { href: "/gestiones/upload", label: "Subir Gestiones", roles: ["superadmin", "analyst"] },
 ];
 
-const COBRANZAS_PREFIXES = ["/cobranzas", "/reports", "/upload", "/calls", "/gestiones"];
+const COBRANZAS_PREFIXES = ["/cobranzas", "/reports", "/upload", "/calls", "/gestiones", "/publicaciones"];
 
 const ROLE_LABELS: Record<string, string> = {
   superadmin: "Superadmin",
