@@ -323,7 +323,9 @@ async def get_carteras_totales(
     carteras: list[CarteraResumen] = []
     if dxp_report:
         data = dxp_report.data or {}
-        # polizas/asegurados viven en el JSON (no son columnas del modelo Report)
+        # Report tiene columnas denormalizadas (polizas_total, asegurados_total,
+        # saldo_total, vencido_total); el cartera analyzer las repite en
+        # data.cartera.kpis con sufijo _total. Usamos la columna y caemos al JSON.
         cartera_kpis = (data.get("cartera") or {}).get("kpis") or {}
         tramos = _tramos_from_report_data(data)
         saldo_total = float(dxp_report.saldo_total or cartera_kpis.get("saldo_total", 0) or 0)
@@ -335,8 +337,8 @@ async def get_carteras_totales(
         carteras.append(CarteraResumen(
             nombre="Cartera DXP",
             fuente="dxp",
-            polizas=int(cartera_kpis.get("polizas", 0) or 0),
-            asegurados=int(cartera_kpis.get("asegurados", 0) or 0),
+            polizas=int(dxp_report.polizas_total or cartera_kpis.get("polizas_total", 0) or 0),
+            asegurados=int(dxp_report.asegurados_total or cartera_kpis.get("asegurados_total", 0) or 0),
             saldo_total=saldo_total,
             saldo_mora=vencido,
             tramos=tramos,
