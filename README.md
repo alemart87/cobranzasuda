@@ -8,11 +8,14 @@ Plataforma web monorepo para análisis mensual de cobranzas y operativo de conta
 
 ## ✨ Funcionalidades principales
 
-### Dos módulos de reportes independientes
+### Módulos de reportes independientes
 | Módulo | Archivos | Output |
 |---|---|---|
-| **Cobranzas** | DXP + Boca + Cobrado 186 (3 xlsx) | KPIs cartera, tramos, top 10 deudores, recupero total + recupero sobre mora, proyección al cierre, ranking organizadores |
+| **Cobranzas (DXP)** | DXP + Boca + Cobrado 186 (3 xlsx) | KPIs cartera, tramos, top 10 deudores, recupero total, proyección al cierre, ranking organizadores |
 | **Llamadas** | Reporte Cobranzas con hoja `Bsse de llamadas` (xlsx/xls) | Total equipo, talk time, AHT, llamadas por día por asesor, detalle por operador |
+| **Gestiones** | Reporte_Gestiones xlsx | Funnel CRM, % contactos efectivos, promesas, cumplimiento, ranking por asesor + por campaña |
+| **Bases Adicionales** | `BASE A GESTIONAR - COBRADOR BANCA.xlsx` y `BASE A GESTIONAR - COBRADOR BANCARD.xlsx` | KPIs por base (pólizas, asegurados, saldo, tramos, top 20). NO recibe pagos; las pólizas se guardan para futuro cruce con gestiones |
+| **Carteras Totales** | (vista agregada — sin upload propio) | Consolidación gerencial DXP + Débitos Automáticos + Bancard lado a lado, totales, comparativa por tramo |
 
 ### Sistema de roles
 | Rol | Origen | Permisos |
@@ -237,6 +240,67 @@ cd backend
 
 ### Sistema
 - `GET /health` — health check para Render
+
+---
+
+## 🚧 Pendientes inmediatos
+
+### Bases Adicionales (Débitos Automáticos / Bancard) — entregado
+
+**Estado actual (28/05/2026):** sección operativa nueva bajo Cobranzas para cargar dos carteras que se gestionan pero NO reciben pagos. Backend completo, frontend completo, smoke test validado contra archivos reales.
+
+**Backend (lo que existe):**
+- Modelos `BaseAdicionalUpload` + `BaseAdicionalReport` con campo `tipo ∈ {debitos_automaticos, bancard}`.
+- Parser reutiliza `dxp_parser` (estructura idéntica al DXP).
+- Analyzer `analyze_base_adicional`: pólizas, asegurados, saldo, 7 tramos de mora, top 20 deudores. Match tolerante a headers con encoding roto (`Hasta 30 D�as`).
+- Job runner + recovery al boot.
+- Endpoints: `POST/GET/DELETE /api/v1/bases-adicionales/uploads`, `.../reports`, `.../publish` y `.../carteras-totales` (consolidado gerencial).
+- Schema healing extendido para las nuevas columnas.
+
+**Frontend (lo que existe):**
+- `/cobranzas/bases-adicionales` — hub con dos cards (último reporte por tipo).
+- `/cobranzas/bases-adicionales/upload/{tipo}` — pantalla de subida con polling.
+- `/cobranzas/bases-adicionales/reports/{id}` — detalle con banners *"Sudameris no enviará pagos"* + *"Cruce con gestiones en desarrollo"*, KPIs, tramos, top deudores.
+- `/cobranzas/carteras-totales` — vista gerencial con DXP + Débitos + Bancard lado a lado, comparativa de tramos en barras, tabla numérica + totales.
+- 2 cards nuevas en hub de Cobranzas: "Carteras Totales" y "Bases Adicionales".
+
+**Smoke test validado** contra los .xlsx reales:
+- Banca: 1.839 pólizas · 1.483 asegurados · Gs 3.436.502.677 (todos los tramos OK).
+- Bancard: 159 pólizas · 136 asegurados · Gs 193.787.839 (todos los tramos OK).
+
+**Pendiente cuando se quiera retomar:**
+- [ ] Implementar el cruce real de pólizas DXP/Banca/Bancard ↔ gestiones (ya están guardadas las pólizas en `data.polizas_detalle`).
+- [ ] Filtro por período en `Carteras Totales`.
+- [ ] Test E2E del flujo de upload de bases adicionales con archivos fixture.
+
+---
+
+### Cruce Gestiones ↔ Carteras por Póliza (work in progress)
+
+**Estado actual (28/05/2026):** parser de Gestiones reescrito para extraer y normalizar la columna `Póliza` que ahora viene en el export del CRM. Soporta los 5 formatos heterogéneos detectados:
+- entero suelto (Excel guarda como número): `27810`
+- 3 tokens con espacios: `'0201   27810 0'`
+- 3 tokens con puntos: `'0501.162382.0'`
+- pegado sin separador: `'01049601084'` (detecta sección por prefijo conocido)
+- entero corto suelto: `'1496'`
+
+Por cada gestión el parser ahora expone: `poliza_raw`, `poliza_sec`, `poliza_num`, `poliza_end`, `poliza_key` (`SSSS-PPPPPP` canónica para join con DXP), y `has_value`.
+
+KPIs nuevos en el reporte: `gestiones_con_poliza`, `pct_gestiones_con_poliza`, `gestiones_poliza_normalizada`, `polizas_unicas`.
+
+**Validado contra `Reporte_Gestiones_Nuevo.xlsx` (6.094 filas)**: 4.663 con dato (76.5 %), 1.501 con `(sec, pol)` completa, 3.162 con solo número.
+
+**Por verificar / decidir antes de avanzar al cruce:**
+- [ ] Regla de desambiguación cuando una gestión trae solo `poliza_num` (sin sección): ¿matchear contra DXP por `Pol.` aunque haya colisión entre secciones? ¿Asumir sección dominante por asegurado?
+- [ ] Regla de corte para pólizas pegadas sin separador (`01049601084` → ¿`0104 + 960 + 1084` o `0104 + 9601084`?). Hoy se guarda como `0104 + 9601084` y se cruzará por substring.
+- [ ] Lista completa de prefijos de sección válidos. Hoy hardcodeada: `0101, 0104, 0201, 0301, 0401, 0501, 0601, 0701, 0801, 0901, 1001, 1006, 1021, 1101, 1110, 1201, 1301, 1401`. Falta confirmar si están todas.
+- [ ] Carteras adicionales que se sumarán para cruzar (a definir por usuario).
+- [ ] Cobrado / Boca: hoy NO traen póliza, solo nombre de asegurado y recibo. Para cruzar pagos con gestión por póliza, hay que agregar la columna a esos archivos o cruzar por asegurado (fuzzy match).
+
+**Próximos pasos cuando estos puntos estén definidos:**
+- [ ] Implementar `matcher gestion ↔ cartera DXP` por `poliza_key`.
+- [ ] Tabla detalle fila-a-fila (`gestion_rows`) para poder exportar el cruce.
+- [ ] UI en el reporte de Gestiones: tarjeta "Pólizas identificadas" + tabla detalle con saldo, tramo, organizador (cuando exista cruce).
 
 ---
 

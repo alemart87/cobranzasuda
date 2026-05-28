@@ -6,7 +6,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.v1 import audit, auth, calls, gestiones, modules, reports, uploads, users
+from .api.v1 import (
+    audit, auth, bases_adicionales, calls, gestiones, modules, reports,
+    uploads, users,
+)
 from .core.config import settings
 from .core.database import Base, engine
 from .core.logging import configure_logging, logger
@@ -56,6 +59,11 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("gestion_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
     ("gestion_reports", "published_by", "VARCHAR(36)"),
     ("gestion_reports", "title", "VARCHAR(255)"),
+    # bases adicionales (créase via create_all, pero por si la tabla ya existía)
+    ("base_adicional_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("base_adicional_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("base_adicional_reports", "published_by", "VARCHAR(36)"),
+    ("base_adicional_reports", "title", "VARCHAR(255)"),
 ]
 
 
@@ -221,3 +229,4 @@ app.include_router(gestiones.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(audit.router, prefix="/api/v1")
 app.include_router(modules.router, prefix="/api/v1")
+app.include_router(bases_adicionales.router, prefix="/api/v1")

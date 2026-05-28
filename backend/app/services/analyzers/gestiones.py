@@ -42,6 +42,22 @@ def _funnel_metrics(gestiones: int, contactos: int, promesas: int, cobrados: int
 def analyze_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
     total = len(rows)
 
+    # --- Identificación de póliza ---
+    # "con_poliza_valor": la columna Póliza venía con algún dato (cualquier formato).
+    # "con_poliza_normalizada": pudimos extraer (sec, pol) — listo para cruzar con DXP.
+    con_poliza_valor = sum(1 for r in rows if r.get("has_value"))
+    con_poliza_normalizada = sum(1 for r in rows if r.get("poliza_key"))
+    con_poliza_num_solo = sum(
+        1 for r in rows
+        if r.get("has_value") and r.get("poliza_num") is not None and not r.get("poliza_key")
+    )
+    sin_poliza = total - con_poliza_valor
+    polizas_unicas = len({r["poliza_key"] for r in rows if r.get("poliza_key")})
+    polizas_num_unicas = len({
+        r["poliza_num"] for r in rows
+        if r.get("poliza_num") is not None and not r.get("poliza_key")
+    })
+
     # --- Conteos globales por subestado y estado ---
     subestados_count = Counter(r["subestado"] for r in rows if r["subestado"])
     estados_count = Counter(r["estado"] for r in rows if r["estado"])
@@ -127,6 +143,16 @@ def analyze_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "asesores_activos": len(usuarios_set),
             "subestados_unicos": len(subestados_count),
             "campanas_unicas": len(by_camp_total),
+            # Identificación de póliza (para diagnosticar archivos malformados
+            # y dimensionar qué % se puede cruzar luego con cartera).
+            "gestiones_con_poliza": con_poliza_valor,
+            "pct_gestiones_con_poliza": _pct(con_poliza_valor, total, 1),
+            "gestiones_sin_poliza": sin_poliza,
+            "gestiones_poliza_normalizada": con_poliza_normalizada,
+            "pct_gestiones_poliza_normalizada": _pct(con_poliza_normalizada, total, 1),
+            "gestiones_poliza_solo_numero": con_poliza_num_solo,
+            "polizas_unicas": polizas_unicas,
+            "polizas_solo_numero_unicas": polizas_num_unicas,
             # Funnel del equipo
             **{f"equipo_{k}": v for k, v in funnel_equipo.items()},
             # Alias mantenidos para compatibilidad de modelos

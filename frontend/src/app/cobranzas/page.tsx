@@ -34,6 +34,14 @@ interface ActionTile {
 
 const ACTIONS: ActionTile[] = [
   {
+    href: "/cobranzas/carteras-totales",
+    title: "Carteras Totales",
+    description: "Vista gerencial: DXP + Débitos Automáticos + Bancard en un mismo panel.",
+    icon: "🧮",
+    variant: "primary",
+    forRoles: ["superadmin", "analyst", "client"],
+  },
+  {
     href: "/reports",
     title: "Reportes de Cartera",
     description: "Cartera total, vencido por tramo, top deudores y recupero del mes.",
@@ -55,6 +63,14 @@ const ACTIONS: ActionTile[] = [
     description: "Gestiones del CRM: subestados, promesas obtenidas, cumplimiento y cobros por asesor.",
     icon: "📝",
     variant: "purple",
+    forRoles: ["superadmin", "analyst", "client"],
+  },
+  {
+    href: "/cobranzas/bases-adicionales",
+    title: "Bases Adicionales",
+    description: "Débitos Automáticos y Bancard. Carteras que se gestionan sin recibir pagos.",
+    icon: "🗂️",
+    variant: "orange",
     forRoles: ["superadmin", "analyst", "client"],
   },
   {
