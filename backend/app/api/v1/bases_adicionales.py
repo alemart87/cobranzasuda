@@ -302,12 +302,20 @@ async def get_carteras_totales(
     también un total general. Toma el último reporte publicado por cliente o
     cualquier último reporte por analista/admin.
     """
-    period_date = None
+    # Filtro por MES (no por fecha exacta): un mes puede tener cargas con
+    # distinto día (DXP 2026-05-20, bases 2026-05-01) y deben verse juntas.
+    month_start = None
+    month_end = None
     if period_month:
         try:
-            period_date = datetime.strptime(period_month, "%Y-%m-%d").date()
+            d = (datetime.strptime(period_month, "%Y-%m") if len(period_month) == 7
+                 else datetime.strptime(period_month, "%Y-%m-%d")).date()
         except ValueError:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "period_month YYYY-MM-DD")
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "period_month YYYY-MM o YYYY-MM-DD")
+        month_start = d.replace(day=1)
+        month_end = (month_start.replace(year=month_start.year + 1, month=1)
+                     if month_start.month == 12
+                     else month_start.replace(month=month_start.month + 1))
 
     only_published = user.is_client
 
@@ -315,8 +323,10 @@ async def get_carteras_totales(
     dxp_stmt = select(Report).order_by(Report.generated_at.desc())
     if only_published:
         dxp_stmt = dxp_stmt.where(Report.is_published == True)  # noqa: E712
-    if period_date:
-        dxp_stmt = dxp_stmt.where(Report.period_month == period_date)
+    if month_start:
+        dxp_stmt = dxp_stmt.where(
+            Report.period_month >= month_start, Report.period_month < month_end
+        )
     dxp_stmt = dxp_stmt.limit(1)
     dxp_report = (await db.execute(dxp_stmt)).scalar_one_or_none()
 
@@ -358,8 +368,11 @@ async def get_carteras_totales(
         )
         if only_published:
             bstmt = bstmt.where(BaseAdicionalReport.is_published == True)  # noqa: E712
-        if period_date:
-            bstmt = bstmt.where(BaseAdicionalReport.period_month == period_date)
+        if month_start:
+            bstmt = bstmt.where(
+                BaseAdicionalReport.period_month >= month_start,
+                BaseAdicionalReport.period_month < month_end,
+            )
         bstmt = bstmt.limit(1)
         rep = (await db.execute(bstmt)).scalar_one_or_none()
         if not rep:
@@ -397,7 +410,7 @@ async def get_carteras_totales(
         "m_150": float(sum(c.tramos.get("m_150", 0) for c in carteras)),
     }
     return CarterasTotalesResponse(
-        period_month=period_date,
+        period_month=month_start,
         carteras=carteras,
         totales=totales,
     )
@@ -430,5 +443,6 @@ async def get_carteras_periods(
     for (pm,) in (await db.execute(b_stmt)).all():
         periods.add(pm)
 
-    ordered = sorted(periods, reverse=True)
-    return {"periods": [p.isoformat() for p in ordered]}
+    # Agrupado por MES (YYYY-MM), desc.
+    months = sorted({p.strftime("%Y-%m") for p in periods}, reverse=True)
+    return {"periods": months}
