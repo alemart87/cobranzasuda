@@ -93,7 +93,8 @@ def analyze_base_adicional(rows: list[dict[str, Any]]) -> dict[str, Any]:
     if not rows:
         return {
             "kpis": {
-                "polizas": 0, "asegurados": 0, "saldo_total": 0.0,
+                "polizas": 0, "asegurados": 0, "asegurados_en_mora": 0,
+                "saldo_total": 0.0,
                 **{f"tramo_{k}": 0.0 for k in tramos},
             },
             "tramos": [],
@@ -117,6 +118,8 @@ def analyze_base_adicional(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
     # Top deudores: agrupar por asegurado, sumar saldo.
     saldo_por_asegurado: dict[str, float] = defaultdict(float)
+    # Vencido (mora) por asegurado para contar clientes en mora.
+    vencido_por_asegurado: dict[str, float] = defaultdict(float)
     polizas_detalle: list[dict[str, Any]] = []
 
     for row in rows:
@@ -127,13 +130,22 @@ def analyze_base_adicional(rows: list[dict[str, Any]]) -> dict[str, Any]:
         saldo_total += saldo
         saldo_por_asegurado[aseg] += saldo
 
+        v_30 = _num(row.get(k_30)) if k_30 else 0
+        v_60 = _num(row.get(k_60)) if k_60 else 0
+        v_90 = _num(row.get(k_90)) if k_90 else 0
+        v_120 = _num(row.get(k_120)) if k_120 else 0
+        v_150 = _num(row.get(k_150)) if k_150 else 0
+        v_m150 = _num(row.get(k_m150)) if k_m150 else 0
         tramos["a_vencer"] += _num(row.get(k_avencer)) if k_avencer else 0
-        tramos["h_30"] += _num(row.get(k_30)) if k_30 else 0
-        tramos["h_60"] += _num(row.get(k_60)) if k_60 else 0
-        tramos["h_90"] += _num(row.get(k_90)) if k_90 else 0
-        tramos["h_120"] += _num(row.get(k_120)) if k_120 else 0
-        tramos["h_150"] += _num(row.get(k_150)) if k_150 else 0
-        tramos["m_150"] += _num(row.get(k_m150)) if k_m150 else 0
+        tramos["h_30"] += v_30
+        tramos["h_60"] += v_60
+        tramos["h_90"] += v_90
+        tramos["h_120"] += v_120
+        tramos["h_150"] += v_150
+        tramos["m_150"] += v_m150
+        # vencido = todos los tramos de mora (excluye "a vencer")
+        if aseg:
+            vencido_por_asegurado[aseg] += v_30 + v_60 + v_90 + v_120 + v_150 + v_m150
 
         # Detalle para cruce futuro con gestiones
         sec = row.get(k_sec) if k_sec else None
@@ -154,6 +166,8 @@ def analyze_base_adicional(rows: list[dict[str, Any]]) -> dict[str, Any]:
             "saldo_total": saldo,
         })
 
+    asegurados_en_mora = sum(1 for v in vencido_por_asegurado.values() if v > 0)
+
     top_deudores = [
         {"asegurado": a, "saldo": s}
         for a, s in sorted(saldo_por_asegurado.items(), key=lambda x: -x[1])[:20]
@@ -173,6 +187,7 @@ def analyze_base_adicional(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "kpis": {
             "polizas": polizas_count,
             "asegurados": len(asegurados_set),
+            "asegurados_en_mora": asegurados_en_mora,
             "saldo_total": round(saldo_total, 2),
             "tramo_a_vencer": round(tramos["a_vencer"], 2),
             "tramo_h_30": round(tramos["h_30"], 2),

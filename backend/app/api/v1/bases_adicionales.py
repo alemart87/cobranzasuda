@@ -339,6 +339,7 @@ async def get_carteras_totales(
             fuente="dxp",
             polizas=int(dxp_report.polizas_total or cartera_kpis.get("polizas_total", 0) or 0),
             asegurados=int(dxp_report.asegurados_total or cartera_kpis.get("asegurados_total", 0) or 0),
+            asegurados_mora=int(dxp_report.asegurados_en_mora or cartera_kpis.get("asegurados_en_mora", 0) or 0),
             saldo_total=saldo_total,
             saldo_mora=vencido,
             tramos=tramos,
@@ -363,12 +364,15 @@ async def get_carteras_totales(
         rep = (await db.execute(bstmt)).scalar_one_or_none()
         if not rep:
             continue
-        tramos = _tramos_from_report_data(rep.data or {})
+        rdata = rep.data or {}
+        tramos = _tramos_from_report_data(rdata)
+        rep_kpis = rdata.get("kpis") or {}
         carteras.append(CarteraResumen(
             nombre=f"Base {TIPO_LABELS[tipo]}",
             fuente=tipo,
             polizas=int(rep.polizas or 0),
             asegurados=int(rep.asegurados or 0),
+            asegurados_mora=int(rep_kpis.get("asegurados_en_mora", 0) or 0),
             saldo_total=float(rep.saldo_total or 0),
             saldo_mora=_vencido_from_tramos(tramos),
             tramos=tramos,
@@ -381,6 +385,7 @@ async def get_carteras_totales(
     totales = {
         "polizas": float(sum(c.polizas for c in carteras)),
         "asegurados": float(sum(c.asegurados for c in carteras)),
+        "asegurados_mora": float(sum(c.asegurados_mora for c in carteras)),
         "saldo_total": float(sum(c.saldo_total for c in carteras)),
         "saldo_mora": float(sum(c.saldo_mora for c in carteras)),
         "a_vencer": float(sum(c.tramos.get("a_vencer", 0) for c in carteras)),

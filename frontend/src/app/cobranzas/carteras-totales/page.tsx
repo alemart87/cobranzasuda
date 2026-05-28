@@ -15,6 +15,7 @@ interface Cartera {
   fuente: string;
   polizas: number;
   asegurados: number;
+  asegurados_mora: number;
   saldo_total: number;
   saldo_mora: number;
   tramos: {
@@ -31,7 +32,8 @@ interface Response {
   period_month: string | null;
   carteras: Cartera[];
   totales: {
-    polizas: number; asegurados: number; saldo_total: number; saldo_mora: number;
+    polizas: number; asegurados: number; asegurados_mora: number;
+    saldo_total: number; saldo_mora: number;
     a_vencer: number; h_30: number; h_60: number; h_90: number;
     h_120: number; h_150: number; m_150: number;
   };
@@ -142,7 +144,7 @@ export default function CarterasTotalesPage() {
         <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold mb-3">
           Totales consolidados
         </h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           <KpiCard
             label="Pólizas totales"
             value={formatInt(data.totales.polizas)}
@@ -154,6 +156,16 @@ export default function CarterasTotalesPage() {
             value={formatInt(data.totales.asegurados)}
             hint="agregado por cartera"
             accent="cyan"
+          />
+          <KpiCard
+            label="Clientes en mora"
+            value={formatInt(data.totales.asegurados_mora)}
+            hint={
+              data.totales.asegurados > 0
+                ? `${((data.totales.asegurados_mora / data.totales.asegurados) * 100).toFixed(1)}% de asegurados`
+                : "con saldo vencido"
+            }
+            accent="orange"
           />
           <KpiCard
             label="Saldo total operado"
@@ -223,6 +235,7 @@ export default function CarterasTotalesPage() {
                 <div>
                   <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">En mora</div>
                   <div className="font-display text-2xl text-brand-orange">{formatGs(c.saldo_mora)}</div>
+                  <div className="text-[10px] text-brand-slate mt-0.5">{formatInt(c.asegurados_mora)} clientes</div>
                 </div>
               </div>
               {c.report_id && (
@@ -318,6 +331,17 @@ export default function CarterasTotalesPage() {
               ))}
               <td className="px-4 py-2.5 text-right font-bold text-brand-orange">
                 {formatGs(data.totales.saldo_mora)}
+              </td>
+            </tr>
+            <tr className="border-t border-brand-border">
+              <td className="px-4 py-2.5 font-semibold text-brand-ink">Clientes en mora</td>
+              {data.carteras.map((c) => (
+                <td key={c.fuente} className="px-4 py-2.5 text-right">
+                  {formatInt(c.asegurados_mora)}
+                </td>
+              ))}
+              <td className="px-4 py-2.5 text-right font-bold text-brand-ink">
+                {formatInt(data.totales.asegurados_mora)}
               </td>
             </tr>
             <tr className="border-t-2 border-brand-ink bg-brand-bg-soft">
