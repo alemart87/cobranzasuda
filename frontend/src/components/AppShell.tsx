@@ -31,6 +31,7 @@ const NAV_UPLOADS = [
   { href: "/upload", label: "Cartera" },
   { href: "/calls/upload", label: "Llamadas" },
   { href: "/gestiones/upload", label: "Gestiones" },
+  { href: "/cobranzas/bases-adicionales", label: "Bases Adicionales" },
 ];
 
 const COBRANZAS_PREFIXES = ["/cobranzas", "/reports", "/upload", "/calls", "/gestiones", "/publicaciones"];

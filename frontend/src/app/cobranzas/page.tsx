@@ -159,6 +159,14 @@ const UPLOAD_ACTIONS: ActionTile[] = [
     variant: "purple",
     forRoles: ["superadmin", "analyst"],
   },
+  {
+    href: "/cobranzas/bases-adicionales",
+    title: "Subir Bases Adicionales",
+    description: "Débitos Automáticos o Bancard. Elegí la base y procesá el Excel.",
+    icon: ICONS.folder,
+    variant: "orange",
+    forRoles: ["superadmin", "analyst"],
+  },
 ];
 
 const VARIANT_CLS: Record<Variant, { bar: string; iconBg: string }> = {
@@ -266,7 +274,7 @@ export default function CobranzasHubPage() {
       {uploadActions.length > 0 && (
         <section>
           <SectionLabel>Cargar datos</SectionLabel>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
             {uploadActions.map((a) => (
               <ActionCard key={a.href} a={a} />
             ))}
