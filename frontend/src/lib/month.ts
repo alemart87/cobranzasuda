@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+
 // Utilidades de mes compartidas entre vistas (Overview, Carteras Totales, etc.)
 
 const MONTH_KEY = "vc_month";
@@ -40,4 +42,42 @@ export function pickInitialMonth(available: string[]): string | null {
   if (available.length === 0) return null;
   const pref = getPreferredMonth();
   return pref && available.includes(pref) ? pref : available[0];
+}
+
+/**
+ * Filtro de mes del lado del cliente para listados que ya traen todos los
+ * registros. Deriva los meses disponibles de los items, elige el inicial
+ * (preferencia o más reciente) y devuelve los items del mes seleccionado.
+ */
+export function useMonthFilter<T extends { period_month: string | null }>(items: T[]) {
+  const months = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      const m = toMonth(it.period_month);
+      if (m) set.add(m);
+    }
+    return Array.from(set).sort().reverse();
+  }, [items]);
+
+  const [month, setMonthState] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (months.length === 0) {
+      setMonthState(null);
+      return;
+    }
+    setMonthState((cur) => (cur && months.includes(cur) ? cur : pickInitialMonth(months)));
+  }, [months]);
+
+  const setMonth = (m: string) => {
+    setMonthState(m);
+    setPreferredMonth(m);
+  };
+
+  const filtered = useMemo(
+    () => (month ? items.filter((it) => toMonth(it.period_month) === month) : items),
+    [items, month],
+  );
+
+  return { months, month, setMonth, filtered };
 }

@@ -22,16 +22,19 @@ const ADMIN_NAV: NavItem[] = [
 // Navegación interna del módulo Cobranzas (aparece SOLO cuando estás dentro),
 // organizada en grupos para no saturar la barra.
 const NAV_INICIO = { href: "/cobranzas", label: "Inicio" };
+// Vistas (todos los roles). Incluye Carteras Totales y Bases Adicionales para
+// que el cliente/gerente las vea en el navbar, no solo en el hub.
 const NAV_REPORTS = [
-  { href: "/reports", label: "Cartera" },
+  { href: "/cobranzas/carteras-totales", label: "Carteras Totales" },
+  { href: "/reports", label: "Cartera DXP" },
   { href: "/calls/reports", label: "Llamadas" },
   { href: "/gestiones/reports", label: "Gestiones" },
+  { href: "/cobranzas/bases-adicionales", label: "Bases Adicionales" },
 ];
 const NAV_UPLOADS = [
   { href: "/upload", label: "Cartera" },
   { href: "/calls/upload", label: "Llamadas" },
   { href: "/gestiones/upload", label: "Gestiones" },
-  { href: "/cobranzas/bases-adicionales", label: "Bases Adicionales" },
 ];
 
 const COBRANZAS_PREFIXES = ["/cobranzas", "/reports", "/upload", "/calls", "/gestiones", "/publicaciones"];

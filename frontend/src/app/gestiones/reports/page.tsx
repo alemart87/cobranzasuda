@@ -3,8 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { MonthNavigator } from "@/components/MonthNavigator";
 import { apiFetch, getUser } from "@/lib/api";
-import { formatDate, formatInt } from "@/lib/format";
+import { formatInt } from "@/lib/format";
+import { monthLabel, useMonthFilter } from "@/lib/month";
 
 interface GestionReportSummary {
   id: string;
@@ -34,6 +36,7 @@ export default function GestionReportsListPage() {
       .finally(() => setLoading(false));
 
   const canManage = user && (user.role === "superadmin" || user.role === "analyst");
+  const { months, month, setMonth, filtered } = useMonthFilter(items);
 
   return (
     <AppShell>
@@ -61,6 +64,13 @@ export default function GestionReportsListPage() {
       )}
 
       {!loading && items.length > 0 && (
+        <>
+        {months.length > 0 && (
+          <div className="mb-4 flex items-center gap-3">
+            <MonthNavigator months={months} value={month} onChange={setMonth} />
+            <span className="text-xs text-brand-slate">{filtered.length} reporte(s) en {month ? monthLabel(month) : "—"}</span>
+          </div>
+        )}
         <div className="card overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-brand-bg border-b border-brand-border">
@@ -76,7 +86,7 @@ export default function GestionReportsListPage() {
               </tr>
             </thead>
             <tbody>
-              {items.map((r) => (
+              {filtered.map((r) => (
                 <tr key={r.id} className="border-t border-brand-border hover:bg-brand-bg-soft">
                   <td className="px-4 py-3 font-semibold text-brand-ink">{r.period_month ?? "—"}</td>
                   <td className="px-4 py-3">
@@ -97,6 +107,7 @@ export default function GestionReportsListPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </AppShell>
   );
