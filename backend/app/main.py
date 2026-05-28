@@ -37,15 +37,24 @@ MIGRATIONS_IDEMPOTENT = [
 ]
 
 
-async def _run_migrations() -> None:
+async def _run_migrations() -> dict[str, list[str]]:
+    """Corre cada ALTER de forma idempotente. Cada uno en su propia transacción
+    para que un error no abort'ee toda la cola en PostgreSQL.
+    Devuelve {'ok': [...], 'skipped': [...]} para diagnóstico.
+    """
     from sqlalchemy import text
-    async with engine.begin() as conn:
-        for stmt in MIGRATIONS_IDEMPOTENT:
-            try:
+    ok: list[str] = []
+    skipped: list[str] = []
+    for stmt in MIGRATIONS_IDEMPOTENT:
+        try:
+            async with engine.begin() as conn:
                 await conn.execute(text(stmt))
-            except Exception as exc:
-                # SQLite/old PG no soportan ALTER ... ADD COLUMN IF NOT EXISTS; ignorar
-                logger.debug(f"migration skipped: {stmt[:50]}... -> {exc}")
+            ok.append(stmt[:80])
+            logger.info(f"[migration] OK: {stmt[:80]}")
+        except Exception as exc:
+            skipped.append(f"{stmt[:80]} -> {exc}")
+            logger.warning(f"[migration] SKIPPED: {stmt[:80]} -> {exc}")
+    return {"ok": ok, "skipped": skipped}
 
 
 @asynccontextmanager
@@ -54,7 +63,9 @@ async def lifespan(app: FastAPI):
     logger.info("Boot: ensuring DB schema")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    await _run_migrations()
+    logger.info("Boot: running idempotent migrations")
+    result = await _run_migrations()
+    logger.info(f"Boot: migrations ok={len(result['ok'])} skipped={len(result['skipped'])}")
     logger.info("Boot: resuming pending jobs")
     count = await resume_pending_jobs()
     logger.info(f"Boot: re-queued {count} jobs")
@@ -81,6 +92,44 @@ app.add_middleware(
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "env": settings.env}
+
+
+@app.post("/api/v1/admin/migrate")
+async def trigger_migrations(token: str | None = None) -> dict:
+    """Endpoint de emergencia para re-correr las migraciones idempotentes.
+
+    Auth simple: hay que pasar ?token=<SECRET_KEY> para evitar abuso.
+    Devuelve cuáles ALTER pasaron y cuáles se saltaron (con el motivo).
+    """
+    from fastapi import HTTPException, status
+    if token != settings.secret_key:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Token invalido")
+    result = await _run_migrations()
+    return {
+        "ok_count": len(result["ok"]),
+        "skipped_count": len(result["skipped"]),
+        "ok": result["ok"],
+        "skipped": result["skipped"],
+    }
+
+
+@app.get("/api/v1/admin/db-info")
+async def db_info(token: str | None = None) -> dict:
+    """Diagnóstico: cuántas filas hay en cada tabla principal."""
+    from fastapi import HTTPException, status
+    from sqlalchemy import text
+    if token != settings.secret_key:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Token invalido")
+    counts: dict = {}
+    async with engine.begin() as conn:
+        for table in ["users", "uploads", "reports", "call_uploads", "call_reports",
+                      "gestion_uploads", "gestion_reports", "audit_log"]:
+            try:
+                r = await conn.execute(text(f"SELECT COUNT(*) FROM {table}"))
+                counts[table] = r.scalar()
+            except Exception as exc:
+                counts[table] = f"ERROR: {exc}"
+    return {"tables": counts}
 
 
 # Mount routers
