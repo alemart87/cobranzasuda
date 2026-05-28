@@ -53,6 +53,9 @@ def analyze_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
     )
     sin_poliza = total - con_poliza_valor
     polizas_unicas = len({r["poliza_key"] for r in rows if r.get("poliza_key")})
+    # Clientes únicos gestionados (por nombre de asegurado / lead). Sirve para
+    # medir cobertura "por cliente" sobre la cartera.
+    clientes_unicos = len({r["lead"] for r in rows if r.get("lead")})
     polizas_num_unicas = len({
         r["poliza_num"] for r in rows
         if r.get("poliza_num") is not None and not r.get("poliza_key")
@@ -140,6 +143,7 @@ def analyze_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
     return {
         "kpis": {
             "total_gestiones": total,
+            "clientes_unicos": clientes_unicos,
             "asesores_activos": len(usuarios_set),
             "subestados_unicos": len(subestados_count),
             "campanas_unicas": len(by_camp_total),

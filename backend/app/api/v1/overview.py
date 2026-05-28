@@ -63,6 +63,7 @@ class LlamadasBlock(BaseModel):
 
 class GestionesBlock(BaseModel):
     total_gestiones: int
+    clientes_unicos: int
     promesas_totales: int
     cobros_totales: int
     pct_promesas_cumplidas: float
@@ -71,8 +72,8 @@ class GestionesBlock(BaseModel):
 
 class RendimientoBlock(BaseModel):
     pct: float
-    gestiones: int
-    polizas: int
+    clientes_gestionados: int
+    asegurados: int
 
 
 class OverviewResponse(BaseModel):
@@ -225,21 +226,24 @@ async def get_overview(
         .order_by(GestionReport.generated_at.desc())
         .limit(1)
     )).scalar_one_or_none()
+    gest_kpis = (gest.data or {}).get("kpis") if gest else None
     gestiones = GestionesBlock(
         total_gestiones=int(gest.total_gestiones or 0),
+        clientes_unicos=int((gest_kpis or {}).get("clientes_unicos", 0) or 0),
         promesas_totales=int(gest.promesas_totales or 0),
         cobros_totales=int(gest.cobros_totales or 0),
         pct_promesas_cumplidas=float(gest.pct_promesas_cumplidas or 0),
         asesores_activos=int(gest.asesores_activos or 0),
     ) if gest else None
 
-    # --- 5) Rendimiento estimativo = gestiones / pólizas totales * 100 ---
+    # --- 5) Rendimiento estimativo: cobertura POR CLIENTE ---
+    # clientes únicos gestionados / asegurados totales de la cartera * 100.
     rendimiento: Optional[RendimientoBlock] = None
-    if carteras and gestiones and carteras.polizas > 0:
+    if carteras and gestiones and gestiones.clientes_unicos > 0 and carteras.asegurados > 0:
         rendimiento = RendimientoBlock(
-            pct=round(gestiones.total_gestiones / carteras.polizas * 100, 1),
-            gestiones=gestiones.total_gestiones,
-            polizas=carteras.polizas,
+            pct=round(gestiones.clientes_unicos / carteras.asegurados * 100, 1),
+            clientes_gestionados=gestiones.clientes_unicos,
+            asegurados=carteras.asegurados,
         )
 
     return OverviewResponse(

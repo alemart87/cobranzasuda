@@ -36,12 +36,13 @@ interface Overview {
   } | null;
   gestiones: {
     total_gestiones: number;
+    clientes_unicos: number;
     promesas_totales: number;
     cobros_totales: number;
     pct_promesas_cumplidas: number;
     asesores_activos: number;
   } | null;
-  rendimiento: { pct: number; gestiones: number; polizas: number } | null;
+  rendimiento: { pct: number; clientes_gestionados: number; asegurados: number } | null;
 }
 
 const MONTH_NAMES = [
@@ -243,6 +244,28 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
+/** Encabezado de grupo con regla, para ordenar el panel gerencial. */
+function GroupHeading({ children }: { children: ReactNode }) {
+  return (
+    <h3 className="text-[11px] uppercase tracking-wider2 text-brand-graphite font-bold mb-3 flex items-center gap-3">
+      <span className="flex-shrink-0">{children}</span>
+      <span className="h-px flex-1 bg-brand-border" />
+    </h3>
+  );
+}
+
+function Metric({
+  label, value, sub, accentClass,
+}: { label: string; value: ReactNode; sub?: ReactNode; accentClass?: string }) {
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">{label}</div>
+      <div className={`font-display text-lg leading-tight ${accentClass ?? "text-brand-ink"}`}>{value}</div>
+      {sub && <div className="text-[11px] text-brand-slate mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
 export default function CobranzasHubPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [user, setUser] = useState<any>(null);
@@ -276,105 +299,80 @@ export default function CobranzasHubPage() {
       {/* Resumen gerencial (datos publicados del mes) */}
       {hasOverview && ov && (
         <section className="mb-10">
-          <div className="flex items-baseline justify-between mb-3">
+          <div className="flex items-baseline justify-between mb-4">
             <SectionLabel>
               Resumen gerencial{ov.period_month ? ` · ${monthLabel(ov.period_month)}` : ""}
             </SectionLabel>
             <span className="text-[11px] text-brand-mist">Solo datos publicados</span>
           </div>
 
-          {/* Fila 1: Rendimiento estimativo + totales de cartera */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-            <div className="card p-5 relative overflow-hidden">
-              <div className="absolute top-0 bottom-0 left-0 w-1 bg-brand-primary" />
+          {/* Rendimiento estimativo — métrica titular */}
+          <div className="card p-5 mb-6 relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-5">
+            <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-brand-primary" />
+            <div className="sm:pr-6 sm:border-r sm:border-brand-border sm:min-w-[210px]">
               <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold">
                 Rendimiento estimativo
               </div>
-              <div className="font-display text-4xl text-brand-primary mt-1 leading-none">
+              <div className="font-display text-5xl text-brand-primary leading-none mt-1">
                 {ov.rendimiento ? `${ov.rendimiento.pct}%` : "—"}
               </div>
-              <div className="text-[11px] text-brand-slate mt-2 leading-snug">
+            </div>
+            <div className="text-sm text-brand-slate">
+              Cobertura estimada de gestión <b className="text-brand-ink">por cliente</b> sobre la cartera del mes.
+              <div className="text-brand-ink font-semibold mt-1">
                 {ov.rendimiento
-                  ? `${formatInt(ov.rendimiento.gestiones)} gestiones ÷ ${formatInt(ov.rendimiento.polizas)} pólizas`
-                  : "faltan datos de cartera o gestiones"}
+                  ? `${formatInt(ov.rendimiento.clientes_gestionados)} clientes gestionados ÷ ${formatInt(ov.rendimiento.asegurados)} asegurados`
+                  : "Faltan datos de cartera o de gestiones publicados."}
               </div>
             </div>
-            <KpiCard
-              label="Pólizas totales"
-              value={formatInt(ov.carteras?.polizas ?? 0)}
-              hint={`${ov.carteras?.items.length ?? 0} carteras · ${formatInt(ov.carteras?.asegurados ?? 0)} asegurados`}
-              accent="secondary"
-            />
-            <KpiCard
-              label="Saldo total operado"
-              value={formatGs(ov.carteras?.saldo_total ?? 0)}
-              accent="cyan"
-            />
-            <KpiCard
-              label="Saldo en mora"
-              value={formatGs(ov.carteras?.saldo_mora ?? 0)}
-              hint={`${formatInt(ov.carteras?.asegurados_mora ?? 0)} clientes en mora`}
-              accent="orange"
-            />
           </div>
 
-          {/* Fila 2: operación (llamadas + gestiones) */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KpiCard
-              label="Llamadas del mes"
-              value={ov.llamadas ? formatInt(ov.llamadas.total_llamadas) : "—"}
-              hint={ov.llamadas ? `${formatInt(ov.llamadas.efectivas_total)} efectivas · ${ov.llamadas.asesores_activos} asesores` : "sin reporte publicado"}
-              accent="purple"
-            />
-            <KpiCard
-              label="Total hablado"
-              value={ov.llamadas ? `${(ov.llamadas.total_talk_seg / 3600).toFixed(1)} hs` : "—"}
-              accent="cyan"
-            />
-            <KpiCard
-              label="Prom. conversación"
-              value={ov.llamadas ? `${fmtMinSeg(ov.llamadas.aht_seg)} min` : "—"}
-              hint="por contacto (AHT)"
-              accent="secondary"
-            />
-            <KpiCard
-              label="Gestiones del mes"
-              value={ov.gestiones ? formatInt(ov.gestiones.total_gestiones) : "—"}
-              hint={ov.gestiones ? `${formatInt(ov.gestiones.promesas_totales)} promesas · ${formatInt(ov.gestiones.cobros_totales)} cobros` : "sin reporte publicado"}
-              accent="primary"
-            />
+          {/* Cartera */}
+          <GroupHeading>Cartera</GroupHeading>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <KpiCard label="Pólizas totales" value={formatInt(ov.carteras?.polizas ?? 0)} hint={`${ov.carteras?.items.length ?? 0} carteras`} accent="secondary" />
+            <KpiCard label="Asegurados" value={formatInt(ov.carteras?.asegurados ?? 0)} accent="cyan" />
+            <KpiCard label="Saldo total operado" value={formatGs(ov.carteras?.saldo_total ?? 0)} accent="primary" />
+            <KpiCard label="Saldo en mora" value={formatGs(ov.carteras?.saldo_mora ?? 0)} hint={`${formatInt(ov.carteras?.asegurados_mora ?? 0)} clientes en mora`} accent="orange" />
           </div>
 
-          {/* Desglose de carteras */}
+          {/* Operación */}
+          <GroupHeading>Operación del mes</GroupHeading>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <KpiCard label="Llamadas" value={ov.llamadas ? formatInt(ov.llamadas.total_llamadas) : "—"} hint={ov.llamadas ? `${formatInt(ov.llamadas.efectivas_total)} efectivas · ${ov.llamadas.asesores_activos} asesores` : "sin reporte publicado"} accent="purple" />
+            <KpiCard label="Total hablado" value={ov.llamadas ? `${(ov.llamadas.total_talk_seg / 3600).toFixed(1)} hs` : "—"} accent="cyan" />
+            <KpiCard label="Prom. conversación" value={ov.llamadas ? `${fmtMinSeg(ov.llamadas.aht_seg)} min` : "—"} hint="por contacto (AHT)" accent="secondary" />
+            <KpiCard label="Gestiones" value={ov.gestiones ? formatInt(ov.gestiones.total_gestiones) : "—"} hint={ov.gestiones ? `${formatInt(ov.gestiones.clientes_unicos)} clientes · ${formatInt(ov.gestiones.promesas_totales)} promesas` : "sin reporte publicado"} accent="primary" />
+          </div>
+
+          {/* Detalle por cartera */}
           {ov.carteras && ov.carteras.items.length > 0 && (
-            <div className="mt-4 grid md:grid-cols-3 gap-4">
-              {ov.carteras.items.map((c) => (
-                <div key={c.fuente} className="card p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <h4 className="font-display text-base text-brand-ink uppercase leading-tight">{c.nombre}</h4>
-                    <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${c.recibe_pagos ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                      {c.recibe_pagos ? "Recibe pagos" : "Sin pagos"}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3">
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">Pólizas</div>
-                      <div className="font-display text-lg text-brand-ink">{formatInt(c.polizas)}</div>
+            <>
+              <GroupHeading>Detalle por cartera</GroupHeading>
+              <div className="grid md:grid-cols-3 gap-4">
+                {ov.carteras.items.map((c) => (
+                  <div key={c.fuente} className="card p-4">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <h4 className="font-display text-base text-brand-ink uppercase leading-tight">{c.nombre}</h4>
+                      <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${c.recibe_pagos ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                        {c.recibe_pagos ? "Recibe pagos" : "Sin pagos"}
+                      </span>
                     </div>
-                    <div>
-                      <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">Saldo</div>
-                      <div className="font-display text-lg text-brand-ink">{formatGs(c.saldo_total)}</div>
-                    </div>
-                    <div className="col-span-2">
-                      <div className="text-[10px] uppercase tracking-wider2 text-brand-slate">En mora</div>
-                      <div className="font-display text-lg text-brand-orange">
-                        {formatGs(c.saldo_mora)} <span className="text-xs text-brand-slate font-sans">· {formatInt(c.asegurados_mora)} clientes</span>
-                      </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                      <Metric label="Pólizas" value={formatInt(c.polizas)} />
+                      <Metric label="Asegurados" value={formatInt(c.asegurados)} />
+                      <Metric label="Saldo total" value={formatGs(c.saldo_total)} />
+                      <Metric
+                        label="Saldo en mora"
+                        value={formatGs(c.saldo_mora)}
+                        sub={`${formatInt(c.asegurados_mora)} clientes`}
+                        accentClass="text-brand-orange"
+                      />
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            </>
           )}
         </section>
       )}
