@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
+import { MonthNavigator } from "@/components/MonthNavigator";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
+import { getPreferredMonth, monthLabel, pickInitialMonth, setPreferredMonth, toMonth } from "@/lib/month";
 
 interface CarteraItem {
   nombre: string;
@@ -19,6 +21,7 @@ interface CarteraItem {
 }
 interface Overview {
   period_month: string | null;
+  available_months: string[];
   carteras: {
     items: CarteraItem[];
     polizas: number;
@@ -44,15 +47,6 @@ interface Overview {
   rendimiento: { pct: number; gestiones: number; asegurados: number } | null;
 }
 
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
-function monthLabel(iso: string): string {
-  const [y, m] = iso.split("-");
-  const name = MONTH_NAMES[Number(m) - 1];
-  return name ? `${name} ${y}` : iso;
-}
 function fmtMinSeg(seg: number): string {
   const m = Math.floor(seg / 60);
   const s = Math.round(seg % 60);
@@ -267,12 +261,40 @@ function Metric({
 
 export default function CobranzasHubPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [month, setMonth] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+
+  const loadOverview = (m: string | null) =>
+    apiFetch<Overview>(`/api/v1/overview${m ? `?month=${m}` : ""}`)
+      .then((d) => {
+        setOverview(d);
+        setMonth(toMonth(d.period_month) ?? m);
+      })
+      .catch(() => {});
 
   useEffect(() => {
     setUser(getUser());
-    apiFetch<Overview>("/api/v1/overview").then(setOverview).catch(() => {});
+    // Primera carga: traer el mes más reciente + meses disponibles, luego
+    // respetar la preferencia del usuario si ese mes tiene datos.
+    apiFetch<Overview>("/api/v1/overview")
+      .then((d) => {
+        const desired = pickInitialMonth(d.available_months);
+        if (desired && toMonth(d.period_month) !== desired) {
+          setMonth(desired);
+          loadOverview(desired);
+        } else {
+          setOverview(d);
+          setMonth(toMonth(d.period_month));
+        }
+      })
+      .catch(() => {});
   }, []);
+
+  const onMonth = (m: string) => {
+    setMonth(m);
+    setPreferredMonth(m);
+    loadOverview(m);
+  };
 
   const ov = overview;
   const hasOverview = !!(ov && (ov.carteras || ov.llamadas || ov.gestiones));
@@ -295,16 +317,27 @@ export default function CobranzasHubPage() {
         </p>
       </div>
 
-      {/* Resumen gerencial (datos publicados del mes) */}
-      {hasOverview && ov && (
+      {/* Resumen gerencial (datos publicados, navegable por mes) */}
+      {ov && ov.available_months.length > 0 && (
         <section className="mb-10">
-          <div className="flex items-baseline justify-between mb-4">
-            <SectionLabel>
-              Resumen gerencial{ov.period_month ? ` · ${monthLabel(ov.period_month)}` : ""}
-            </SectionLabel>
-            <span className="text-[11px] text-brand-mist">Solo datos publicados</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <SectionLabel>Resumen gerencial</SectionLabel>
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] text-brand-mist hidden sm:inline">Solo datos publicados</span>
+              <MonthNavigator months={ov.available_months} value={month} onChange={onMonth} />
+            </div>
           </div>
 
+          {!hasOverview && (
+            <div className="card p-8 text-center">
+              <p className="text-brand-slate text-sm">
+                No hay datos publicados para {month ? monthLabel(month) : "este mes"}. Probá con otro mes.
+              </p>
+            </div>
+          )}
+
+          {hasOverview && (
+          <>
           {/* Rendimiento estimativo — métrica titular */}
           <div className="card p-5 mb-6 relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-5">
             <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-brand-primary" />
@@ -373,15 +406,17 @@ export default function CobranzasHubPage() {
               </div>
             </>
           )}
+          </>
+          )}
         </section>
       )}
 
-      {!hasOverview && overview !== null && (
+      {overview && overview.available_months.length === 0 && (
         <section className="mb-10">
           <div className="card p-6 text-center">
             <p className="text-brand-slate text-sm">
-              Aún no hay datos publicados del mes para el resumen gerencial.
-              Publicá los reportes desde el Centro de Publicaciones.
+              Aún no hay datos publicados para el resumen gerencial.
+              Publicá los reportes del mes desde el Centro de Publicaciones.
             </p>
           </div>
         </section>

@@ -9,10 +9,10 @@ Rendimiento estimativo = total_gestiones / pólizas_totales_cartera * 100.
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,6 +77,7 @@ class RendimientoBlock(BaseModel):
 
 class OverviewResponse(BaseModel):
     period_month: Optional[date] = None
+    available_months: list[str] = []  # YYYY-MM con datos publicados, desc
     carteras: Optional[CarterasBlock] = None
     llamadas: Optional[LlamadasBlock] = None
     gestiones: Optional[GestionesBlock] = None
@@ -122,10 +123,11 @@ def _cartera_from_base(rep: BaseAdicionalReport) -> CarteraItem:
 
 @router.get("", response_model=OverviewResponse)
 async def get_overview(
+    month: Optional[str] = Query(None, description="YYYY-MM; default = mes más reciente con datos"),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> OverviewResponse:
-    # --- 1) Determinar el mes objetivo (el más reciente con datos publicados) ---
+    # --- 1) Meses con datos publicados (para el navegador) + mes objetivo ---
     months: list[date] = []
 
     async def _collect(stmt) -> None:
@@ -150,10 +152,19 @@ async def get_overview(
     await _collect(select(CallReport.period_month).where(CallReport.is_published == True))  # noqa: E712
     await _collect(select(GestionReport.period_month).where(GestionReport.is_published == True))  # noqa: E712
 
-    if not months:
-        return OverviewResponse()
+    available = sorted({d.strftime("%Y-%m") for d in months}, reverse=True)
+    if not months and not month:
+        return OverviewResponse(available_months=[])
 
-    start, end = _month_range(max(months))
+    # Mes objetivo: el pedido (si es válido) o el más reciente disponible.
+    if month:
+        try:
+            target = datetime.strptime(month, "%Y-%m").date()
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "month debe ser YYYY-MM")
+    else:
+        target = max(months)
+    start, end = _month_range(target)
 
     # --- 2) Carteras del mes (publicadas por superadmin) ---
     items: list[CarteraItem] = []
@@ -246,6 +257,7 @@ async def get_overview(
 
     return OverviewResponse(
         period_month=start,
+        available_months=available,
         carteras=carteras,
         llamadas=llamadas,
         gestiones=gestiones,

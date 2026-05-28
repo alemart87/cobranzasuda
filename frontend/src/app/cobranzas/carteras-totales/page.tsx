@@ -7,8 +7,10 @@ import {
 } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
+import { MonthNavigator } from "@/components/MonthNavigator";
 import { apiFetch } from "@/lib/api";
 import { formatDate, formatGs, formatInt } from "@/lib/format";
+import { getPreferredMonth, monthLabel, pickInitialMonth, setPreferredMonth } from "@/lib/month";
 
 interface Cartera {
   nombre: string;
@@ -62,17 +64,6 @@ const FUENTE_BADGE: Record<string, string> = {
   bancard: "bg-brand-purple/10 text-brand-purple",
 };
 
-const MONTH_NAMES = [
-  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
-  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
-];
-
-function monthLabel(ym: string): string {
-  const [y, m] = ym.split("-");
-  const name = MONTH_NAMES[Number(m) - 1];
-  return name ? `${name} ${y}` : ym;
-}
-
 export default function CarterasTotalesPage() {
   const [data, setData] = useState<Response | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,8 +76,8 @@ export default function CarterasTotalesPage() {
     apiFetch<{ periods: string[] }>("/api/v1/bases-adicionales/carteras-totales/periods")
       .then((d) => {
         setPeriods(d.periods);
-        // Default: el mes más reciente (todas las cargas de ese mes).
-        setPeriod((cur) => cur ?? (d.periods[0] ?? ""));
+        // Default: preferencia del usuario si tiene datos, si no el más reciente.
+        setPeriod((cur) => cur ?? (pickInitialMonth(d.periods) ?? ""));
       })
       .catch(() => setPeriod((cur) => cur ?? ""));
   }, []);
@@ -102,25 +93,15 @@ export default function CarterasTotalesPage() {
       .finally(() => setLoading(false));
   }, [period]);
 
-  // Selector de período (por MES). El mes elegido decide qué cargas se
-  // consolidan. "" = el último cargado por cada cartera (puede mezclar meses).
-  const periodSelector = (
-    <div className="flex items-center gap-2 mt-3">
-      <label className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold">
-        Período
-      </label>
-      <select
-        value={period ?? ""}
-        onChange={(e) => setPeriod(e.target.value)}
-        className="text-sm border border-brand-border rounded px-3 py-1.5 bg-white"
-      >
-        {periods.map((p) => (
-          <option key={p} value={p}>{monthLabel(p)}</option>
-        ))}
-        <option value="">Último cargado por cartera</option>
-      </select>
-    </div>
-  );
+  const onMonth = (m: string) => {
+    setPeriod(m);
+    setPreferredMonth(m);
+  };
+
+  // Navegador de mes: el mes elegido decide qué cargas se consolidan.
+  const periodSelector = periods.length > 0 ? (
+    <MonthNavigator months={periods} value={period} onChange={onMonth} />
+  ) : null;
 
   if (loading) {
     return (
@@ -151,7 +132,7 @@ export default function CarterasTotalesPage() {
           <span className="text-brand-ink font-semibold">Carteras Totales</span>
         </div>
         <h1 className="font-display text-4xl text-brand-ink uppercase mb-1">Carteras Totales</h1>
-        {periods.length > 0 && periodSelector}
+        {periodSelector && <div className="mt-3">{periodSelector}</div>}
         <div className="card p-8 text-center mt-4">
           <p className="text-brand-slate">
             {period
@@ -188,7 +169,7 @@ export default function CarterasTotalesPage() {
           Vista gerencial consolidada de todas las carteras gestionadas. Cada cartera
           se reporta por separado; sin mezclar números.
         </p>
-        {periods.length > 0 && periodSelector}
+        {periodSelector && <div className="mt-3">{periodSelector}</div>}
       </div>
 
       {/* Totales agregados */}
