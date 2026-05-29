@@ -40,7 +40,7 @@ export default function GestionReportsListPage() {
 
   return (
     <AppShell>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="font-display text-3xl text-brand-ink uppercase">Reportes de Gestiones</h1>
           <p className="text-sm text-brand-slate mt-1">
@@ -71,8 +71,8 @@ export default function GestionReportsListPage() {
             <span className="text-xs text-brand-slate">{filtered.length} reporte(s) en {month ? monthLabel(month) : "—"}</span>
           </div>
         )}
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="card overflow-x-auto">
+          <table className="w-full text-sm min-w-[720px]">
             <thead className="bg-brand-bg border-b border-brand-border">
               <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
                 <th className="px-4 py-3 text-left">Período</th>

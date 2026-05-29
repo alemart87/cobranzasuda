@@ -107,7 +107,7 @@ export default function OperativasPage() {
         <div className="text-[11px] uppercase tracking-wider2 text-brand-slate mb-2">
           Hub de Operativas
         </div>
-        <h1 className="font-display text-5xl text-brand-ink uppercase leading-tight">
+        <h1 className="font-display text-4xl sm:text-5xl text-brand-ink uppercase leading-tight">
           Hola, <span className="text-brand-primary">{userName}</span>
         </h1>
         <p className="text-base text-brand-slate mt-2 max-w-2xl">

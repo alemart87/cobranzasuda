@@ -71,7 +71,7 @@ export default function BasesAdicionalesHubPage() {
       </div>
 
       <div className="mb-8">
-        <h1 className="font-display text-4xl text-brand-ink uppercase">Bases Adicionales</h1>
+        <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Bases Adicionales</h1>
         <p className="text-sm text-brand-slate mt-1 max-w-3xl">
           Carteras complementarias que se gestionan operativamente pero no reciben pagos.
           La información se guarda para futuros cruces con la base de gestiones.
@@ -186,8 +186,8 @@ export default function BasesAdicionalesHubPage() {
           <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold mb-3">
             Todos los reportes
           </h2>
-          <div className="card overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="card overflow-x-auto">
+            <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-brand-bg border-b border-brand-border">
                 <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
                   <th className="px-4 py-3 text-left">Base</th>

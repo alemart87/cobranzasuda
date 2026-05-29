@@ -29,6 +29,7 @@ interface Overview {
     saldo_total: number;
     saldo_mora: number;
     asegurados_mora: number;
+    recupero: number;
   } | null;
   llamadas: {
     total_llamadas: number;
@@ -39,7 +40,10 @@ interface Overview {
   } | null;
   gestiones: {
     total_gestiones: number;
+    contactos_efectivos: number;
+    pct_contactos_efectivos: number;
     promesas_totales: number;
+    pct_promesas: number;
     cobros_totales: number;
     pct_promesas_cumplidas: number;
     asesores_activos: number;
@@ -311,7 +315,7 @@ export default function CobranzasHubPage() {
         <span className="text-brand-ink font-semibold">Cobranzas</span>
       </div>
       <div className="mb-8 pb-5 border-b border-brand-border">
-        <h1 className="font-display text-4xl text-brand-ink uppercase">Cobranzas</h1>
+        <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Cobranzas</h1>
         <p className="text-sm text-brand-slate mt-1 max-w-2xl">
           Cartera, recupero del mes, reporte operativo de contact center y proyecciones.
         </p>
@@ -361,11 +365,12 @@ export default function CobranzasHubPage() {
 
           {/* Cartera */}
           <GroupHeading>Cartera</GroupHeading>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
             <KpiCard label="Pólizas totales" value={formatInt(ov.carteras?.polizas ?? 0)} hint={`${ov.carteras?.items.length ?? 0} carteras`} accent="secondary" />
-            <KpiCard label="Asegurados" value={formatInt(ov.carteras?.asegurados ?? 0)} accent="cyan" />
+            <KpiCard label="Asegurados" value={formatInt(ov.carteras?.asegurados ?? 0)} accent="purple" />
             <KpiCard label="Saldo total operado" value={formatGs(ov.carteras?.saldo_total ?? 0)} accent="primary" />
             <KpiCard label="Saldo en mora" value={formatGs(ov.carteras?.saldo_mora ?? 0)} hint={`${formatInt(ov.carteras?.asegurados_mora ?? 0)} clientes en mora`} accent="orange" />
+            <KpiCard label="Saldo recuperado" value={formatGs(ov.carteras?.recupero ?? 0)} hint="del mes (DXP)" accent="cyan" />
           </div>
 
           {/* Operación */}
@@ -376,6 +381,33 @@ export default function CobranzasHubPage() {
             <KpiCard label="Prom. conversación" value={ov.llamadas ? `${fmtMinSeg(ov.llamadas.aht_seg)} min` : "—"} hint="por contacto (AHT)" accent="secondary" />
             <KpiCard label="Gestiones" value={ov.gestiones ? formatInt(ov.gestiones.total_gestiones) : "—"} hint={ov.gestiones ? `${formatInt(ov.gestiones.promesas_totales)} promesas · ${formatInt(ov.gestiones.cobros_totales)} cobros` : "sin reporte publicado"} accent="primary" />
           </div>
+
+          {/* Gestiones · detalle (funnel del equipo) */}
+          {ov.gestiones && (
+            <>
+              <GroupHeading>Gestiones · detalle</GroupHeading>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <KpiCard
+                  label="% Contactos efectivos"
+                  value={`${ov.gestiones.pct_contactos_efectivos.toFixed(1)} %`}
+                  hint={`${formatInt(ov.gestiones.contactos_efectivos)} de ${formatInt(ov.gestiones.total_gestiones)} gestiones`}
+                  accent="cyan"
+                />
+                <KpiCard
+                  label="% Promesas"
+                  value={`${ov.gestiones.pct_promesas.toFixed(1)} %`}
+                  hint={`${formatInt(ov.gestiones.promesas_totales)} promesas sobre contactos`}
+                  accent="purple"
+                />
+                <KpiCard
+                  label="% Promesas cumplidas"
+                  value={`${ov.gestiones.pct_promesas_cumplidas.toFixed(1)} %`}
+                  hint={`${formatInt(ov.gestiones.cobros_totales)} cobros sobre promesas`}
+                  accent="primary"
+                />
+              </div>
+            </>
+          )}
 
           {/* Detalle por cartera */}
           {ov.carteras && ov.carteras.items.length > 0 && (

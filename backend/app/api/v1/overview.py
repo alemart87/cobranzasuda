@@ -51,6 +51,7 @@ class CarterasBlock(BaseModel):
     saldo_total: float
     saldo_mora: float
     asegurados_mora: int
+    recupero: float  # saldo recuperado del mes (solo DXP recibe pagos)
 
 
 class LlamadasBlock(BaseModel):
@@ -63,7 +64,10 @@ class LlamadasBlock(BaseModel):
 
 class GestionesBlock(BaseModel):
     total_gestiones: int
+    contactos_efectivos: int
+    pct_contactos_efectivos: float
     promesas_totales: int
+    pct_promesas: float          # promesas sobre contactos efectivos
     cobros_totales: int
     pct_promesas_cumplidas: float
     asesores_activos: int
@@ -199,6 +203,8 @@ async def get_overview(
 
     carteras: Optional[CarterasBlock] = None
     if items:
+        # Recupero del mes: solo la cartera DXP recibe pagos.
+        recupero = float(dxp.recupero_total or 0) if dxp else 0.0
         carteras = CarterasBlock(
             items=items,
             polizas=sum(c.polizas for c in items),
@@ -206,6 +212,7 @@ async def get_overview(
             saldo_total=sum(c.saldo_total for c in items),
             saldo_mora=sum(c.saldo_mora for c in items),
             asegurados_mora=sum(c.asegurados_mora for c in items),
+            recupero=recupero,
         )
 
     # --- 3) Llamadas del mes (cualquier publicado) ---
@@ -236,13 +243,19 @@ async def get_overview(
         .order_by(GestionReport.generated_at.desc())
         .limit(1)
     )).scalar_one_or_none()
-    gestiones = GestionesBlock(
-        total_gestiones=int(gest.total_gestiones or 0),
-        promesas_totales=int(gest.promesas_totales or 0),
-        cobros_totales=int(gest.cobros_totales or 0),
-        pct_promesas_cumplidas=float(gest.pct_promesas_cumplidas or 0),
-        asesores_activos=int(gest.asesores_activos or 0),
-    ) if gest else None
+    gestiones = None
+    if gest:
+        gk = (gest.data or {}).get("kpis") or {}
+        gestiones = GestionesBlock(
+            total_gestiones=int(gest.total_gestiones or 0),
+            contactos_efectivos=int(gk.get("contactos_efectivos", gk.get("equipo_contactos_efectivos", 0)) or 0),
+            pct_contactos_efectivos=float(gk.get("equipo_pct_contactos_efectivos", 0) or 0),
+            promesas_totales=int(gest.promesas_totales or 0),
+            pct_promesas=float(gk.get("equipo_pct_promesas_sobre_contactos", 0) or 0),
+            cobros_totales=int(gest.cobros_totales or 0),
+            pct_promesas_cumplidas=float(gest.pct_promesas_cumplidas or 0),
+            asesores_activos=int(gest.asesores_activos or 0),
+        )
 
     # --- 5) Rendimiento estimativo: avance de gestión sobre los clientes ---
     # Indicador de cobertura: total de gestiones / asegurados de la cartera * 100.

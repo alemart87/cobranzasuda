@@ -50,6 +50,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<CurrentUserInfo | null>(null);
   const [uploadsOpen, setUploadsOpen] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     const t = getToken();
@@ -60,9 +61,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setUser(getUser());
   }, [router]);
 
-  // Cerrar el menú "Cargar" al navegar.
+  // Cerrar menús al navegar.
   useEffect(() => {
     setUploadsOpen(false);
+    setMobileOpen(false);
   }, [pathname]);
 
   const onLogout = () => {
@@ -84,18 +86,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }`;
   const uploadsActive = NAV_UPLOADS.some((u) => isActive(u.href));
   const navDivider = <span className="w-px h-4 bg-white/15 mx-1.5 flex-shrink-0" aria-hidden />;
+  const mobilePill = (active: boolean) =>
+    `block px-3 py-2 rounded-md text-sm font-medium ${
+      active ? "bg-brand-primary-light text-brand-primary-dark" : "text-brand-graphite hover:bg-brand-bg"
+    }`;
+  const mobileGroupLabel = "px-3 pt-3 pb-1 text-[10px] uppercase tracking-wider2 text-brand-mist font-semibold";
 
   return (
     <div className="min-h-screen flex flex-col bg-brand-bg">
       {/* Header principal: logo (link a Operativas) + acciones admin + perfil */}
       <header className="bg-white border-b border-brand-border shadow-soft sticky top-0 z-30">
-        <div className="px-6 py-3 flex items-center justify-between gap-4">
+        <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           {/* Brand clickable → vuelve a Operativas */}
-          <Link href="/operativas" className="hover:opacity-90 transition-opacity">
+          <Link href="/operativas" className="hover:opacity-90 transition-opacity flex-shrink-0">
             <Brand logoHeight={40} />
           </Link>
 
-          {/* Top nav: SOLO items administrativos (Superadmin) */}
+          {/* Top nav: SOLO items administrativos (Superadmin) — desktop */}
           {adminItems.length > 0 && (
             <nav className="hidden md:flex items-center gap-1">
               {adminItems.map((item) => {
@@ -113,8 +120,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
           )}
 
-          {/* Perfil */}
-          <div className="flex items-center gap-4">
+          {/* Perfil + hamburguesa */}
+          <div className="flex items-center gap-3 sm:gap-4">
             <div className="text-right leading-tight hidden sm:block">
               <div className="text-sm font-semibold text-brand-ink">{user.full_name}</div>
               <div className="text-[11px] uppercase tracking-wider2 text-brand-slate">
@@ -122,16 +129,74 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </div>
             </div>
             <Avatar name={user.full_name} photoUrl={user.photo_url} size={40} />
-            <button onClick={onLogout} className="btn-ghost" title="Cerrar sesión">
+            <button onClick={onLogout} className="btn-ghost hidden md:inline-flex" title="Cerrar sesión">
               Salir
+            </button>
+            {/* Hamburguesa (mobile/tablet) */}
+            <button
+              type="button"
+              className="md:hidden w-9 h-9 flex items-center justify-center rounded-md text-brand-ink hover:bg-brand-bg"
+              aria-label="Menú"
+              aria-expanded={mobileOpen}
+              onClick={() => setMobileOpen((o) => !o)}
+            >
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                {mobileOpen ? <path d="M18 6 6 18M6 6l12 12" /> : <path d="M3 6h18M3 12h18M3 18h18" />}
+              </svg>
             </button>
           </div>
         </div>
 
-        {/* Nav del módulo Cobranzas: SOLO cuando estás dentro del módulo */}
+        {/* Drawer mobile: navegación completa (admin + cobranzas + cargar) */}
+        {mobileOpen && (
+          <div className="md:hidden border-t border-brand-border bg-white animate-fade max-h-[75vh] overflow-y-auto">
+            <nav className="px-3 py-3 flex flex-col">
+              <Link href="/operativas" className={mobilePill(pathname === "/operativas")}>← Operativas</Link>
+
+              {adminItems.length > 0 && (
+                <>
+                  <div className={mobileGroupLabel}>Administración</div>
+                  {adminItems.map((item) => (
+                    <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>
+                      {item.label}
+                    </Link>
+                  ))}
+                </>
+              )}
+
+              <div className={mobileGroupLabel}>Cobranzas</div>
+              <Link href={NAV_INICIO.href} className={mobilePill(isActive(NAV_INICIO.href))}>{NAV_INICIO.label}</Link>
+              {NAV_REPORTS.map((item) => (
+                <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>
+                  {item.label}
+                </Link>
+              ))}
+              {canManage && (
+                <Link href="/publicaciones" className={mobilePill(isActive("/publicaciones"))}>Publicaciones</Link>
+              )}
+
+              {canManage && (
+                <>
+                  <div className={mobileGroupLabel}>Cargar datos</div>
+                  {NAV_UPLOADS.map((item) => (
+                    <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>
+                      Subir {item.label}
+                    </Link>
+                  ))}
+                </>
+              )}
+
+              <button onClick={onLogout} className="mt-3 text-left px-3 py-2 rounded-md text-sm font-medium text-brand-primary hover:bg-brand-primary-light">
+                Cerrar sesión
+              </button>
+            </nav>
+          </div>
+        )}
+
+        {/* Nav del módulo Cobranzas (desktop): SOLO cuando estás dentro del módulo */}
         {inCobranzas && (
-          <div className="bg-brand-ink text-white">
-            <div className="px-6 py-2 flex items-center gap-1 flex-wrap">
+          <div className="bg-brand-ink text-white hidden md:block">
+            <div className="px-4 sm:px-6 py-2 flex items-center gap-1 flex-wrap">
               <Link
                 href="/operativas"
                 className="text-[10px] uppercase tracking-wider2 font-semibold text-white/55 hover:text-white flex-shrink-0"
@@ -217,10 +282,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main */}
-      <main className="flex-1 px-6 py-8 max-w-screen-2xl w-full mx-auto">{children}</main>
+      <main className="flex-1 px-4 sm:px-6 py-6 sm:py-8 max-w-screen-2xl w-full mx-auto">{children}</main>
 
       {/* Footer */}
-      <footer className="border-t border-brand-border bg-white px-6 py-3 text-[11px] text-brand-slate flex items-center justify-between">
+      <footer className="border-t border-brand-border bg-white px-4 sm:px-6 py-3 text-[11px] text-brand-slate flex flex-wrap items-center justify-between gap-1">
         <span>© {new Date().getFullYear()} Voicenter S.A.</span>
         <span className="font-display tracking-wider2 uppercase">Operaciones · Sudameris Seguros</span>
       </footer>
