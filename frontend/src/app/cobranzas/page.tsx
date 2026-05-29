@@ -73,12 +73,12 @@ const REGESTION_RANGES = [
 
 function regestionStatus(pct: number) {
   if (pct < 100)
-    return { key: "barrido", label: "Barrido sin regestión", cls: "bg-red-50 text-red-700", note: "Se barrió la cartera sin re-gestión." };
+    return { key: "barrido", label: "Barrido sin regestión", cls: "bg-red-50 text-red-700", valueText: "text-red-600", bar: "bg-red-500", note: "Se barrió la cartera sin re-gestión." };
   if (pct < 200)
-    return { key: "intermedia", label: "Regestión intermedia", cls: "bg-amber-50 text-amber-700", note: "Regestión parcial: ~1 a 2 veces por cliente." };
+    return { key: "intermedia", label: "Regestión intermedia", cls: "bg-amber-50 text-amber-700", valueText: "text-amber-600", bar: "bg-amber-500", note: "Regestión parcial: ~1 a 2 veces por cliente." };
   if (pct <= 250)
-    return { key: "ideal", label: "Regestión adecuada", cls: "bg-emerald-50 text-emerald-700", note: "Regestión recomendada: 2 a 2.5 veces por cliente." };
-  return { key: "exceso", label: "Sobre-llamado", cls: "bg-[#6b0f1e] text-white", note: "Exceso de llamadas: riesgo de reclamos de clientes." };
+    return { key: "ideal", label: "Regestión adecuada", cls: "bg-emerald-50 text-emerald-700", valueText: "text-emerald-600", bar: "bg-emerald-500", note: "Regestión recomendada: 2 a 2.5 veces por cliente." };
+  return { key: "exceso", label: "Sobre-llamado", cls: "bg-[#6b0f1e] text-white", valueText: "text-[#6b0f1e]", bar: "bg-[#6b0f1e]", note: "Exceso de llamadas: riesgo de reclamos de clientes." };
 }
 
 // Estado vs. referencia de mercado. min obligatorio; max opcional (banda).
@@ -464,12 +464,12 @@ export default function CobranzasHubPage() {
           <>
           {/* Rendimiento estimativo — métrica titular */}
           <div className="card p-5 mb-6 relative overflow-hidden flex flex-col lg:flex-row lg:items-center gap-5">
-            <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-brand-primary" />
+            <div className={`absolute top-0 bottom-0 left-0 w-1.5 ${ov.rendimiento ? regestionStatus(ov.rendimiento.pct).bar : "bg-brand-mist"}`} />
             <div className="lg:pr-6 lg:border-r lg:border-brand-border lg:min-w-[200px]">
               <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold">
                 Rendimiento estimativo
               </div>
-              <div className="font-display text-5xl text-brand-primary leading-none mt-1">
+              <div className={`font-display text-5xl leading-none mt-1 ${ov.rendimiento ? regestionStatus(ov.rendimiento.pct).valueText : "text-brand-ink"}`}>
                 {ov.rendimiento ? `${ov.rendimiento.pct}%` : "—"}
               </div>
             </div>
