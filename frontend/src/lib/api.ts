@@ -34,6 +34,13 @@ export function getUser(): CurrentUserInfo | null {
   return raw ? JSON.parse(raw) : null;
 }
 
+/** Actualiza (merge) el usuario guardado en localStorage tras editar el perfil. */
+export function saveUser(partial: Partial<CurrentUserInfo>): void {
+  if (typeof window === "undefined") return;
+  const cur = getUser() ?? ({} as CurrentUserInfo);
+  localStorage.setItem(USER_KEY, JSON.stringify({ ...cur, ...partial }));
+}
+
 export async function apiFetch<T = any>(
   path: string,
   opts: RequestInit = {},

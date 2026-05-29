@@ -122,13 +122,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
           {/* Perfil + hamburguesa */}
           <div className="flex items-center gap-3 sm:gap-4">
-            <div className="text-right leading-tight hidden sm:block">
-              <div className="text-sm font-semibold text-brand-ink">{user.full_name}</div>
-              <div className="text-[11px] uppercase tracking-wider2 text-brand-slate">
-                {ROLE_LABELS[user.role] ?? user.role}
+            <Link href="/perfil" className="flex items-center gap-3 group" title="Mi perfil">
+              <div className="text-right leading-tight hidden sm:block">
+                <div className="text-sm font-semibold text-brand-ink group-hover:text-brand-primary transition-colors">{user.full_name}</div>
+                <div className="text-[11px] uppercase tracking-wider2 text-brand-slate">
+                  {ROLE_LABELS[user.role] ?? user.role}
+                </div>
               </div>
-            </div>
-            <Avatar name={user.full_name} photoUrl={user.photo_url} size={40} />
+              <Avatar name={user.full_name} photoUrl={user.photo_url} size={40} />
+            </Link>
             <button onClick={onLogout} className="btn-ghost hidden md:inline-flex" title="Cerrar sesión">
               Salir
             </button>
@@ -151,6 +153,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {mobileOpen && (
           <div className="md:hidden border-t border-brand-border bg-white animate-fade max-h-[75vh] overflow-y-auto">
             <nav className="px-3 py-3 flex flex-col">
+              <Link href="/perfil" className={mobilePill(pathname === "/perfil")}>Mi perfil</Link>
               <Link href="/operativas" className={mobilePill(pathname === "/operativas")}>← Operativas</Link>
 
               {adminItems.length > 0 && (
