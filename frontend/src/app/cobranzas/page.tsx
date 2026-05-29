@@ -79,6 +79,41 @@ function vecesStatus(gestiones: number, asegurados: number) {
   return { v, label, cls };
 }
 
+// Estado vs. referencia de mercado. min obligatorio; max opcional (banda).
+function benchStatus(v: number, min: number, max?: number) {
+  if (v < min) return { label: "Bajo referencia", cls: "bg-amber-50 text-amber-700" };
+  if (max != null && v > max) return { label: "Sobre referencia", cls: "bg-emerald-50 text-emerald-700" };
+  return { label: "En referencia", cls: "bg-emerald-50 text-emerald-700" };
+}
+
+const GEST_ACCENT: Record<string, string> = {
+  cyan: "border-l-brand-cyan",
+  purple: "border-l-brand-purple",
+  primary: "border-l-brand-primary",
+};
+
+function GestionStat({
+  label, pct, hint, refText, accent, min, max,
+}: {
+  label: string; pct: number; hint: string; refText: string;
+  accent: "cyan" | "purple" | "primary"; min: number; max?: number;
+}) {
+  const s = benchStatus(pct, min, max);
+  return (
+    <div className={`card p-5 border-l-[3px] ${GEST_ACCENT[accent]}`}>
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold">{label}</span>
+        <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded whitespace-nowrap ${s.cls}`}>
+          {s.label}
+        </span>
+      </div>
+      <div className="font-display text-3xl text-brand-ink mt-1 leading-none">{pct.toFixed(1)} %</div>
+      <div className="text-[11px] text-brand-slate mt-1.5">{hint}</div>
+      <div className="text-[10px] text-brand-mist mt-1">Referencia de mercado: {refText}</div>
+    </div>
+  );
+}
+
 type Variant = "primary" | "cyan" | "purple" | "orange";
 
 interface ActionTile {
@@ -493,23 +528,30 @@ export default function CobranzasHubPage() {
             <>
               <GroupHeading>Gestiones · detalle</GroupHeading>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <KpiCard
+                <GestionStat
                   label="% Contactos efectivos"
-                  value={`${ov.gestiones.pct_contactos_efectivos.toFixed(1)} %`}
+                  pct={ov.gestiones.pct_contactos_efectivos}
                   hint={`${formatInt(ov.gestiones.contactos_efectivos)} de ${formatInt(ov.gestiones.total_gestiones)} gestiones`}
+                  refText="40 a 50%"
                   accent="cyan"
+                  min={40}
+                  max={50}
                 />
-                <KpiCard
+                <GestionStat
                   label="% Promesas"
-                  value={`${ov.gestiones.pct_promesas.toFixed(1)} %`}
+                  pct={ov.gestiones.pct_promesas}
                   hint={`${formatInt(ov.gestiones.promesas_totales)} promesas sobre contactos`}
+                  refText="superior a 40%"
                   accent="purple"
+                  min={40}
                 />
-                <KpiCard
+                <GestionStat
                   label="% Promesas cumplidas"
-                  value={`${ov.gestiones.pct_promesas_cumplidas.toFixed(1)} %`}
+                  pct={ov.gestiones.pct_promesas_cumplidas}
                   hint={`${formatInt(ov.gestiones.cobros_totales)} cobros sobre promesas`}
+                  refText="superior a 40%"
                   accent="primary"
+                  min={40}
                 />
               </div>
             </>
