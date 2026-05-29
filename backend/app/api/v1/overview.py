@@ -41,6 +41,7 @@ class CarteraItem(BaseModel):
     saldo_total: float
     saldo_mora: float
     asegurados_mora: int
+    recupero: float       # saldo recuperado del mes (0 si la cartera no recibe pagos)
     recibe_pagos: bool
 
 
@@ -106,6 +107,7 @@ def _cartera_from_dxp(rep: Report) -> CarteraItem:
         saldo_total=float(rep.saldo_total or kpis.get("saldo_total", 0) or 0),
         saldo_mora=float(rep.vencido_total or kpis.get("vencido_total", 0) or 0),
         asegurados_mora=int(rep.asegurados_en_mora or kpis.get("asegurados_en_mora", 0) or 0),
+        recupero=float(rep.recupero_total or 0),
         recibe_pagos=True,
     )
 
@@ -121,6 +123,7 @@ def _cartera_from_base(rep: BaseAdicionalReport) -> CarteraItem:
         saldo_total=float(rep.saldo_total or 0),
         saldo_mora=vencido,
         asegurados_mora=int(kpis.get("asegurados_en_mora", 0) or 0),
+        recupero=0.0,
         recibe_pagos=False,
     )
 

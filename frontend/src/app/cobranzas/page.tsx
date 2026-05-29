@@ -17,6 +17,7 @@ interface CarteraItem {
   saldo_total: number;
   saldo_mora: number;
   asegurados_mora: number;
+  recupero: number;
   recibe_pagos: boolean;
 }
 interface Overview {
@@ -267,6 +268,7 @@ export default function CobranzasHubPage() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [month, setMonth] = useState<string | null>(null);
   const [user, setUser] = useState<any>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
 
   const loadOverview = (m: string | null) =>
     apiFetch<Overview>(`/api/v1/overview${m ? `?month=${m}` : ""}`)
@@ -363,14 +365,14 @@ export default function CobranzasHubPage() {
             </div>
           </div>
 
-          {/* Cartera */}
-          <GroupHeading>Cartera</GroupHeading>
+          {/* Cartera — consolidado de todas las carteras */}
+          <GroupHeading>Cartera · todas las carteras</GroupHeading>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
             <KpiCard label="Pólizas totales" value={formatInt(ov.carteras?.polizas ?? 0)} hint={`${ov.carteras?.items.length ?? 0} carteras`} accent="secondary" />
-            <KpiCard label="Asegurados" value={formatInt(ov.carteras?.asegurados ?? 0)} accent="purple" />
+            <KpiCard label="Asegurados" value={formatInt(ov.carteras?.asegurados ?? 0)} accent="cyan" />
+            <KpiCard label="Clientes en mora" value={formatInt(ov.carteras?.asegurados_mora ?? 0)} accent="orange" />
             <KpiCard label="Saldo total operado" value={formatGs(ov.carteras?.saldo_total ?? 0)} accent="primary" />
-            <KpiCard label="Saldo en mora" value={formatGs(ov.carteras?.saldo_mora ?? 0)} hint={`${formatInt(ov.carteras?.asegurados_mora ?? 0)} clientes en mora`} accent="orange" />
-            <KpiCard label="Saldo recuperado" value={formatGs(ov.carteras?.recupero ?? 0)} hint="del mes (DXP)" accent="cyan" />
+            <KpiCard label="Saldo en mora" value={formatGs(ov.carteras?.saldo_mora ?? 0)} accent="orange" />
           </div>
 
           {/* Operación */}
@@ -409,34 +411,63 @@ export default function CobranzasHubPage() {
             </>
           )}
 
-          {/* Detalle por cartera */}
+          {/* Detalle por cartera — colapsable */}
           {ov.carteras && ov.carteras.items.length > 0 && (
-            <>
-              <GroupHeading>Detalle por cartera</GroupHeading>
-              <div className="grid md:grid-cols-3 gap-4">
-                {ov.carteras.items.map((c) => (
-                  <div key={c.fuente} className="card p-4">
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <h4 className="font-display text-base text-brand-ink uppercase leading-tight">{c.nombre}</h4>
-                      <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${c.recibe_pagos ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                        {c.recibe_pagos ? "Recibe pagos" : "Sin pagos"}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                      <Metric label="Pólizas" value={formatInt(c.polizas)} />
-                      <Metric label="Asegurados" value={formatInt(c.asegurados)} />
-                      <Metric label="Saldo total" value={formatGs(c.saldo_total)} />
-                      <Metric
-                        label="Saldo en mora"
-                        value={formatGs(c.saldo_mora)}
-                        sub={`${formatInt(c.asegurados_mora)} clientes`}
-                        accentClass="text-brand-orange"
-                      />
-                    </div>
+            <div className="mt-2">
+              <button
+                type="button"
+                onClick={() => setDetailOpen((o) => !o)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 card hover:bg-brand-bg-soft transition-colors"
+                aria-expanded={detailOpen}
+              >
+                <span className="text-[11px] uppercase tracking-wider2 text-brand-graphite font-bold">
+                  Detalle por cartera
+                </span>
+                <span className="inline-flex items-center gap-2 text-xs text-brand-slate">
+                  {detailOpen ? "Ocultar" : "Ver detalle"}
+                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${detailOpen ? "rotate-180" : ""}`}>
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </span>
+              </button>
+
+              {detailOpen && (
+                <div className="mt-4 animate-fade">
+                  <p className="text-xs text-brand-slate mb-3">
+                    Las carteras adicionales (Débitos Automáticos y Bancard) <b className="text-brand-ink">no cuentan con datos de pagos</b> según informe de Sudameris Seguros; por eso no registran saldo recuperado.
+                  </p>
+                  <div className="grid md:grid-cols-3 gap-4">
+                    {ov.carteras.items.map((c) => (
+                      <div key={c.fuente} className="card p-4">
+                        <div className="flex items-center justify-between gap-2 mb-3">
+                          <h4 className="font-display text-base text-brand-ink uppercase leading-tight">{c.nombre}</h4>
+                          <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${c.recibe_pagos ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                            {c.recibe_pagos ? "Recibe pagos" : "Sin pagos"}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                          <Metric label="Pólizas" value={formatInt(c.polizas)} />
+                          <Metric label="Asegurados" value={formatInt(c.asegurados)} />
+                          <Metric label="Saldo total" value={formatGs(c.saldo_total)} />
+                          <Metric
+                            label="Saldo en mora"
+                            value={formatGs(c.saldo_mora)}
+                            sub={`${formatInt(c.asegurados_mora)} clientes`}
+                            accentClass="text-brand-orange"
+                          />
+                          <Metric
+                            label="Saldo recuperado"
+                            value={c.recibe_pagos ? formatGs(c.recupero) : "—"}
+                            sub={c.recibe_pagos ? "del mes" : "sin datos de pagos"}
+                            accentClass={c.recibe_pagos ? "text-brand-cyan" : "text-brand-mist"}
+                          />
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </>
+                </div>
+              )}
+            </div>
           )}
           </>
           )}
