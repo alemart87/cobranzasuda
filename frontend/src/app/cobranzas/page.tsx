@@ -58,25 +58,27 @@ function fmtMinSeg(seg: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-// Gestiones por cliente: el rendimiento (gestiones/asegurados) interpretado como
-// "veces que se gestiona a cada cliente". Media ideal (buenas prácticas): 2–2.5.
-function vecesStatus(gestiones: number, asegurados: number) {
-  const v = asegurados > 0 ? gestiones / asegurados : 0;
-  let label = "Sin datos";
-  let cls = "bg-brand-bg text-brand-slate";
-  if (asegurados > 0) {
-    if (v < 2) {
-      label = "Por debajo de lo ideal";
-      cls = "bg-amber-50 text-amber-700";
-    } else if (v <= 2.5) {
-      label = "En rango ideal";
-      cls = "bg-emerald-50 text-emerald-700";
-    } else {
-      label = "Por encima de lo ideal";
-      cls = "bg-amber-50 text-amber-700";
-    }
-  }
-  return { v, label, cls };
+// Semáforo de regestión: el rendimiento (% = veces/cliente × 100) clasificado
+// por buenas prácticas de cobranza.
+//   < 100%  → se barrió la cartera sin regestión.
+//   100-200% → regestión intermedia (~1 a 2 veces por cliente).
+//   200-250% → regestión adecuada/recomendada (2 a 2.5 veces).
+//   > 250%  → sobre-llamado, riesgo de reclamos.
+const REGESTION_RANGES = [
+  { key: "barrido", range: "< 100%", label: "Barrido sin regestión", dot: "bg-red-500" },
+  { key: "intermedia", range: "100–200%", label: "Regestión intermedia", dot: "bg-amber-500" },
+  { key: "ideal", range: "200–250%", label: "Regestión adecuada", dot: "bg-emerald-500" },
+  { key: "exceso", range: "> 250%", label: "Sobre-llamado", dot: "bg-[#6b0f1e]" },
+];
+
+function regestionStatus(pct: number) {
+  if (pct < 100)
+    return { key: "barrido", label: "Barrido sin regestión", cls: "bg-red-50 text-red-700", note: "Se barrió la cartera sin re-gestión." };
+  if (pct < 200)
+    return { key: "intermedia", label: "Regestión intermedia", cls: "bg-amber-50 text-amber-700", note: "Regestión parcial: ~1 a 2 veces por cliente." };
+  if (pct <= 250)
+    return { key: "ideal", label: "Regestión adecuada", cls: "bg-emerald-50 text-emerald-700", note: "Regestión recomendada: 2 a 2.5 veces por cliente." };
+  return { key: "exceso", label: "Sobre-llamado", cls: "bg-[#6b0f1e] text-white", note: "Exceso de llamadas: riesgo de reclamos de clientes." };
 }
 
 // Estado vs. referencia de mercado. min obligatorio; max opcional (banda).
@@ -480,26 +482,55 @@ export default function CobranzasHubPage() {
               </div>
             </div>
             {ov.rendimiento && (() => {
-              const s = vecesStatus(ov.rendimiento.gestiones, ov.rendimiento.asegurados);
+              const s = regestionStatus(ov.rendimiento.pct);
+              const veces = ov.rendimiento.asegurados > 0 ? ov.rendimiento.gestiones / ov.rendimiento.asegurados : 0;
               return (
                 <div className="lg:pl-6 lg:border-l lg:border-brand-border lg:min-w-[230px] pt-4 border-t border-brand-border lg:pt-0 lg:border-t-0">
                   <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold">
                     Gestiones por cliente
                   </div>
                   <div className="flex items-baseline gap-2 mt-1">
-                    <span className="font-display text-3xl text-brand-ink leading-none">{s.v.toFixed(1)}×</span>
+                    <span className="font-display text-3xl text-brand-ink leading-none">{veces.toFixed(1)}×</span>
                     <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${s.cls}`}>
                       {s.label}
                     </span>
                   </div>
-                  <div className="text-[11px] text-brand-slate mt-1.5 leading-snug">
-                    Se gestiona a cada cliente ~<b className="text-brand-ink">{s.v.toFixed(1)} veces</b> en el mes.
-                    Media ideal: <b className="text-brand-ink">2 a 2.5</b> veces/cliente (buenas prácticas).
-                  </div>
+                  <div className="text-[11px] text-brand-slate mt-1.5 leading-snug">{s.note}</div>
                 </div>
               );
             })()}
           </div>
+
+          {/* Semáforo de referencia de regestión */}
+          {ov.rendimiento && (() => {
+            const activeKey = regestionStatus(ov.rendimiento.pct).key;
+            return (
+              <div className="card p-4 mb-6">
+                <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold mb-2">
+                  Referencia de regestión
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {REGESTION_RANGES.map((r) => {
+                    const active = r.key === activeKey;
+                    return (
+                      <div
+                        key={r.key}
+                        className={`flex items-start gap-2 rounded-md px-3 py-2 border transition-colors ${
+                          active ? "border-brand-ink bg-brand-bg-soft" : "border-brand-border"
+                        }`}
+                      >
+                        <span className={`w-2.5 h-2.5 rounded-full mt-1 flex-shrink-0 ${r.dot}`} />
+                        <div>
+                          <div className={`text-xs font-bold ${active ? "text-brand-ink" : "text-brand-graphite"}`}>{r.range}</div>
+                          <div className="text-[11px] text-brand-slate leading-tight">{r.label}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Operación */}
           <GroupHeading>Operación del mes</GroupHeading>
