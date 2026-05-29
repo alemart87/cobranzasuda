@@ -143,7 +143,7 @@ export default function BasesAdicionalesHubPage() {
                     )}
                     <span>· Período {latest.period_month ?? "—"} · {formatDate(latest.generated_at)}</span>
                   </div>
-                  <div className="flex gap-2 pt-2 border-t border-brand-border">
+                  <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-brand-border">
                     <Link
                       href={`/cobranzas/bases-adicionales/reports/${latest.id}`}
                       className="text-sm text-brand-primary font-semibold hover:underline"
@@ -153,9 +153,14 @@ export default function BasesAdicionalesHubPage() {
                     {canManage && (
                       <Link
                         href={`/cobranzas/bases-adicionales/upload/${t.slug}`}
-                        className="text-sm text-brand-slate hover:text-brand-ink ml-auto"
+                        className="btn-secondary text-xs py-1.5 px-3 inline-flex items-center gap-1.5 ml-auto"
                       >
-                        + Cargar nuevo
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <path d="m17 8-5-5-5 5" />
+                          <path d="M12 3v12" />
+                        </svg>
+                        Cargar nueva base
                       </Link>
                     )}
                   </div>
