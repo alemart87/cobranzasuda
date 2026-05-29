@@ -501,19 +501,6 @@ export default function CobranzasHubPage() {
             })()}
           </div>
 
-          {/* Cartera — consolidado de todas las carteras */}
-          <GroupHeading>Cartera · todas las carteras</GroupHeading>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-            <KpiCard label="Pólizas totales" value={formatInt(ov.carteras?.polizas ?? 0)} hint={`${ov.carteras?.items.length ?? 0} carteras`} accent="secondary" />
-            <KpiCard label="Asegurados" value={formatInt(ov.carteras?.asegurados ?? 0)} accent="cyan" />
-            <KpiCard label="Clientes en mora" value={formatInt(ov.carteras?.asegurados_mora ?? 0)} accent="orange" />
-            <KpiCard label="Saldo total operado" value={formatGs(ov.carteras?.saldo_total ?? 0)} accent="primary" />
-            <KpiCard label="Saldo en mora" value={formatGs(ov.carteras?.saldo_mora ?? 0)} accent="orange" />
-          </div>
-
-          {/* Detalle por cartera (colapsable), debajo del consolidado */}
-          {detallePorCartera}
-
           {/* Operación */}
           <GroupHeading>Operación del mes</GroupHeading>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -556,6 +543,19 @@ export default function CobranzasHubPage() {
               </div>
             </>
           )}
+
+          {/* Cartera — consolidado de todas las carteras */}
+          <GroupHeading>Cartera · todas las carteras</GroupHeading>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+            <KpiCard label="Pólizas totales" value={formatInt(ov.carteras?.polizas ?? 0)} hint={`${ov.carteras?.items.length ?? 0} carteras`} accent="secondary" />
+            <KpiCard label="Asegurados" value={formatInt(ov.carteras?.asegurados ?? 0)} accent="cyan" />
+            <KpiCard label="Clientes en mora" value={formatInt(ov.carteras?.asegurados_mora ?? 0)} accent="orange" />
+            <KpiCard label="Saldo total operado" value={formatGs(ov.carteras?.saldo_total ?? 0)} accent="primary" />
+            <KpiCard label="Saldo en mora" value={formatGs(ov.carteras?.saldo_mora ?? 0)} accent="orange" />
+          </div>
+
+          {/* Detalle por cartera (colapsable), debajo del consolidado */}
+          {detallePorCartera}
 
           </>
           )}
