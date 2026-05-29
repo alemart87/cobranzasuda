@@ -58,6 +58,27 @@ function fmtMinSeg(seg: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+// Gestiones por cliente: el rendimiento (gestiones/asegurados) interpretado como
+// "veces que se gestiona a cada cliente". Media ideal (buenas prácticas): 2–2.5.
+function vecesStatus(gestiones: number, asegurados: number) {
+  const v = asegurados > 0 ? gestiones / asegurados : 0;
+  let label = "Sin datos";
+  let cls = "bg-brand-bg text-brand-slate";
+  if (asegurados > 0) {
+    if (v < 2) {
+      label = "Por debajo de lo ideal";
+      cls = "bg-amber-50 text-amber-700";
+    } else if (v <= 2.5) {
+      label = "En rango ideal";
+      cls = "bg-emerald-50 text-emerald-700";
+    } else {
+      label = "Por encima de lo ideal";
+      cls = "bg-amber-50 text-amber-700";
+    }
+  }
+  return { v, label, cls };
+}
+
 type Variant = "primary" | "cyan" | "purple" | "orange";
 
 interface ActionTile {
@@ -305,6 +326,66 @@ export default function CobranzasHubPage() {
   const ov = overview;
   const hasOverview = !!(ov && (ov.carteras || ov.llamadas || ov.gestiones));
 
+  // Detalle por cartera (colapsable) — se renderiza justo debajo del consolidado.
+  const detallePorCartera =
+    ov?.carteras && ov.carteras.items.length > 0 ? (
+      <div className="mb-6">
+        <button
+          type="button"
+          onClick={() => setDetailOpen((o) => !o)}
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 card hover:bg-brand-bg-soft transition-colors"
+          aria-expanded={detailOpen}
+        >
+          <span className="text-[11px] uppercase tracking-wider2 text-brand-graphite font-bold">
+            Detalle por cartera
+          </span>
+          <span className="inline-flex items-center gap-2 text-xs font-semibold text-brand-primary">
+            {detailOpen ? "Ocultar" : "Ver detalle"}
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${detailOpen ? "rotate-180" : ""}`}>
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </span>
+        </button>
+
+        {detailOpen && (
+          <div className="mt-4 animate-fade">
+            <p className="text-xs text-brand-slate mb-3">
+              Las carteras adicionales (Débitos Automáticos y Bancard) <b className="text-brand-ink">no cuentan con datos de pagos</b> según informe de Sudameris Seguros; por eso no registran saldo recuperado.
+            </p>
+            <div className="grid md:grid-cols-3 gap-4">
+              {ov.carteras.items.map((c) => (
+                <div key={c.fuente} className="card p-4">
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <h4 className="font-display text-base text-brand-ink uppercase leading-tight">{c.nombre}</h4>
+                    <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${c.recibe_pagos ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                      {c.recibe_pagos ? "Recibe pagos" : "Sin pagos"}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+                    <Metric label="Pólizas" value={formatInt(c.polizas)} />
+                    <Metric label="Asegurados" value={formatInt(c.asegurados)} />
+                    <Metric label="Saldo total" value={formatGs(c.saldo_total)} />
+                    <Metric
+                      label="Saldo en mora"
+                      value={formatGs(c.saldo_mora)}
+                      sub={`${formatInt(c.asegurados_mora)} clientes`}
+                      accentClass="text-brand-orange"
+                    />
+                    <Metric
+                      label="Saldo recuperado"
+                      value={c.recibe_pagos ? formatGs(c.recupero) : "—"}
+                      sub={c.recibe_pagos ? "del mes" : "sin datos de pagos"}
+                      accentClass={c.recibe_pagos ? "text-brand-cyan" : "text-brand-mist"}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    ) : null;
+
   const role = user?.role;
   const viewActions = VIEW_ACTIONS.filter((a) => !role || a.forRoles.includes(role));
   const uploadActions = UPLOAD_ACTIONS.filter((a) => !role || a.forRoles.includes(role));
@@ -345,9 +426,9 @@ export default function CobranzasHubPage() {
           {hasOverview && (
           <>
           {/* Rendimiento estimativo — métrica titular */}
-          <div className="card p-5 mb-6 relative overflow-hidden flex flex-col sm:flex-row sm:items-center gap-5">
+          <div className="card p-5 mb-6 relative overflow-hidden flex flex-col lg:flex-row lg:items-center gap-5">
             <div className="absolute top-0 bottom-0 left-0 w-1.5 bg-brand-primary" />
-            <div className="sm:pr-6 sm:border-r sm:border-brand-border sm:min-w-[210px]">
+            <div className="lg:pr-6 lg:border-r lg:border-brand-border lg:min-w-[200px]">
               <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold">
                 Rendimiento estimativo
               </div>
@@ -355,7 +436,7 @@ export default function CobranzasHubPage() {
                 {ov.rendimiento ? `${ov.rendimiento.pct}%` : "—"}
               </div>
             </div>
-            <div className="text-sm text-brand-slate">
+            <div className="text-sm text-brand-slate lg:flex-1">
               Indicador estimativo del <b className="text-brand-ink">avance de gestión sobre los clientes</b> de la cartera del mes.
               <div className="text-brand-ink font-semibold mt-1">
                 {ov.rendimiento
@@ -363,6 +444,26 @@ export default function CobranzasHubPage() {
                   : "Faltan datos de cartera o de gestiones publicados."}
               </div>
             </div>
+            {ov.rendimiento && (() => {
+              const s = vecesStatus(ov.rendimiento.gestiones, ov.rendimiento.asegurados);
+              return (
+                <div className="lg:pl-6 lg:border-l lg:border-brand-border lg:min-w-[230px] pt-4 border-t border-brand-border lg:pt-0 lg:border-t-0">
+                  <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold">
+                    Gestiones por cliente
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="font-display text-3xl text-brand-ink leading-none">{s.v.toFixed(1)}×</span>
+                    <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${s.cls}`}>
+                      {s.label}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-brand-slate mt-1.5 leading-snug">
+                    Se gestiona a cada cliente ~<b className="text-brand-ink">{s.v.toFixed(1)} veces</b> en el mes.
+                    Media ideal: <b className="text-brand-ink">2 a 2.5</b> veces/cliente (buenas prácticas).
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Cartera — consolidado de todas las carteras */}
@@ -374,6 +475,9 @@ export default function CobranzasHubPage() {
             <KpiCard label="Saldo total operado" value={formatGs(ov.carteras?.saldo_total ?? 0)} accent="primary" />
             <KpiCard label="Saldo en mora" value={formatGs(ov.carteras?.saldo_mora ?? 0)} accent="orange" />
           </div>
+
+          {/* Detalle por cartera (colapsable), debajo del consolidado */}
+          {detallePorCartera}
 
           {/* Operación */}
           <GroupHeading>Operación del mes</GroupHeading>
@@ -411,64 +515,6 @@ export default function CobranzasHubPage() {
             </>
           )}
 
-          {/* Detalle por cartera — colapsable */}
-          {ov.carteras && ov.carteras.items.length > 0 && (
-            <div className="mt-2">
-              <button
-                type="button"
-                onClick={() => setDetailOpen((o) => !o)}
-                className="w-full flex items-center justify-between gap-3 px-4 py-3 card hover:bg-brand-bg-soft transition-colors"
-                aria-expanded={detailOpen}
-              >
-                <span className="text-[11px] uppercase tracking-wider2 text-brand-graphite font-bold">
-                  Detalle por cartera
-                </span>
-                <span className="inline-flex items-center gap-2 text-xs text-brand-slate">
-                  {detailOpen ? "Ocultar" : "Ver detalle"}
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${detailOpen ? "rotate-180" : ""}`}>
-                    <path d="m6 9 6 6 6-6" />
-                  </svg>
-                </span>
-              </button>
-
-              {detailOpen && (
-                <div className="mt-4 animate-fade">
-                  <p className="text-xs text-brand-slate mb-3">
-                    Las carteras adicionales (Débitos Automáticos y Bancard) <b className="text-brand-ink">no cuentan con datos de pagos</b> según informe de Sudameris Seguros; por eso no registran saldo recuperado.
-                  </p>
-                  <div className="grid md:grid-cols-3 gap-4">
-                    {ov.carteras.items.map((c) => (
-                      <div key={c.fuente} className="card p-4">
-                        <div className="flex items-center justify-between gap-2 mb-3">
-                          <h4 className="font-display text-base text-brand-ink uppercase leading-tight">{c.nombre}</h4>
-                          <span className={`text-[10px] uppercase tracking-wider2 font-semibold px-2 py-0.5 rounded ${c.recibe_pagos ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                            {c.recibe_pagos ? "Recibe pagos" : "Sin pagos"}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-                          <Metric label="Pólizas" value={formatInt(c.polizas)} />
-                          <Metric label="Asegurados" value={formatInt(c.asegurados)} />
-                          <Metric label="Saldo total" value={formatGs(c.saldo_total)} />
-                          <Metric
-                            label="Saldo en mora"
-                            value={formatGs(c.saldo_mora)}
-                            sub={`${formatInt(c.asegurados_mora)} clientes`}
-                            accentClass="text-brand-orange"
-                          />
-                          <Metric
-                            label="Saldo recuperado"
-                            value={c.recibe_pagos ? formatGs(c.recupero) : "—"}
-                            sub={c.recibe_pagos ? "del mes" : "sin datos de pagos"}
-                            accentClass={c.recibe_pagos ? "text-brand-cyan" : "text-brand-mist"}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
           </>
           )}
         </section>
