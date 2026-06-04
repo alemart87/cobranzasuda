@@ -40,6 +40,18 @@ const NAV_UPLOADS = [
 
 const COBRANZAS_PREFIXES = ["/cobranzas", "/reports", "/upload", "/calls", "/gestiones", "/publicaciones"];
 
+// Navegación interna del módulo Atención al Cliente (100% independiente de Cobranzas).
+const NAV_ATENCION_INICIO = { href: "/atencion", label: "Inicio" };
+const NAV_ATENCION_REPORTS = [
+  { href: "/atencion/llamadas/reports", label: "Llamadas" },
+  { href: "/atencion/gestiones/reports", label: "Gestiones" },
+];
+const NAV_ATENCION_UPLOADS = [
+  { href: "/atencion/llamadas/upload", label: "Llamadas" },
+  { href: "/atencion/gestiones/upload", label: "Gestiones" },
+];
+const ATENCION_PREFIXES = ["/atencion"];
+
 const ROLE_LABELS: Record<string, string> = {
   superadmin: "Superadmin",
   analyst: "Analista",
@@ -76,7 +88,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   const adminItems = ADMIN_NAV.filter((n) => n.roles.includes(user.role));
-  const inCobranzas = COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inAtencion = ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inCobranzas = !inAtencion && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
   const canManage = user.role === "superadmin" || user.role === "analyst";
 
   const isActive = (href: string) =>
@@ -86,6 +99,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       active ? "bg-brand-primary text-white" : "text-white/70 hover:bg-white/10 hover:text-white"
     }`;
   const uploadsActive = NAV_UPLOADS.some((u) => isActive(u.href));
+  const atencionUploadsActive = NAV_ATENCION_UPLOADS.some((u) => isActive(u.href));
   const navDivider = <span className="w-px h-4 bg-white/15 mx-1.5 flex-shrink-0" aria-hidden />;
   const mobilePill = (active: boolean) =>
     `block px-3 py-2 rounded-md text-sm font-medium ${
@@ -168,25 +182,52 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </>
               )}
 
-              <div className={mobileGroupLabel}>Cobranzas</div>
-              <Link href={NAV_INICIO.href} className={mobilePill(isActive(NAV_INICIO.href))}>{NAV_INICIO.label}</Link>
-              {NAV_REPORTS.map((item) => (
-                <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>
-                  {item.label}
-                </Link>
-              ))}
-              {canManage && (
-                <Link href="/publicaciones" className={mobilePill(isActive("/publicaciones"))}>Publicaciones</Link>
-              )}
-
-              {canManage && (
+              {inAtencion ? (
                 <>
-                  <div className={mobileGroupLabel}>Cargar datos</div>
-                  {NAV_UPLOADS.map((item) => (
+                  <div className={mobileGroupLabel}>Atención al Cliente</div>
+                  <Link href={NAV_ATENCION_INICIO.href} className={mobilePill(pathname === NAV_ATENCION_INICIO.href)}>{NAV_ATENCION_INICIO.label}</Link>
+                  {NAV_ATENCION_REPORTS.map((item) => (
                     <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>
-                      Subir {item.label}
+                      {item.label}
                     </Link>
                   ))}
+                  {canManage && (
+                    <Link href="/atencion/publicaciones" className={mobilePill(isActive("/atencion/publicaciones"))}>Publicaciones</Link>
+                  )}
+                  {canManage && (
+                    <>
+                      <div className={mobileGroupLabel}>Cargar datos</div>
+                      {NAV_ATENCION_UPLOADS.map((item) => (
+                        <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>
+                          Subir {item.label}
+                        </Link>
+                      ))}
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className={mobileGroupLabel}>Cobranzas</div>
+                  <Link href={NAV_INICIO.href} className={mobilePill(isActive(NAV_INICIO.href))}>{NAV_INICIO.label}</Link>
+                  {NAV_REPORTS.map((item) => (
+                    <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>
+                      {item.label}
+                    </Link>
+                  ))}
+                  {canManage && (
+                    <Link href="/publicaciones" className={mobilePill(isActive("/publicaciones"))}>Publicaciones</Link>
+                  )}
+
+                  {canManage && (
+                    <>
+                      <div className={mobileGroupLabel}>Cargar datos</div>
+                      {NAV_UPLOADS.map((item) => (
+                        <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>
+                          Subir {item.label}
+                        </Link>
+                      ))}
+                    </>
+                  )}
                 </>
               )}
 
@@ -269,6 +310,89 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                               onClick={() => setUploadsOpen(false)}
                               className={`block px-3 py-2 text-sm font-medium hover:bg-brand-bg ${
                                 isActive(item.href) ? "text-brand-primary" : "text-brand-graphite"
+                              }`}
+                            >
+                              {item.label}
+                            </Link>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Nav del módulo Atención (desktop): SOLO cuando estás dentro del módulo */}
+        {inAtencion && (
+          <div className="bg-brand-ink text-white hidden md:block">
+            <div className="px-4 sm:px-6 py-2 flex items-center gap-1 flex-wrap">
+              <Link
+                href="/operativas"
+                className="text-[10px] uppercase tracking-wider2 font-semibold text-white/55 hover:text-white flex-shrink-0"
+              >
+                ← Operativas
+              </Link>
+              {navDivider}
+              <span className="text-[10px] uppercase tracking-wider2 font-bold text-brand-cyan flex-shrink-0">
+                Atención
+              </span>
+              {navDivider}
+
+              <Link href={NAV_ATENCION_INICIO.href} className={pill(pathname === NAV_ATENCION_INICIO.href)}>
+                {NAV_ATENCION_INICIO.label}
+              </Link>
+
+              {navDivider}
+              <span className="text-[10px] uppercase tracking-wider2 font-semibold text-white/40 px-1.5 flex-shrink-0">
+                Reportes
+              </span>
+              {NAV_ATENCION_REPORTS.map((item) => (
+                <Link key={item.href} href={item.href} className={pill(isActive(item.href))}>
+                  {item.label}
+                </Link>
+              ))}
+
+              {canManage && (
+                <>
+                  {navDivider}
+                  <Link href="/atencion/publicaciones" className={pill(isActive("/atencion/publicaciones"))}>
+                    Publicaciones
+                  </Link>
+
+                  {navDivider}
+                  <div className="relative flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setUploadsOpen((o) => !o)}
+                      className={`${pill(atencionUploadsActive)} inline-flex items-center gap-1.5`}
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <path d="m17 8-5-5-5 5" />
+                        <path d="M12 3v12" />
+                      </svg>
+                      Cargar
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${uploadsOpen ? "rotate-180" : ""}`}>
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                    {uploadsOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setUploadsOpen(false)} />
+                        <div className="absolute left-0 top-full mt-1.5 z-40 min-w-[180px] bg-white text-brand-ink rounded-md shadow-elevated border border-brand-border py-1 overflow-hidden">
+                          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider2 text-brand-mist font-semibold">
+                            Procesar archivos
+                          </div>
+                          {NAV_ATENCION_UPLOADS.map((item) => (
+                            <Link
+                              key={item.href}
+                              href={item.href}
+                              onClick={() => setUploadsOpen(false)}
+                              className={`block px-3 py-2 text-sm font-medium hover:bg-brand-bg ${
+                                isActive(item.href) ? "text-brand-cyan" : "text-brand-graphite"
                               }`}
                             >
                               {item.label}

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1 import (
-    audit, auth, bases_adicionales, calls, gestiones, modules, overview,
+    atencion, audit, auth, bases_adicionales, calls, gestiones, modules, overview,
     publications, reports, uploads, users,
 )
 from .core.config import settings
@@ -64,6 +64,15 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("base_adicional_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
     ("base_adicional_reports", "published_by", "VARCHAR(36)"),
     ("base_adicional_reports", "title", "VARCHAR(255)"),
+    # atención al cliente (créanse via create_all; por si la tabla ya existía)
+    ("atencion_llamadas_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("atencion_llamadas_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("atencion_llamadas_reports", "published_by", "VARCHAR(36)"),
+    ("atencion_llamadas_reports", "title", "VARCHAR(255)"),
+    ("atencion_gestion_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("atencion_gestion_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("atencion_gestion_reports", "published_by", "VARCHAR(36)"),
+    ("atencion_gestion_reports", "title", "VARCHAR(255)"),
 ]
 
 
@@ -232,3 +241,4 @@ app.include_router(modules.router, prefix="/api/v1")
 app.include_router(bases_adicionales.router, prefix="/api/v1")
 app.include_router(publications.router, prefix="/api/v1")
 app.include_router(overview.router, prefix="/api/v1")
+app.include_router(atencion.router, prefix="/api/v1")
