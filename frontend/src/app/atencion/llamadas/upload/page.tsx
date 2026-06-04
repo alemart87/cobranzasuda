@@ -151,7 +151,10 @@ export default function AtencionLlamadasUploadPage() {
         {status && status !== "completed" && !error && (
           <div className="bg-brand-cyan/10 border border-brand-cyan/30 text-brand-cyan text-sm rounded-md p-3 flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-brand-cyan animate-pulse" />
-            Estado: <b>{status}</b> · procesando los 4 archivos…
+            {status === "uploading" && <span>Subiendo archivos…</span>}
+            {status === "pending" && <span><b>En cola</b> · esperando un espacio de procesamiento…</span>}
+            {status === "processing" && <span><b>Procesando</b> los 4 archivos…</span>}
+            {!["uploading", "pending", "processing"].includes(status) && <span>Estado: <b>{status}</b></span>}
           </div>
         )}
 

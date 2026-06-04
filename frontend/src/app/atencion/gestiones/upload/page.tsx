@@ -127,7 +127,10 @@ export default function AtencionGestionesUploadPage() {
         {status && status !== "completed" && !error && (
           <div className="bg-brand-purple/10 border border-brand-purple/30 text-brand-purple text-sm rounded-md p-3 flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-brand-purple animate-pulse" />
-            Estado: <b>{status}</b> · procesando…
+            {status === "uploading" && <span>Subiendo archivo…</span>}
+            {status === "pending" && <span><b>En cola</b> · esperando un espacio de procesamiento…</span>}
+            {status === "processing" && <span><b>Procesando</b>…</span>}
+            {!["uploading", "pending", "processing"].includes(status) && <span>Estado: <b>{status}</b></span>}
           </div>
         )}
 
