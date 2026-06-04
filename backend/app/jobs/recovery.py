@@ -49,5 +49,7 @@ async def resume_pending_jobs() -> int:
         logger.info(f"[recovery] re-queuing base adicional {u.id} ({u.tipo})")
         asyncio.create_task(process_base_adicional_upload(u.id))
         total += 1
+    # Atención NO se re-encola acá: lo maneja su propio worker de cola
+    # (atencion_queue), que al iniciar resetea 'processing' -> 'pending'.
 
     return total

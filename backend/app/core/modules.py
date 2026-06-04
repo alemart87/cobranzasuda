@@ -17,8 +17,8 @@ MODULES: list[dict] = [
     {
         "slug": "atencion",
         "name": "Atención al Cliente",
-        "description": "NPS, detractores, motivos de consulta.",
-        "available": False,
+        "description": "Llamadas (entrantes/salientes, SLA, AHT, auxiliares) y gestiones (motivos, canales, estados).",
+        "available": True,
         "color": "#00B2BF",
     },
     {

@@ -9,10 +9,16 @@ from .gestion_upload import GestionUpload
 from .gestion_report import GestionReport
 from .base_adicional_upload import BaseAdicionalUpload
 from .base_adicional_report import BaseAdicionalReport
+from .atencion_llamadas_upload import AtencionLlamadasUpload
+from .atencion_llamadas_report import AtencionLlamadasReport
+from .atencion_gestion_upload import AtencionGestionUpload
+from .atencion_gestion_report import AtencionGestionReport
 
 __all__ = [
     "User", "Upload", "Report", "AuditLog",
     "CallUpload", "CallReport",
     "GestionUpload", "GestionReport",
     "BaseAdicionalUpload", "BaseAdicionalReport",
+    "AtencionLlamadasUpload", "AtencionLlamadasReport",
+    "AtencionGestionUpload", "AtencionGestionReport",
 ]
