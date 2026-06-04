@@ -1,7 +1,15 @@
-"""Runner in-process del Reporte de Gestiones (Atención)."""
+"""Runner del Reporte de Gestiones (Atención).
+
+Parseo CPU-bound en thread (`asyncio.to_thread`). El disparo y la serialización
+los maneja el worker de cola (`atencion_queue`); asume el upload ya reclamado.
+"""
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime
+from typing import Any
+
+from sqlalchemy import select
 
 from ..core.database import session_scope
 from ..core.logging import logger
@@ -11,26 +19,38 @@ from ..services.analyzers import analyze_atencion_gestiones
 from ..services.parsers import parse_atencion_gestiones
 
 
-async def process_atencion_gestion_upload(upload_id: str) -> None:
+def _build_analysis(file_path: str) -> dict[str, Any]:
+    """Trabajo pesado (sync). Se corre en un thread aparte."""
+    rows = parse_atencion_gestiones(file_path)
+    return analyze_atencion_gestiones(rows)
+
+
+async def run_atencion_gestion(upload_id: str) -> None:
     logger.info(f"[atencion-gestion-job] start {upload_id}")
 
     async with session_scope() as db:
         upload = await db.get(AtencionGestionUpload, upload_id)
         if not upload:
             return
-        upload.status = "processing"
-        upload.started_at = datetime.utcnow()
-        await db.commit()
+        existing = (await db.execute(
+            select(AtencionGestionReport.id).where(AtencionGestionReport.upload_id == upload_id)
+        )).first()
+        if existing:
+            upload.status = "completed"
+            upload.completed_at = upload.completed_at or datetime.utcnow()
+            await db.commit()
+            logger.info(f"[atencion-gestion-job] already done {upload_id}")
+            return
+        file_path = upload.file_path
+        period = upload.period_month or datetime.utcnow().date().replace(day=1)
 
     try:
-        rows = parse_atencion_gestiones(upload.file_path)
-        analysis = analyze_atencion_gestiones(rows)
+        analysis = await asyncio.to_thread(_build_analysis, file_path)
         k = analysis["kpis"]
 
         async with session_scope() as db:
-            period = upload.period_month or datetime.utcnow().date().replace(day=1)
             report = AtencionGestionReport(
-                upload_id=upload.id,
+                upload_id=upload_id,
                 period_month=period,
                 total_gestiones=k["total_gestiones"],
                 cerrados=k["cerrados"],

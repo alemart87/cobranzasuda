@@ -100,6 +100,43 @@ def test_analyze_llamadas_kpis_y_operadores():
     assert a["auxiliares_equipo"][0]["estado"] == "Comida"
 
 
+def test_queue_claim_atomico_y_reset():
+    """El worker reclama jobs de forma atómica y resetea los interrumpidos."""
+    import asyncio
+
+    async def _run():
+        from sqlalchemy import delete
+        from app.core.database import Base, engine, session_scope
+        from app.jobs.atencion_queue import _claim_next, _reset_stale_processing
+        from app.models.atencion_gestion_upload import AtencionGestionUpload
+
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        uid = "queue-test-claim"
+        async with session_scope() as db:
+            await db.execute(delete(AtencionGestionUpload).where(AtencionGestionUpload.id == uid))
+            db.add(AtencionGestionUpload(id=uid, uploaded_by="u", status="processing",
+                                         file_path="/inexistente.xlsx"))
+            await db.commit()
+
+        # Interrumpido (processing) -> pending al bootear.
+        await _reset_stale_processing()
+        async with session_scope() as db:
+            assert (await db.get(AtencionGestionUpload, uid)).status == "pending"
+
+        # Primer claim lo toma; el segundo no devuelve el mismo (ya no está pending).
+        job = await _claim_next()
+        assert job == ("gestiones", uid)
+        assert await _claim_next() is None
+        async with session_scope() as db:
+            assert (await db.get(AtencionGestionUpload, uid)).status == "processing"
+            await db.execute(delete(AtencionGestionUpload).where(AtencionGestionUpload.id == uid))
+            await db.commit()
+
+    asyncio.run(_run())
+
+
 def test_analyze_gestiones_distribuciones():
     rows = [
         {"cliente": "A", "tipo_caso": "Consulta", "estado": "Cerrado",

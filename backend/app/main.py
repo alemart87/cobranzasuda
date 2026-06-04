@@ -13,7 +13,7 @@ from .api.v1 import (
 from .core.config import settings
 from .core.database import Base, engine
 from .core.logging import configure_logging, logger
-from .jobs import resume_pending_jobs
+from .jobs import atencion_worker, resume_pending_jobs
 
 
 MIGRATIONS_IDEMPOTENT = [
@@ -165,7 +165,15 @@ async def lifespan(app: FastAPI):
     logger.info("Boot: resuming pending jobs")
     count = await resume_pending_jobs()
     logger.info(f"Boot: re-queued {count} jobs")
+
+    # Worker de cola del módulo Atención (Postgres + disco, concurrencia limitada).
+    import asyncio
+    worker_task = asyncio.create_task(atencion_worker())
+    logger.info("Boot: atencion queue worker started")
+
     yield
+
+    worker_task.cancel()
     logger.info("Shutdown")
 
 

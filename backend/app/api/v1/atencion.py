@@ -26,8 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import settings
 from ...core.database import get_db
-from ...jobs.atencion_gestion_runner import process_atencion_gestion_upload
-from ...jobs.atencion_llamadas_runner import process_atencion_llamadas_upload
+from ...jobs.atencion_queue import signal_atencion_queue
 from ...models.atencion_gestion_report import AtencionGestionReport
 from ...models.atencion_gestion_upload import AtencionGestionUpload
 from ...models.atencion_llamadas_report import AtencionLlamadasReport
@@ -115,7 +114,9 @@ async def create_llamadas_upload(
         resource_type="atencion_llamadas_upload", resource_id=upload.id,
         ip=client_ip(request), extra={"period_month": period_month},
     )
-    background_tasks.add_task(process_atencion_llamadas_upload, upload.id)
+    # Encolar: el archivo ya está en disco y el job en 'pending'.
+    # El worker de cola (atencion_queue) lo tomará según la concurrencia disponible.
+    signal_atencion_queue()
     return upload
 
 
@@ -257,7 +258,7 @@ async def create_gestion_upload(
         resource_type="atencion_gestion_upload", resource_id=upload.id,
         ip=client_ip(request), extra={"period_month": period_month},
     )
-    background_tasks.add_task(process_atencion_gestion_upload, upload.id)
+    signal_atencion_queue()
     return upload
 
 
