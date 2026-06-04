@@ -33,11 +33,11 @@ const MODULES: ModuleCard[] = [
     href: "/atencion",
     title: "Atención al Cliente",
     description:
-      "Análisis de NPS, gestión de detractores, calidad del servicio, motivos de consulta y desempeño por asesor.",
+      "Reporte de llamadas (ingresadas, contestadas, niveles de servicio y atención, abandono, AHT y auxiliares) y reporte de gestiones (motivos, canales y estados de los registros de contacto).",
     color: "#00B2BF",
     bgGradient: "linear-gradient(135deg, #007680 0%, #00B2BF 100%)",
-    available: false,
-    badges: ["NPS", "Detractores", "Calidad"],
+    available: true,
+    badges: ["Reportes de llamadas", "Niveles de servicio", "Reportes de gestiones"],
   },
   {
     slug: "ventas",
