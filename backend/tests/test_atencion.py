@@ -219,6 +219,15 @@ def test_sql_guardas():
         validar_select("SELECT * FROM atencion_gestion_items WHERE 1=1; update atencion_gestion_items set estado='x'")
 
 
+def test_agent_cost_usd():
+    from app.services.agent.pricing import compute_cost_usd
+    # 1M input + 1M output (gpt-5.4: 2.50 + 15.00)
+    assert compute_cost_usd(1_000_000, 1_000_000, 0) == 17.5
+    # con 500k cacheados: 500k*2.50 + 500k*0.25 + 1M*15  (por millón)
+    assert compute_cost_usd(1_000_000, 1_000_000, 500_000) == round(1.25 + 0.125 + 15.0, 6)
+    assert compute_cost_usd(0, 0, 0) == 0.0
+
+
 def test_pii_redactar_row():
     from app.services.agent.pii import redactar_row
     row = redactar_row({"estado": "Cerrado", "cliente": "Ana Perez",

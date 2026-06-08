@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     agent_max_history: int = 20             # mensajes de contexto por conversación
     agent_max_tool_turns: int = 8           # iteraciones máximas de tools por respuesta
 
+    # Precios del modelo (USD por 1M tokens). Default = gpt-5.4 (oficial OpenAI).
+    agent_price_input_per_mtok: float = 2.50
+    agent_price_cached_input_per_mtok: float = 0.25
+    agent_price_output_per_mtok: float = 15.00
+
     @property
     def agent_enabled(self) -> bool:
         return bool(self.openai_api_key)

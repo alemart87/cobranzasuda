@@ -249,6 +249,24 @@ async def stream_agent(
         yield {"type": "canvas", "artifact": context.canvas[emitted_canvas]}
         emitted_canvas += 1
 
+    # Consumo de tokens del run completo (incluye los turnos de tools).
+    usage_out: dict[str, int] = {"input_tokens": 0, "cached_tokens": 0,
+                                 "output_tokens": 0, "reasoning_tokens": 0, "total_tokens": 0}
+    try:
+        usage = getattr(getattr(result, "context_wrapper", None), "usage", None)
+        if usage:
+            usage_out["input_tokens"] = int(getattr(usage, "input_tokens", 0) or 0)
+            usage_out["output_tokens"] = int(getattr(usage, "output_tokens", 0) or 0)
+            usage_out["total_tokens"] = int(getattr(usage, "total_tokens", 0) or 0)
+            itd = getattr(usage, "input_tokens_details", None)
+            if itd is not None:
+                usage_out["cached_tokens"] = int(getattr(itd, "cached_tokens", 0) or 0)
+            otd = getattr(usage, "output_tokens_details", None)
+            if otd is not None:
+                usage_out["reasoning_tokens"] = int(getattr(otd, "reasoning_tokens", 0) or 0)
+    except Exception:
+        pass
+
     content = "".join(full_text) or (getattr(result, "final_output", "") or "")
     yield {"type": "done", "content": content, "reasoning": "".join(full_reasoning),
-           "artifacts": context.canvas, "tool_trace": context.tool_trace}
+           "artifacts": context.canvas, "tool_trace": context.tool_trace, "usage": usage_out}

@@ -17,6 +17,7 @@ interface NavItem {
 const ADMIN_NAV: NavItem[] = [
   { href: "/admin/users", label: "Usuarios", roles: ["superadmin"] },
   { href: "/admin/audit", label: "Auditoría", roles: ["superadmin"] },
+  { href: "/admin/costos-agente", label: "Costos IA", roles: ["superadmin"] },
 ];
 
 // Navegación interna del módulo Cobranzas (aparece SOLO cuando estás dentro),
