@@ -74,8 +74,14 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("atencion_gestion_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
     ("atencion_gestion_reports", "published_by", "VARCHAR(36)"),
     ("atencion_gestion_reports", "title", "VARCHAR(255)"),
-    # agente: resumen de razonamiento (tabla nueva, por si ya existía)
+    # agente: resumen de razonamiento + consumo de tokens/costo (tabla nueva)
     ("agent_messages", "reasoning", "TEXT NOT NULL DEFAULT ''"),
+    ("agent_messages", "input_tokens", "INTEGER NOT NULL DEFAULT 0"),
+    ("agent_messages", "cached_tokens", "INTEGER NOT NULL DEFAULT 0"),
+    ("agent_messages", "output_tokens", "INTEGER NOT NULL DEFAULT 0"),
+    ("agent_messages", "reasoning_tokens", "INTEGER NOT NULL DEFAULT 0"),
+    ("agent_messages", "total_tokens", "INTEGER NOT NULL DEFAULT 0"),
+    ("agent_messages", "cost_usd", "NUMERIC(12,6) NOT NULL DEFAULT 0"),
 ]
 
 

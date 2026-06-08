@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, String, Text, JSON, func
+from sqlalchemy import DateTime, Integer, Numeric, String, Text, JSON, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..core.database import Base
@@ -44,6 +44,15 @@ class AgentMessage(Base):
     artifacts: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     # Trazas de las tools usadas (para auditoría/depuración).
     tool_trace: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+
+    # Consumo del modelo (solo en mensajes del asistente) + costo calculado.
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cached_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    reasoning_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cost_usd: Mapped[float] = mapped_column(Numeric(12, 6), default=0, nullable=False)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
