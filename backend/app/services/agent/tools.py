@@ -94,11 +94,31 @@ async def resumen_gestiones_impl(ctx: AgentContext, month: Optional[str]) -> dic
 async def voz_del_cliente_impl(ctx: AgentContext, month: Optional[str]) -> dict[str, Any]:
     m = _resolve_month(month, ctx)
     rep = await _latest(AtencionGestionReport, m)
-    if not rep:
-        return {"sin_datos": True, "mes": m, "periodos_disponibles": await _periodos()}
-    v = (rep.data or {}).get("voz_cliente") or {}
+    v = ((rep.data or {}).get("voz_cliente") or {}) if rep else {}
+
+    # Fallback: si no hay bloque precomputado (reporte viejo), reconstruir desde
+    # las descripciones de la tabla granular de items.
     if not v.get("disponible"):
-        return {"sin_datos": True, "mes": m, "motivo": "sin descripciones"}
+        start, end = _bounds(m)
+        async with session_scope() as db:
+            rows_db = (await db.execute(
+                select(AtencionGestionItem.descripcion, AtencionGestionItem.estado)
+                .where(AtencionGestionItem.period_month >= start,
+                       AtencionGestionItem.period_month < end)
+            )).all()
+        rows = [{"descripcion": d, "estado": e} for d, e in rows_db if d and d.strip()]
+        if rows:
+            from ...services.analyzers.voz_cliente import analizar_voz_cliente
+            v = analizar_voz_cliente(rows)
+
+    if not v.get("disponible"):
+        return {
+            "sin_datos": True, "mes": m,
+            "motivo": "No hay descripciones cargadas para este mes. Si el reporte se "
+                      "procesó con una versión anterior, hay que volver a subir el archivo "
+                      "de Gestiones para poblar las descripciones.",
+            "periodos_disponibles": await _periodos(),
+        }
     # Los ejemplos pueden contener PII (nombres/teléfonos): redactar.
     temas = []
     for t in v.get("temas", []):
