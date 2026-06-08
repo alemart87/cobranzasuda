@@ -1,18 +1,19 @@
 """Endpoints del Agente de Experiencia: conversaciones, mensajes y chat (SSE)."""
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import settings
-from ...core.database import get_db, session_scope
+from ...core.database import engine, get_db, session_scope
 from ...core.logging import logger
 from ...models.agent import AgentConversation, AgentMessage
 from ...models.user import User
@@ -75,10 +76,35 @@ async def agent_access(user: CurrentUser = Depends(require_agent_access)) -> dic
 
 @router.get("/costs")
 async def agent_costs(
+    month: Optional[str] = Query(None, description="YYYY-MM; default = todos los períodos"),
     user: CurrentUser = Depends(require_superadmin),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Consumo de tokens y costo del Agente por usuario (solo superadmin)."""
+    """Consumo de tokens y costo del Agente por usuario (solo superadmin).
+
+    Filtrable por mes (YYYY-MM). Devuelve también los meses con actividad.
+    """
+    # Meses con actividad (para el selector).
+    is_pg = engine.dialect.name == "postgresql"
+    mexpr = (func.to_char(AgentMessage.created_at, "YYYY-MM") if is_pg
+             else func.strftime("%Y-%m", AgentMessage.created_at))
+    months = sorted(
+        {r[0] for r in (await db.execute(
+            select(mexpr).where(AgentMessage.role == "assistant")
+        )).all() if r[0]},
+        reverse=True,
+    )
+
+    conds = [AgentMessage.role == "assistant"]
+    if month:
+        try:
+            start = datetime.strptime(month, "%Y-%m")
+        except ValueError:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "month debe ser YYYY-MM")
+        end = (start.replace(year=start.year + 1, month=1)
+               if start.month == 12 else start.replace(month=start.month + 1))
+        conds += [AgentMessage.created_at >= start, AgentMessage.created_at < end]
+
     rows = (await db.execute(
         select(
             AgentConversation.user_id,
@@ -91,7 +117,7 @@ async def agent_costs(
             func.max(AgentMessage.created_at),
         )
         .join(AgentConversation, AgentMessage.conversation_id == AgentConversation.id)
-        .where(AgentMessage.role == "assistant")
+        .where(*conds)
         .group_by(AgentConversation.user_id)
     )).all()
 
@@ -132,7 +158,8 @@ async def agent_costs(
         "total_tokens": sum(i["total_tokens"] for i in items),
         "cost_usd": round(sum(i["cost_usd"] for i in items), 6),
     }
-    return {"pricing": pricing_info(), "items": items, "totals": totals}
+    return {"pricing": pricing_info(), "items": items, "totals": totals,
+            "available_months": months, "month": month}
 
 
 @router.get("/conversations", response_model=list[ConversationRead])
@@ -241,26 +268,56 @@ async def post_message(
     uid = user.id
 
     async def event_stream():
+        # Padding inicial (comentario SSE) para vencer buffers de proxy que
+        # esperan ~2KB antes de empezar a entregar; el cliente ignora comentarios.
+        yield ":" + (" " * 2048) + "\n\n"
+        yield _sse({"type": "start"})
+
         final_content = ""
         final_reasoning = ""
         artifacts: list = []
         tool_trace: list = []
         usage: dict = {}
-        try:
-            async for ev in stream_agent(messages, context):
-                if ev["type"] == "done":
-                    final_content = ev.get("content", "")
-                    final_reasoning = ev.get("reasoning", "")
-                    artifacts = ev.get("artifacts", [])
-                    tool_trace = ev.get("tool_trace", [])
-                    usage = ev.get("usage", {}) or {}
-                yield _sse(ev)
-        except AgentNotConfigured as exc:
-            yield _sse({"type": "error", "message": str(exc)})
-            return
-        except Exception as exc:  # noqa: BLE001
-            logger.exception(f"[agent] error en conversación {conv_id}: {exc}")
-            yield _sse({"type": "error", "message": "Ocurrió un error procesando la consulta."})
+        # Productor en task separado → cola; el consumidor emite heartbeats en los
+        # huecos (razonamiento oculto) para que el proxy no bufferee por inactividad.
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def _produce():
+            try:
+                async for ev in stream_agent(messages, context):
+                    await queue.put(("ev", ev))
+            except AgentNotConfigured as exc:
+                await queue.put(("err", str(exc)))
+            except Exception as exc:  # noqa: BLE001
+                logger.exception(f"[agent] error en conversación {conv_id}: {exc}")
+                await queue.put(("err", "Ocurrió un error procesando la consulta."))
+            finally:
+                await queue.put(("end", None))
+
+        producer = asyncio.create_task(_produce())
+        failed = False
+        while True:
+            try:
+                kind, payload = await asyncio.wait_for(queue.get(), timeout=2.0)
+            except asyncio.TimeoutError:
+                yield ": hb\n\n"   # heartbeat (comentario SSE; el cliente lo ignora)
+                continue
+            if kind == "end":
+                break
+            if kind == "err":
+                failed = True
+                yield _sse({"type": "error", "message": payload})
+                continue
+            ev = payload
+            if ev["type"] == "done":
+                final_content = ev.get("content", "")
+                final_reasoning = ev.get("reasoning", "")
+                artifacts = ev.get("artifacts", [])
+                tool_trace = ev.get("tool_trace", [])
+                usage = ev.get("usage", {}) or {}
+            yield _sse(ev)
+
+        if failed:
             return
 
         # Persistir la respuesta del asistente.

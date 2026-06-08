@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { MonthNavigator } from "@/components/MonthNavigator";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatDate, formatInt } from "@/lib/format";
+import { monthLabel } from "@/lib/month";
 
 interface CostItem {
   user_id: string;
@@ -23,6 +25,8 @@ interface CostsResponse {
   pricing: { model: string; input_per_mtok: number; cached_input_per_mtok: number; output_per_mtok: number; currency: string };
   items: CostItem[];
   totals: { queries: number; input_tokens: number; output_tokens: number; total_tokens: number; cost_usd: number };
+  available_months: string[];
+  month: string | null;
 }
 
 const usd = (n: number) => `$${(n ?? 0).toLocaleString("en-US", { minimumFractionDigits: n < 1 ? 4 : 2, maximumFractionDigits: 4 })}`;
@@ -34,12 +38,15 @@ export default function CostosAgentePage() {
   const [error, setError] = useState<string | null>(null);
   const [markup, setMarkup] = useState<number>(0);   // % de margen sobre el costo
   const [fx, setFx] = useState<number>(0);           // Gs por USD (0 = oculto)
+  const [month, setMonth] = useState<string | null>(null); // null = todos los períodos
   const [user, setUser] = useState<any>(null);
 
+  useEffect(() => setUser(getUser()), []);
   useEffect(() => {
-    setUser(getUser());
-    apiFetch<CostsResponse>("/api/v1/agent/costs").then(setData).catch((e) => setError(e.message));
-  }, []);
+    apiFetch<CostsResponse>(`/api/v1/agent/costs${month ? `?month=${month}` : ""}`)
+      .then(setData)
+      .catch((e) => setError(e.message));
+  }, [month]);
 
   if (user && user.role !== "superadmin") {
     return <AppShell><div className="card p-8 text-center"><p className="text-brand-slate">Solo el superadmin puede ver los costos del agente.</p></div></AppShell>;
@@ -58,6 +65,23 @@ export default function CostosAgentePage() {
           Consumo de tokens y costo de las consultas al Agente de Experiencia, por usuario.
           Sirve para definir cuánto cobrar a cada cliente.
         </p>
+      </div>
+
+      {/* Selector de período */}
+      <div className="flex flex-wrap items-center gap-3 mb-5">
+        <span className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold">Período</span>
+        <button
+          onClick={() => setMonth(null)}
+          className={`text-xs font-semibold px-3 py-1.5 rounded border ${month === null ? "border-brand-primary bg-brand-primary-light text-brand-primary-dark" : "border-brand-border text-brand-slate hover:border-brand-mist"}`}
+        >
+          Todos los períodos
+        </button>
+        {data.available_months.length > 0 && (
+          <MonthNavigator months={data.available_months} value={month ?? data.available_months[0]} onChange={setMonth} />
+        )}
+        <span className="text-xs text-brand-slate">
+          {month ? monthLabel(month) : "Acumulado histórico"} · {formatInt(data.totals.queries)} consulta(s)
+        </span>
       </div>
 
       {/* Precios del modelo */}
