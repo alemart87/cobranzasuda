@@ -65,6 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [canUseAgent, setCanUseAgent] = useState(false);
   const [uploadsOpen, setUploadsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [agentChromeOpen, setAgentChromeOpen] = useState(false);
 
   useEffect(() => {
     const t = getToken();
@@ -96,6 +97,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const inAtencion = ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
   const inCobranzas = !inAtencion && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
   const canManage = user.role === "superadmin" || user.role === "analyst";
+  // En el Agente de Experiencia colapsamos el chrome para un workspace amplio.
+  const isAgent = pathname?.startsWith("/atencion/agente") ?? false;
+  const showChrome = !isAgent || agentChromeOpen;
 
   const isActive = (href: string) =>
     pathname === href || (href !== "/cobranzas" && (pathname?.startsWith(href) ?? false));
@@ -115,6 +119,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen flex flex-col bg-brand-bg">
       {/* Header principal: logo (link a Operativas) + acciones admin + perfil */}
+      {showChrome && (
       <header className="bg-white border-b border-brand-border shadow-soft sticky top-0 z-30">
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           {/* Brand clickable → vuelve a Operativas */}
@@ -426,15 +431,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         )}
       </header>
+      )}
+
+      {/* Workspace del Agente: chrome colapsado en una barra slim */}
+      {isAgent && (
+        agentChromeOpen ? (
+          <button
+            onClick={() => setAgentChromeOpen(false)}
+            className="w-full bg-brand-ink text-white/60 hover:text-white text-[10px] uppercase tracking-wider2 font-semibold py-1 flex items-center justify-center gap-1.5"
+          >
+            <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m18 15-6-6-6 6" /></svg>
+            Contraer menú
+          </button>
+        ) : (
+          <div className="sticky top-0 z-30 bg-brand-ink text-white flex items-center justify-between px-3 sm:px-4 py-1.5">
+            <div className="flex items-center gap-3 min-w-0">
+              <Link href="/atencion" className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white flex-shrink-0">← Atención</Link>
+              <span className="text-[11px] uppercase tracking-wider2 font-bold text-brand-cyan truncate">Agente de Experiencia</span>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <button onClick={() => setAgentChromeOpen(true)} className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white inline-flex items-center gap-1">
+                Menú
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="m6 9 6 6 6-6" /></svg>
+              </button>
+              <Link href="/perfil" title="Mi perfil"><Avatar name={user.full_name} photoUrl={user.photo_url} size={26} /></Link>
+              <button onClick={onLogout} className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white">Salir</button>
+            </div>
+          </div>
+        )
+      )}
 
       {/* Main */}
-      <main className="flex-1 px-4 sm:px-6 py-6 sm:py-8 max-w-screen-2xl w-full mx-auto">{children}</main>
+      <main className={isAgent
+        ? "flex-1 flex min-h-0 w-full"
+        : "flex-1 px-4 sm:px-6 py-6 sm:py-8 max-w-screen-2xl w-full mx-auto"}>{children}</main>
 
-      {/* Footer */}
-      <footer className="border-t border-brand-border bg-white px-4 sm:px-6 py-3 text-[11px] text-brand-slate flex flex-wrap items-center justify-between gap-1">
-        <span>© {new Date().getFullYear()} Voicenter S.A.</span>
-        <span className="font-display tracking-wider2 uppercase">Operaciones · Sudameris Seguros</span>
-      </footer>
+      {/* Footer (oculto en el workspace del agente) */}
+      {!isAgent && (
+        <footer className="border-t border-brand-border bg-white px-4 sm:px-6 py-3 text-[11px] text-brand-slate flex flex-wrap items-center justify-between gap-1">
+          <span>© {new Date().getFullYear()} Voicenter S.A.</span>
+          <span className="font-display tracking-wider2 uppercase">Operaciones · Sudameris Seguros</span>
+        </footer>
+      )}
     </div>
   );
 }

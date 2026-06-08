@@ -180,7 +180,7 @@ export default function AgentePage() {
 
   return (
     <AppShell>
-      <div className="flex h-[calc(100vh-13rem)] min-h-[480px] gap-0 -mx-1">
+      <div className="flex flex-1 min-h-0 w-full">
         {/* Sidebar histórico */}
         <aside className={`${sidebarOpen ? "fixed inset-0 z-40 bg-black/30 md:bg-transparent md:static" : "hidden"} md:block md:relative w-full md:w-60 flex-shrink-0`}>
           <div className="bg-white md:bg-transparent h-full w-60 md:w-full border-r border-brand-border flex flex-col">
@@ -200,7 +200,7 @@ export default function AgentePage() {
         </aside>
 
         {/* Chat */}
-        <section className="flex-1 flex flex-col min-w-0 border-r border-brand-border">
+        <section className="flex-1 flex flex-col min-w-0 min-h-0 border-r border-brand-border">
           <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-brand-border">
             <div className="flex items-center gap-2 min-w-0">
               <button onClick={() => setSidebarOpen(true)} className="md:hidden text-brand-slate" aria-label="Historial">☰</button>
