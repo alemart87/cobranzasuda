@@ -112,6 +112,25 @@ h3,
   animation: vc-pop 0.15s ease-out;
 }
 
+/* Shimmer (loader del agente mientras razona) */
+@keyframes vc-shimmer {
+  0% { background-position: -180% 0; }
+  100% { background-position: 180% 0; }
+}
+.shimmer-text {
+  background: linear-gradient(90deg, #94a3b8 25%, #00B2BF 50%, #94a3b8 75%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: vc-shimmer 1.6s linear infinite;
+}
+.shimmer-bar {
+  background: linear-gradient(90deg, rgba(0,178,191,0.06) 25%, rgba(0,178,191,0.22) 50%, rgba(0,178,191,0.06) 75%);
+  background-size: 200% 100%;
+  animation: vc-shimmer 1.6s linear infinite;
+}
+
 /* Scrollbar corporativo en navegadores Webkit */
 ::-webkit-scrollbar {
   width: 10px;

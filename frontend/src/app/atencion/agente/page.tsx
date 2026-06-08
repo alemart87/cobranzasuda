@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CanvasArtifact, type Artifact } from "@/components/agent/CanvasArtifact";
+import { Markdown } from "@/components/agent/Markdown";
 import { apiFetch, getToken } from "@/lib/api";
 
 interface Conversation {
@@ -14,6 +15,7 @@ interface Conversation {
 interface Message {
   role: "user" | "assistant";
   content: string;
+  reasoning?: string;
   artifacts: Artifact[];
   streaming?: boolean;
   error?: boolean;
@@ -52,7 +54,7 @@ export default function AgentePage() {
     setActiveId(id);
     setSidebarOpen(false);
     const msgs = await apiFetch<Message[]>(`/api/v1/agent/conversations/${id}/messages`);
-    const norm = msgs.map((m) => ({ ...m, artifacts: m.artifacts || [] }));
+    const norm = msgs.map((m) => ({ ...m, artifacts: m.artifacts || [], reasoning: m.reasoning || "" }));
     setMessages(norm);
     const arts = norm.flatMap((m) => m.artifacts);
     setArtifacts(arts);
@@ -93,7 +95,7 @@ export default function AgentePage() {
       setActiveId(c.id);
     }
 
-    setMessages((p) => [...p, { role: "user", content, artifacts: [] }, { role: "assistant", content: "", artifacts: [], streaming: true }]);
+    setMessages((p) => [...p, { role: "user", content, artifacts: [] }, { role: "assistant", content: "", reasoning: "", artifacts: [], streaming: true }]);
     setInput("");
     setStreaming(true);
     setToolStatus(null);
@@ -136,6 +138,9 @@ export default function AgentePage() {
   const handleEvent = (ev: any) => {
     if (ev.type === "token") {
       patchLastAssistant((m) => ({ ...m, content: m.content + ev.text }));
+      setToolStatus(null);
+    } else if (ev.type === "reasoning") {
+      patchLastAssistant((m) => ({ ...m, reasoning: (m.reasoning || "") + ev.text }));
     } else if (ev.type === "tool") {
       setToolStatus(`Consultando datos: ${ev.name}…`);
     } else if (ev.type === "canvas") {
@@ -225,20 +230,15 @@ export default function AgentePage() {
                 </div>
               </div>
             )}
-            {messages.map((m, i) => (
-              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
-                  m.role === "user" ? "bg-brand-ink text-white" : m.error ? "bg-brand-primary-light text-brand-primary-dark" : "bg-brand-bg text-brand-graphite"}`}>
-                  {m.content || (m.streaming ? <span className="text-brand-mist">▍</span> : "")}
-                  {m.role === "assistant" && m.artifacts.length > 0 && (
-                    <button onClick={() => setCanvasOpen(true)} className="mt-2 text-[11px] text-brand-cyan font-semibold hover:underline">
-                      📊 {m.artifacts.length} artefacto(s) en el canvas →
-                    </button>
-                  )}
+            {messages.map((m, i) =>
+              m.role === "user" ? (
+                <div key={i} className="flex justify-end">
+                  <div className="max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap bg-brand-ink text-white">{m.content}</div>
                 </div>
-              </div>
-            ))}
-            {toolStatus && <div className="text-xs text-brand-cyan flex items-center gap-2 pl-1"><span className="w-1.5 h-1.5 rounded-full bg-brand-cyan animate-pulse" />{toolStatus}</div>}
+              ) : (
+                <AssistantBubble key={i} m={m} toolStatus={m.streaming ? toolStatus : null} onOpenCanvas={() => setCanvasOpen(true)} />
+              )
+            )}
           </div>
 
           <div className="border-t border-brand-border p-3">
@@ -276,5 +276,62 @@ export default function AgentePage() {
         )}
       </div>
     </AppShell>
+  );
+}
+
+function AssistantBubble({ m, toolStatus, onOpenCanvas }: { m: Message; toolStatus: string | null; onOpenCanvas: () => void }) {
+  const [open, setOpen] = useState(false);
+  const hasReasoning = !!(m.reasoning && m.reasoning.trim());
+  const thinking = !!m.streaming && !m.content;
+  const showReasoning = (!!m.streaming && hasReasoning) || open;
+
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[88%] w-full">
+        {/* Panel de pensamiento / razonamiento */}
+        {(thinking || hasReasoning) && (
+          <div className="mb-1.5">
+            <button onClick={() => setOpen((o) => !o)} className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider2">
+              {m.streaming
+                ? <span className="shimmer-text">{toolStatus ? "Consultando…" : "Pensando…"}</span>
+                : <span className="text-brand-slate">Razonamiento</span>}
+              {hasReasoning && (
+                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5"
+                  className={`text-brand-mist transition-transform ${showReasoning ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6" /></svg>
+              )}
+            </button>
+            {showReasoning && hasReasoning && (
+              <div className="mt-1 rounded-lg bg-brand-bg-soft border border-brand-border px-3 py-2 text-[12px] text-brand-slate whitespace-pre-wrap max-h-52 overflow-y-auto leading-relaxed">
+                {m.reasoning}
+              </div>
+            )}
+            {toolStatus && (
+              <div className="mt-1 rounded-md shimmer-bar px-3 py-1.5 text-[11px] text-brand-cyan flex items-center gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-brand-cyan animate-pulse" />{toolStatus}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Burbuja de respuesta */}
+        {(m.content || (!!m.streaming && !thinking)) && (
+          <div className={`rounded-2xl px-4 py-2.5 ${m.error ? "bg-brand-primary-light text-brand-primary-dark" : "bg-brand-bg text-brand-graphite"}`}>
+            {m.content ? <Markdown>{m.content}</Markdown> : <span className="shimmer-text text-sm">▍</span>}
+            {m.artifacts.length > 0 && (
+              <button onClick={onOpenCanvas} className="mt-2 text-[11px] text-brand-cyan font-semibold hover:underline">
+                📊 {m.artifacts.length} artefacto(s) en el canvas →
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Shimmer inicial mientras piensa sin razonamiento visible aún */}
+        {thinking && !hasReasoning && !toolStatus && (
+          <div className="rounded-2xl bg-brand-bg px-4 py-3">
+            <span className="shimmer-text text-sm font-medium">El agente está analizando los datos…</span>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
