@@ -14,6 +14,7 @@ interface UserRow {
   is_active: boolean;
   photo_url: string | null;
   allowed_modules: string[] | null;
+  can_use_agent: boolean;
   created_at: string;
   last_login_at: string | null;
 }
@@ -38,13 +39,14 @@ interface FormState {
   role: string;
   // null = acceso total; array = solo los slugs marcados
   allowed_modules: string[] | null;
+  can_use_agent: boolean;
 }
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [form, setForm] = useState<FormState>({
-    email: "", password: "", full_name: "", role: "analyst", allowed_modules: null,
+    email: "", password: "", full_name: "", role: "analyst", allowed_modules: null, can_use_agent: false,
   });
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -72,10 +74,11 @@ export default function AdminUsersPage() {
         role: form.role,
       };
       if (form.role === "client") payload.allowed_modules = form.allowed_modules;
+      payload.can_use_agent = form.can_use_agent;
 
       await apiFetch("/api/v1/users", { method: "POST", body: JSON.stringify(payload) });
       setOk(`Usuario "${form.email}" creado como ${ROLE_LABELS[form.role]}`);
-      setForm({ email: "", password: "", full_name: "", role: "analyst", allowed_modules: null });
+      setForm({ email: "", password: "", full_name: "", role: "analyst", allowed_modules: null, can_use_agent: false });
       load();
     } catch (e: any) {
       setError(e.message);
@@ -128,6 +131,14 @@ export default function AdminUsersPage() {
     await apiFetch(`/api/v1/users/${u.id}`, {
       method: "PATCH",
       body: JSON.stringify({ is_active: !u.is_active }),
+    });
+    load();
+  };
+
+  const toggleAgent = async (u: UserRow) => {
+    await apiFetch(`/api/v1/users/${u.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ can_use_agent: !u.can_use_agent }),
     });
     load();
   };
@@ -248,6 +259,20 @@ export default function AdminUsersPage() {
             </div>
           )}
 
+          {/* Agente de Experiencia (IA) */}
+          <label className="flex items-start gap-2.5 p-2.5 rounded-md border border-brand-border cursor-pointer hover:border-brand-cyan">
+            <input
+              type="checkbox"
+              checked={form.can_use_agent}
+              onChange={(e) => setForm({ ...form, can_use_agent: e.target.checked })}
+              className="mt-0.5 accent-brand-cyan"
+            />
+            <div>
+              <div className="text-sm font-semibold text-brand-ink">Agente de Experiencia (IA)</div>
+              <div className="text-[11px] text-brand-slate">Habilita el chat con IA sobre los datos de Atención.</div>
+            </div>
+          </label>
+
           <div>
             <label className="label">Email</label>
             <input
@@ -310,6 +335,7 @@ export default function AdminUsersPage() {
                 user={u}
                 modules={modules}
                 onToggle={toggleActive}
+                onToggleAgent={toggleAgent}
                 onResetPwd={() => setResetUserId(u.id)}
                 onUploadPhoto={onUploadPhoto}
                 onEditModules={() => openEditModules(u)}
@@ -414,6 +440,7 @@ function UserListItem({
   user,
   modules,
   onToggle,
+  onToggleAgent,
   onResetPwd,
   onUploadPhoto,
   onEditModules,
@@ -421,6 +448,7 @@ function UserListItem({
   user: UserRow;
   modules: ModuleInfo[];
   onToggle: (u: UserRow) => void;
+  onToggleAgent: (u: UserRow) => void;
   onResetPwd: () => void;
   onUploadPhoto: (u: UserRow, f: File) => void;
   onEditModules: () => void;
@@ -458,6 +486,9 @@ function UserListItem({
             <span className="badge-primary">Cliente</span>
           )}
           {!user.is_active && <span className="badge-neutral">Inactivo</span>}
+          {user.can_use_agent && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-cyan/10 text-brand-cyan font-semibold uppercase tracking-wider2">Agente IA</span>
+          )}
         </div>
         <div className="text-xs text-brand-slate truncate">{user.email}</div>
         <div className="text-[10px] text-brand-slate uppercase tracking-wider2 mt-0.5">
@@ -497,6 +528,9 @@ function UserListItem({
             Operativas
           </button>
         )}
+        <button onClick={() => onToggleAgent(user)} className={`text-xs px-2.5 py-1 rounded border ${user.can_use_agent ? "border-brand-cyan text-brand-cyan" : "border-brand-border hover:border-brand-cyan hover:text-brand-cyan"}`}>
+          {user.can_use_agent ? "Agente IA: ON" : "Agente IA: OFF"}
+        </button>
         <button onClick={onResetPwd} className="text-xs px-2.5 py-1 rounded border border-brand-border hover:border-brand-cyan hover:text-brand-cyan">
           Resetear PWD
         </button>

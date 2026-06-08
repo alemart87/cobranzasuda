@@ -13,6 +13,8 @@ from .atencion_llamadas_upload import AtencionLlamadasUpload
 from .atencion_llamadas_report import AtencionLlamadasReport
 from .atencion_gestion_upload import AtencionGestionUpload
 from .atencion_gestion_report import AtencionGestionReport
+from .atencion_gestion_item import AtencionGestionItem
+from .agent import AgentConversation, AgentMessage
 
 __all__ = [
     "User", "Upload", "Report", "AuditLog",
@@ -21,4 +23,6 @@ __all__ = [
     "BaseAdicionalUpload", "BaseAdicionalReport",
     "AtencionLlamadasUpload", "AtencionLlamadasReport",
     "AtencionGestionUpload", "AtencionGestionReport",
+    "AtencionGestionItem",
+    "AgentConversation", "AgentMessage",
 ]

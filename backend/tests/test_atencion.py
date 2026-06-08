@@ -176,6 +176,25 @@ def test_analyze_gestiones_distribuciones():
     json.dumps(g)
 
 
+def test_pii_redaccion():
+    from app.services.agent.pii import redactar_item
+
+    item = {
+        "cliente": "Ariel Arevalos", "documento": "8.297.729", "telefono": "+595 982 696114",
+        "estado": "Cerrado", "tema": "Asistencia y servicios",
+        "descripcion": "SE COMUNICA EL SEÑOR Ariel Arevalos al 0982 101064 doc 8.297.729 pidiendo grúa",
+    }
+    red = redactar_item(item)
+    # Campos PII estructurados se eliminan
+    assert "documento" not in red and "telefono" not in red and "cliente" not in red
+    # Campos analíticos se conservan
+    assert red["estado"] == "Cerrado" and red["tema"] == "Asistencia y servicios"
+    # En la descripción se enmascara nombre, teléfono y documento
+    d = red["descripcion"]
+    assert "Ariel" not in d and "696114" not in d and "8.297.729" not in d
+    assert "[cliente]" in d and "grúa" in d
+
+
 def test_voz_cliente_temas_y_frases():
     from app.services.analyzers.voz_cliente import analizar_voz_cliente
 

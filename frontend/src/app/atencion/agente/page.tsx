@@ -1,0 +1,278 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { AppShell } from "@/components/AppShell";
+import { CanvasArtifact, type Artifact } from "@/components/agent/CanvasArtifact";
+import { apiFetch, getToken } from "@/lib/api";
+
+interface Conversation {
+  id: string;
+  title: string | null;
+  last_message_at: string | null;
+  created_at: string;
+}
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+  artifacts: Artifact[];
+  streaming?: boolean;
+  error?: boolean;
+}
+
+export default function AgentePage() {
+  const [access, setAccess] = useState<{ configured: boolean; model: string; default_month: string } | null>(null);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [toolStatus, setToolStatus] = useState<string | null>(null);
+  const [canvasOpen, setCanvasOpen] = useState(false);
+  const [canvasW, setCanvasW] = useState(440);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    apiFetch<{ configured: boolean; model: string; default_month: string }>("/api/v1/agent/access")
+      .then(setAccess)
+      .catch(() => setAccessDenied(true));
+    loadConversations();
+  }, []);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages]);
+
+  const loadConversations = () =>
+    apiFetch<Conversation[]>("/api/v1/agent/conversations").then(setConversations).catch(() => {});
+
+  const selectConversation = async (id: string) => {
+    setActiveId(id);
+    setSidebarOpen(false);
+    const msgs = await apiFetch<Message[]>(`/api/v1/agent/conversations/${id}/messages`);
+    const norm = msgs.map((m) => ({ ...m, artifacts: m.artifacts || [] }));
+    setMessages(norm);
+    const arts = norm.flatMap((m) => m.artifacts);
+    setArtifacts(arts);
+    setCanvasOpen(arts.length > 0);
+  };
+
+  const newConversation = () => {
+    setActiveId(null);
+    setMessages([]);
+    setArtifacts([]);
+    setCanvasOpen(false);
+    setSidebarOpen(false);
+  };
+
+  const deleteConversation = async (id: string) => {
+    await apiFetch(`/api/v1/agent/conversations/${id}`, { method: "DELETE" });
+    if (id === activeId) newConversation();
+    loadConversations();
+  };
+
+  const patchLastAssistant = (fn: (m: Message) => Message) =>
+    setMessages((prev) => {
+      const next = [...prev];
+      for (let i = next.length - 1; i >= 0; i--) {
+        if (next[i].role === "assistant") { next[i] = fn(next[i]); break; }
+      }
+      return next;
+    });
+
+  const sendMessage = async () => {
+    const content = input.trim();
+    if (!content || streaming) return;
+
+    let convId = activeId;
+    if (!convId) {
+      const c = await apiFetch<Conversation>("/api/v1/agent/conversations", { method: "POST", body: JSON.stringify({}) });
+      convId = c.id;
+      setActiveId(c.id);
+    }
+
+    setMessages((p) => [...p, { role: "user", content, artifacts: [] }, { role: "assistant", content: "", artifacts: [], streaming: true }]);
+    setInput("");
+    setStreaming(true);
+    setToolStatus(null);
+
+    try {
+      const token = getToken();
+      const res = await fetch(`/api/v1/agent/conversations/${convId}/messages`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok || !res.body) throw new Error("No se pudo iniciar el chat");
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const line = buf.slice(0, idx).trim();
+          buf = buf.slice(idx + 2);
+          if (!line.startsWith("data:")) continue;
+          const ev = JSON.parse(line.slice(5).trim());
+          handleEvent(ev);
+        }
+      }
+    } catch (e: any) {
+      patchLastAssistant((m) => ({ ...m, content: m.content || `⚠️ ${e.message}`, error: true, streaming: false }));
+    } finally {
+      setStreaming(false);
+      setToolStatus(null);
+      patchLastAssistant((m) => ({ ...m, streaming: false }));
+      loadConversations();
+    }
+  };
+
+  const handleEvent = (ev: any) => {
+    if (ev.type === "token") {
+      patchLastAssistant((m) => ({ ...m, content: m.content + ev.text }));
+    } else if (ev.type === "tool") {
+      setToolStatus(`Consultando datos: ${ev.name}…`);
+    } else if (ev.type === "canvas") {
+      const art: Artifact = ev.artifact;
+      setArtifacts((p) => [...p, art]);
+      setCanvasOpen(true);
+      patchLastAssistant((m) => ({ ...m, artifacts: [...m.artifacts, art] }));
+    } else if (ev.type === "done") {
+      if (ev.content) patchLastAssistant((m) => ({ ...m, content: ev.content }));
+      setToolStatus(null);
+    } else if (ev.type === "error") {
+      patchLastAssistant((m) => ({ ...m, content: `⚠️ ${ev.message}`, error: true }));
+    }
+  };
+
+  const onDragCanvas = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startW = canvasW;
+    const move = (ev: MouseEvent) => setCanvasW(Math.max(320, Math.min(760, startW + (startX - ev.clientX))));
+    const up = () => { window.removeEventListener("mousemove", move); window.removeEventListener("mouseup", up); };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  if (accessDenied) {
+    return <AppShell><div className="card p-12 text-center"><p className="text-brand-slate">No tenés acceso al Agente de Experiencia. Pedile al administrador que te habilite.</p></div></AppShell>;
+  }
+
+  const SUGERENCIAS = [
+    "Resumí la atención del mes actual",
+    "¿Cuáles son los principales motivos de contacto?",
+    "Mostrame la Voz del Cliente en un gráfico",
+    "¿Qué temas tienen más fricción?",
+  ];
+
+  return (
+    <AppShell>
+      <div className="flex h-[calc(100vh-13rem)] min-h-[480px] gap-0 -mx-1">
+        {/* Sidebar histórico */}
+        <aside className={`${sidebarOpen ? "fixed inset-0 z-40 bg-black/30 md:bg-transparent md:static" : "hidden"} md:block md:relative w-full md:w-60 flex-shrink-0`}>
+          <div className="bg-white md:bg-transparent h-full w-60 md:w-full border-r border-brand-border flex flex-col">
+            <button onClick={newConversation} className="m-3 btn-primary text-sm py-2">+ Nueva conversación</button>
+            <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5">
+              {conversations.length === 0 && <p className="text-xs text-brand-slate px-2 py-3">Sin conversaciones aún.</p>}
+              {conversations.map((c) => (
+                <div key={c.id} className={`group flex items-center gap-1 rounded-md px-2 py-2 cursor-pointer text-sm ${activeId === c.id ? "bg-brand-cyan/10 text-brand-ink" : "hover:bg-brand-bg text-brand-graphite"}`}
+                  onClick={() => selectConversation(c.id)}>
+                  <span className="flex-1 truncate">{c.title || "Conversación"}</span>
+                  <button onClick={(e) => { e.stopPropagation(); deleteConversation(c.id); }}
+                    className="opacity-0 group-hover:opacity-100 text-brand-mist hover:text-brand-primary text-xs px-1">✕</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
+
+        {/* Chat */}
+        <section className="flex-1 flex flex-col min-w-0 border-r border-brand-border">
+          <div className="flex items-center justify-between gap-2 px-4 py-2.5 border-b border-brand-border">
+            <div className="flex items-center gap-2 min-w-0">
+              <button onClick={() => setSidebarOpen(true)} className="md:hidden text-brand-slate" aria-label="Historial">☰</button>
+              <div className="min-w-0">
+                <h1 className="font-display text-lg text-brand-ink uppercase leading-none">Agente de Experiencia</h1>
+                <p className="text-[11px] text-brand-slate truncate">
+                  {access ? <>Mes actual: <b>{access.default_month}</b> · {access.model}{!access.configured && " · ⚠️ servidor sin API key"}</> : "Cargando…"}
+                </p>
+              </div>
+            </div>
+            <button onClick={() => setCanvasOpen((o) => !o)} className="btn-ghost text-xs whitespace-nowrap">
+              {canvasOpen ? "Ocultar canvas" : `Canvas${artifacts.length ? ` (${artifacts.length})` : ""}`}
+            </button>
+          </div>
+
+          <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-5 space-y-4">
+            {messages.length === 0 && (
+              <div className="max-w-xl mx-auto text-center mt-8">
+                <div className="w-14 h-14 mx-auto rounded-xl bg-brand-cyan/10 text-brand-cyan flex items-center justify-center mb-4">
+                  <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                </div>
+                <h2 className="font-display text-xl text-brand-ink uppercase">¿Qué querés analizar?</h2>
+                <p className="text-sm text-brand-slate mt-1 mb-5">Analizo los datos de Atención al Cliente. Por defecto, el mes actual.</p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  {SUGERENCIAS.map((s) => (
+                    <button key={s} onClick={() => setInput(s)} className="text-left text-sm card p-3 hover:border-brand-cyan transition-colors text-brand-graphite">{s}</button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {messages.map((m, i) => (
+              <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+                  m.role === "user" ? "bg-brand-ink text-white" : m.error ? "bg-brand-primary-light text-brand-primary-dark" : "bg-brand-bg text-brand-graphite"}`}>
+                  {m.content || (m.streaming ? <span className="text-brand-mist">▍</span> : "")}
+                  {m.role === "assistant" && m.artifacts.length > 0 && (
+                    <div className="mt-2 text-[11px] text-brand-cyan font-semibold">📊 {m.artifacts.length} artefacto(s) en el canvas →</div>
+                  )}
+                </div>
+              </div>
+            ))}
+            {toolStatus && <div className="text-xs text-brand-cyan flex items-center gap-2 pl-1"><span className="w-1.5 h-1.5 rounded-full bg-brand-cyan animate-pulse" />{toolStatus}</div>}
+          </div>
+
+          <div className="border-t border-brand-border p-3">
+            <div className="flex items-end gap-2 max-w-3xl mx-auto">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                placeholder="Preguntá sobre la atención al cliente…"
+                rows={1}
+                className="flex-1 resize-none rounded-xl border border-brand-border px-4 py-2.5 text-sm focus:outline-none focus:border-brand-cyan max-h-32"
+              />
+              <button onClick={sendMessage} disabled={streaming || !input.trim()} className="btn-primary px-4 py-2.5 disabled:opacity-50">
+                {streaming ? "…" : "Enviar"}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* Canvas */}
+        {canvasOpen && (
+          <>
+            <div onMouseDown={onDragCanvas} className="hidden md:block w-1.5 cursor-col-resize bg-brand-border/40 hover:bg-brand-cyan/40" />
+            <aside className="flex-shrink-0 flex flex-col bg-brand-bg-soft overflow-hidden w-full md:w-auto" style={{ width: typeof window !== "undefined" && window.innerWidth < 768 ? undefined : canvasW }}>
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-brand-border bg-white">
+                <span className="text-[11px] uppercase tracking-wider2 font-bold text-brand-slate">Canvas</span>
+                <button onClick={() => setCanvasOpen(false)} className="text-brand-mist hover:text-brand-ink text-sm">✕</button>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4">
+                {artifacts.length === 0 && <p className="text-xs text-brand-slate text-center mt-8">El agente dibujará gráficos y análisis acá cuando los necesite.</p>}
+                {artifacts.map((a) => <CanvasArtifact key={a.id} artifact={a} />)}
+              </div>
+            </aside>
+          </>
+        )}
+      </div>
+    </AppShell>
+  );
+}
