@@ -50,6 +50,7 @@ interface GestionDetail {
     por_seccion: DistItem[];
     por_responsable: DistItem[];
     por_dia: Array<{ dia: string; cantidad: number }>;
+    voz_cliente?: { disponible: boolean };
   };
 }
 
@@ -92,11 +93,24 @@ export default function AtencionGestionDetailPage() {
         <span className="mx-2">/</span>
         <span className="text-brand-ink font-semibold">{report.period_month ?? "Reporte"}</span>
       </div>
-      <div className="mb-6">
-        <h1 className="font-display text-3xl text-brand-ink uppercase">Reporte de Gestiones</h1>
-        <p className="text-sm text-brand-slate mt-1">
-          Período: <b>{report.period_month ?? "—"}</b> · Generado: {formatDate(report.generated_at)} · Registros de contacto
-        </p>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl text-brand-ink uppercase">Reporte de Gestiones</h1>
+          <p className="text-sm text-brand-slate mt-1">
+            Período: <b>{report.period_month ?? "—"}</b> · Generado: {formatDate(report.generated_at)} · Registros de contacto
+          </p>
+        </div>
+        {report.data.voz_cliente?.disponible && (
+          <Link
+            href={`/atencion/gestiones/reports/${report.id}/voz`}
+            className="btn-primary inline-flex items-center gap-2"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m3 11 18-5v12L3 14v-3z" /><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6" />
+            </svg>
+            La Voz del Cliente →
+          </Link>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from typing import Any
 
 from ..parsers._text import strip_accents
+from .voz_cliente import analizar_voz_cliente
 
 # Estados que se consideran "resueltos/cerrados" para el % de resolución.
 _CERRADO = {"cerrado", "resuelto", "finalizado"}
@@ -131,4 +132,5 @@ def analyze_atencion_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "por_seccion": secciones,
         "por_responsable": responsables,
         "por_dia": por_dia,
+        "voz_cliente": analizar_voz_cliente(rows),
     }

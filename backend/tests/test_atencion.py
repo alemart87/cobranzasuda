@@ -174,3 +174,33 @@ def test_analyze_gestiones_distribuciones():
 
     import json
     json.dumps(g)
+
+
+def test_voz_cliente_temas_y_frases():
+    from app.services.analyzers.voz_cliente import analizar_voz_cliente
+
+    rows = [
+        {"descripcion": "solicitud de cancelación de póliza, se deriva al área", "estado": "Cerrado"},
+        {"descripcion": "indica que desea realizar una denuncia de siniestro", "estado": "Pendiente"},
+        {"descripcion": "no le llegó el comprobante de débito de cuota, no pudo pagar", "estado": "En proceso"},
+        {"descripcion": "consulta por estado de siniestro", "estado": "Cerrado"},
+        {"descripcion": "PRUEBA XP", "estado": "Cerrado"},
+    ]
+    v = analizar_voz_cliente(rows)
+    assert v["disponible"] is True
+    assert v["total_descripciones"] == 5
+    temas = {t["tema"]: t["cantidad"] for t in v["temas"]}
+    assert temas.get("Cancelaciones") == 1
+    assert temas.get("Siniestros y denuncias") == 2  # denuncia + estado de siniestro
+    assert temas.get("Pagos y cobranzas") == 1
+    # fricción: "no le llegó / no pudo" cuenta como señal
+    assert v["friccion_cantidad"] >= 1
+    # frases: "denuncia de siniestro" / "estado de siniestro" deben aparecer
+    frases = {f["frase"] for f in v["frases_trigramas"]}
+    assert any("siniestro" in f for f in frases)
+    # palabras clave no incluyen stopwords ni muletillas del agente
+    kws = {p["label"] for p in v["palabras_clave"]}
+    assert "indica" not in kws and "para" not in kws
+
+    import json
+    json.dumps(v)
