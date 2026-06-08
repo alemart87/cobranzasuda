@@ -5,6 +5,7 @@ import { AppShell } from "@/components/AppShell";
 import { CanvasArtifact, type Artifact } from "@/components/agent/CanvasArtifact";
 import { Markdown } from "@/components/agent/Markdown";
 import { apiFetch, getToken } from "@/lib/api";
+import { downloadCanvasHtml } from "@/lib/canvasExport";
 
 interface Conversation {
   id: string;
@@ -265,11 +266,23 @@ export default function AgentePage() {
             <aside className="flex-shrink-0 flex flex-col bg-brand-bg-soft overflow-hidden w-full md:w-auto" style={{ width: typeof window !== "undefined" && window.innerWidth < 768 ? undefined : canvasW }}>
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-brand-border bg-white">
                 <span className="text-[11px] uppercase tracking-wider2 font-bold text-brand-slate">Canvas</span>
-                <button onClick={() => setCanvasOpen(false)} className="text-brand-mist hover:text-brand-ink text-sm">✕</button>
+                <div className="flex items-center gap-2">
+                  {artifacts.length > 0 && (
+                    <button
+                      onClick={() => downloadCanvasHtml(artifacts, { title: conversations.find((c) => c.id === activeId)?.title || "Informe", month: access?.default_month })}
+                      title="Descargar HTML (para imprimir como PDF)"
+                      className="text-[11px] font-semibold text-brand-cyan hover:text-brand-ink inline-flex items-center gap-1"
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /><path d="M12 15V3" /></svg>
+                      Descargar
+                    </button>
+                  )}
+                  <button onClick={() => setCanvasOpen(false)} className="text-brand-mist hover:text-brand-ink text-sm">✕</button>
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto p-4">
                 {artifacts.length === 0 && <p className="text-xs text-brand-slate text-center mt-8">El agente dibujará gráficos y análisis acá cuando los necesite.</p>}
-                {artifacts.map((a) => <CanvasArtifact key={a.id} artifact={a} />)}
+                {artifacts.map((a) => <div id={`art-card-${a.id}`} key={a.id}><CanvasArtifact artifact={a} /></div>)}
               </div>
             </aside>
           </>
@@ -281,9 +294,17 @@ export default function AgentePage() {
 
 function AssistantBubble({ m, toolStatus, onOpenCanvas }: { m: Message; toolStatus: string | null; onOpenCanvas: () => void }) {
   const [open, setOpen] = useState(false);
+  const reasonRef = useRef<HTMLDivElement>(null);
   const hasReasoning = !!(m.reasoning && m.reasoning.trim());
   const thinking = !!m.streaming && !m.content;
   const showReasoning = (!!m.streaming && hasReasoning) || open;
+
+  // Auto-scroll del razonamiento mientras llega (sensación de "escribiendo").
+  useEffect(() => {
+    if (m.streaming && reasonRef.current) {
+      reasonRef.current.scrollTop = reasonRef.current.scrollHeight;
+    }
+  }, [m.reasoning, m.streaming]);
 
   return (
     <div className="flex justify-start">
@@ -301,8 +322,10 @@ function AssistantBubble({ m, toolStatus, onOpenCanvas }: { m: Message; toolStat
               )}
             </button>
             {showReasoning && hasReasoning && (
-              <div className="mt-1 rounded-lg bg-brand-bg-soft border border-brand-border px-3 py-2 text-[12px] text-brand-slate whitespace-pre-wrap max-h-52 overflow-y-auto leading-relaxed">
-                {m.reasoning}
+              <div ref={reasonRef} className="mt-1 rounded-lg bg-brand-bg-soft border border-brand-border px-3 py-2 max-h-60 overflow-y-auto reasoning-box">
+                <div className="text-[12px] text-brand-slate leading-relaxed">
+                  <Markdown>{m.reasoning + (m.streaming && thinking ? " ▍" : "")}</Markdown>
+                </div>
               </div>
             )}
             {toolStatus && (
