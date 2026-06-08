@@ -48,6 +48,7 @@ class MessageRead(BaseModel):
     id: str
     role: str
     content: str
+    reasoning: str = ""
     artifacts: list
     created_at: datetime
 
@@ -177,12 +178,14 @@ async def post_message(
 
     async def event_stream():
         final_content = ""
+        final_reasoning = ""
         artifacts: list = []
         tool_trace: list = []
         try:
             async for ev in stream_agent(messages, context):
                 if ev["type"] == "done":
                     final_content = ev.get("content", "")
+                    final_reasoning = ev.get("reasoning", "")
                     artifacts = ev.get("artifacts", [])
                     tool_trace = ev.get("tool_trace", [])
                 yield _sse(ev)
@@ -199,7 +202,8 @@ async def post_message(
             async with session_scope() as s:
                 s.add(AgentMessage(
                     conversation_id=conv_id, role="assistant",
-                    content=final_content, artifacts=artifacts, tool_trace=tool_trace,
+                    content=final_content, reasoning=final_reasoning,
+                    artifacts=artifacts, tool_trace=tool_trace,
                 ))
                 c = await s.get(AgentConversation, conv_id)
                 if c:

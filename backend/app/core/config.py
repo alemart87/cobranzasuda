@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     agent_model: str = "gpt-5.4"
     agent_reasoning_effort: str = "medium"  # minimal | low | medium | high
+    # Resumen del razonamiento ("auto" | "detailed" | "" para desactivar).
+    agent_reasoning_summary: str = "auto"
     agent_max_history: int = 20             # mensajes de contexto por conversación
     agent_max_tool_turns: int = 8           # iteraciones máximas de tools por respuesta
 

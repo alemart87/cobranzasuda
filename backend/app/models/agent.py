@@ -38,6 +38,8 @@ class AgentMessage(Base):
     conversation_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # user | assistant
     content: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    # Resumen del razonamiento del modelo (reasoning summary), si lo hubo.
+    reasoning: Mapped[str] = mapped_column(Text, default="", nullable=False)
     # Artefactos de canvas (gráficos/análisis) emitidos por el agente en este turno.
     artifacts: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     # Trazas de las tools usadas (para auditoría/depuración).

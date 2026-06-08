@@ -164,7 +164,12 @@ def _build_agent():
         from agents import ModelSettings
         try:
             from openai.types.shared import Reasoning
-            model_settings = ModelSettings(reasoning=Reasoning(effort=settings.agent_reasoning_effort))
+            # `summary` pide al modelo de razonamiento un resumen de su pensamiento,
+            # que streameamos como eventos `reasoning`. Configurable / desactivable.
+            rkwargs: dict[str, Any] = {"effort": settings.agent_reasoning_effort}
+            if settings.agent_reasoning_summary:
+                rkwargs["summary"] = settings.agent_reasoning_summary
+            model_settings = ModelSettings(reasoning=Reasoning(**rkwargs))
         except Exception:
             model_settings = ModelSettings()
     except Exception:
@@ -200,20 +205,27 @@ async def stream_agent(
 
     emitted_canvas = 0
     full_text: list[str] = []
-    try:
-        from openai.types.responses import ResponseTextDeltaEvent
-    except Exception:
-        ResponseTextDeltaEvent = None  # type: ignore
+    full_reasoning: list[str] = []
 
     async for event in result.stream_events():
         etype = getattr(event, "type", "")
-        if etype == "raw_response_event" and ResponseTextDeltaEvent is not None:
+        if etype == "raw_response_event":
             data = getattr(event, "data", None)
-            if isinstance(data, ResponseTextDeltaEvent):
+            dtype = getattr(data, "type", "") or ""
+            if dtype == "response.output_text.delta":
                 delta = getattr(data, "delta", "") or ""
                 if delta:
                     full_text.append(delta)
                     yield {"type": "token", "text": delta}
+            elif dtype == "response.reasoning_summary_text.delta":
+                delta = getattr(data, "delta", "") or ""
+                if delta:
+                    full_reasoning.append(delta)
+                    yield {"type": "reasoning", "text": delta}
+            elif dtype == "response.reasoning_summary_part.added" and full_reasoning:
+                # Separador entre partes del razonamiento.
+                full_reasoning.append("\n\n")
+                yield {"type": "reasoning", "text": "\n\n"}
         elif etype == "run_item_stream_event":
             item = getattr(event, "item", None)
             itype = getattr(item, "type", "")
@@ -222,16 +234,14 @@ async def stream_agent(
                 name = getattr(raw, "name", None) or "tool"
                 context.tool_trace.append({"tool": name})
                 yield {"type": "tool", "name": name}
-            # Emitir artefactos de canvas apenas se generan.
             while emitted_canvas < len(context.canvas):
                 yield {"type": "canvas", "artifact": context.canvas[emitted_canvas]}
                 emitted_canvas += 1
 
-    # Por las dudas, emitir artefactos restantes.
     while emitted_canvas < len(context.canvas):
         yield {"type": "canvas", "artifact": context.canvas[emitted_canvas]}
         emitted_canvas += 1
 
     content = "".join(full_text) or (getattr(result, "final_output", "") or "")
-    yield {"type": "done", "content": content,
+    yield {"type": "done", "content": content, "reasoning": "".join(full_reasoning),
            "artifacts": context.canvas, "tool_trace": context.tool_trace}
