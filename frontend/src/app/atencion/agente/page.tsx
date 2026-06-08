@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { CanvasArtifact, type Artifact } from "@/components/agent/CanvasArtifact";
 import { Markdown } from "@/components/agent/Markdown";
+import { ThinkingTicker } from "@/components/agent/ThinkingTicker";
 import { apiFetch, getToken } from "@/lib/api";
 import { downloadCanvasHtml } from "@/lib/canvasExport";
 
@@ -333,6 +334,8 @@ function AssistantBubble({ m, toolStatus, onOpenCanvas }: { m: Message; toolStat
                 <span className="w-1.5 h-1.5 rounded-full bg-brand-cyan animate-pulse" />{toolStatus}
               </div>
             )}
+            {/* Ticker de espera: intercala frases mientras no hay respuesta aún. */}
+            {!!m.streaming && !m.content && <ThinkingTicker />}
           </div>
         )}
 
@@ -345,13 +348,6 @@ function AssistantBubble({ m, toolStatus, onOpenCanvas }: { m: Message; toolStat
                 📊 {m.artifacts.length} artefacto(s) en el canvas →
               </button>
             )}
-          </div>
-        )}
-
-        {/* Shimmer inicial mientras piensa sin razonamiento visible aún */}
-        {thinking && !hasReasoning && !toolStatus && (
-          <div className="rounded-2xl bg-brand-bg px-4 py-3">
-            <span className="shimmer-text text-sm font-medium">El agente está analizando los datos…</span>
           </div>
         )}
       </div>
