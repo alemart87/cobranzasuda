@@ -231,7 +231,9 @@ export default function AgentePage() {
                   m.role === "user" ? "bg-brand-ink text-white" : m.error ? "bg-brand-primary-light text-brand-primary-dark" : "bg-brand-bg text-brand-graphite"}`}>
                   {m.content || (m.streaming ? <span className="text-brand-mist">▍</span> : "")}
                   {m.role === "assistant" && m.artifacts.length > 0 && (
-                    <div className="mt-2 text-[11px] text-brand-cyan font-semibold">📊 {m.artifacts.length} artefacto(s) en el canvas →</div>
+                    <button onClick={() => setCanvasOpen(true)} className="mt-2 text-[11px] text-brand-cyan font-semibold hover:underline">
+                      📊 {m.artifacts.length} artefacto(s) en el canvas →
+                    </button>
                   )}
                 </div>
               </div>

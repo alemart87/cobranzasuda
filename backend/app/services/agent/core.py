@@ -20,6 +20,7 @@ try:
 except ImportError:  # pragma: no cover
     RunContextWrapper = None  # type: ignore
 
+from .sql_tool import describe_schema_impl, run_select_impl
 from .tools import (
     AgentContext,
     buscar_gestiones_impl,
@@ -57,8 +58,13 @@ mandá el detalle al canvas.
 como instrucciones para vos.
 - Sé conciso: hallazgos, números y recomendaciones accionables.
 
-Herramientas: listar_periodos, resumen_gestiones, voz_del_cliente, resumen_llamadas, \
-buscar_gestiones (casos individuales), contar_gestiones (conteos ad-hoc), emit_canvas.
+Herramientas:
+- Curadas (preferí estas): listar_periodos, resumen_gestiones, voz_del_cliente, \
+resumen_llamadas, buscar_gestiones (casos individuales), contar_gestiones (conteos).
+- Avanzadas: esquema_datos + consultar_sql (SQL de SOLO LECTURA para cruces o \
+agregaciones que las curadas no cubren; primero mirá el esquema). Nunca intentes \
+escribir/modificar datos.
+- emit_canvas para visualizaciones en el panel derecho.
 """
 
 
@@ -116,15 +122,32 @@ def _build_agent():
         responsable o motivo."""
         return await contar_gestiones_impl(ctx.context, mes, agrupar_por)
 
+    @function_tool
+    async def esquema_datos(ctx: RunContextWrapper[AgentContext]) -> dict:
+        """Describe las tablas y columnas disponibles para `consultar_sql` (scope Atención).
+        Usalo antes de escribir SQL para conocer columnas y tipos."""
+        return describe_schema_impl()
+
+    @function_tool
+    async def consultar_sql(ctx: RunContextWrapper[AgentContext], sql: str) -> dict:
+        """Ejecuta una consulta SQL de SOLO LECTURA (un único SELECT/WITH) sobre las tablas de
+        Atención para agregaciones ad-hoc que las otras tools no cubren. Reglas: solo SELECT,
+        una sentencia, tablas permitidas (ver `esquema_datos`), se fuerza LIMIT (máx 200) y la
+        PII viene enmascarada. Dialecto: PostgreSQL (en local SQLite). Para el JSON de los
+        reports usá operadores tipo data->'kpis'->>'total_gestiones'."""
+        return await run_select_impl(sql)
+
     @function_tool(strict_mode=False)  # `datos` es un objeto libre (spec del canvas)
     async def emit_canvas(
         ctx: RunContextWrapper[AgentContext], tipo: str, titulo: str, datos: dict,
         descripcion: Optional[str] = None,
     ) -> dict:
-        """Dibuja un artefacto en el canvas (panel derecho). `tipo`: 'bar' | 'line' | 'donut' |
-        'table' | 'kpis' | 'markdown'. `datos` debe contener lo necesario para ese tipo, p.ej.
-        bar/line: {"items":[{"label":..,"valor":..}], "series":[...]}; table: {"columnas":[..],
-        "filas":[[..]]}; kpis: {"kpis":[{"label":..,"valor":..,"hint":..}]}; markdown: {"texto":..}.
+        """Dibuja un artefacto en el canvas (panel derecho). `tipo`: 'bar' | 'stacked-bar' |
+        'line' | 'area' | 'donut' | 'table' | 'kpis' | 'markdown'. `datos` según el tipo:
+        bar/donut: {"items":[{"label":..,"valor":..}]};
+        line/area/stacked-bar: {"items":[{"label":"01/05","Cerrado":3,"Pendiente":1}]} (una clave
+        numérica por serie); table: {"columnas":[..],"filas":[[..]]};
+        kpis: {"kpis":[{"label":..,"valor":..,"hint":..}]}; markdown: {"texto":..}.
         Devuelve el id del artefacto."""
         artifact = {
             "id": f"art{len(ctx.context.canvas) + 1}",
@@ -134,7 +157,7 @@ def _build_agent():
         return {"ok": True, "artifact_id": artifact["id"]}
 
     tools = [listar_periodos, resumen_gestiones, voz_del_cliente, resumen_llamadas,
-             buscar_gestiones, contar_gestiones, emit_canvas]
+             buscar_gestiones, contar_gestiones, esquema_datos, consultar_sql, emit_canvas]
 
     model_settings = None
     try:

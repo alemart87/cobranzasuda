@@ -39,3 +39,29 @@ def redactar_item(item: dict[str, Any]) -> dict[str, Any]:
     if "descripcion" in red:
         red["descripcion"] = _scrub_texto(red.get("descripcion") or "", nombre)
     return red
+
+
+_PII_COLS = {"cliente", "documento", "telefono"}
+
+
+def redactar_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Redacta una fila de resultado SQL SIN quitar columnas (enmascara valores).
+
+    Útil cuando el agente hace SELECT y elige las columnas: conservamos los
+    nombres de columna pero ocultamos el contenido sensible.
+    """
+    nombre = row.get("cliente")
+    out: dict[str, Any] = {}
+    for k, v in row.items():
+        kl = str(k).lower()
+        if kl == "cliente":
+            out[k] = "[cliente]" if v else v
+        elif kl == "documento":
+            out[k] = "[doc]" if v else v
+        elif kl in ("telefono", "teléfono"):
+            out[k] = "[tel]" if v else v
+        elif kl == "descripcion" and isinstance(v, str):
+            out[k] = _scrub_texto(v, nombre)
+        else:
+            out[k] = v
+    return out

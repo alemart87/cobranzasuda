@@ -1,8 +1,8 @@
 "use client";
 
 import {
-  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart,
+  Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
 export interface Artifact {
@@ -61,6 +61,45 @@ function Lines({ datos }: { datos: any }) {
           <Line key={k} type="monotone" dataKey={k} stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={{ r: 2 }} />
         ))}
       </LineChart>
+    </ResponsiveContainer>
+  );
+}
+
+function StackedBars({ datos }: { datos: any }) {
+  const items = asItems(datos).map((it) => ({ ...it, label: String(labelOf(it)) }));
+  const keys = valueKeys(items);
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <BarChart data={items} margin={{ top: 8, right: 16, left: -10 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#eef0f2" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#64748b" }} />
+        <YAxis tick={{ fontSize: 11, fill: "#64748b" }} allowDecimals={false} />
+        <Tooltip cursor={{ fill: "rgba(0,0,0,0.04)" }} />
+        <Legend wrapperStyle={{ fontSize: 12 }} />
+        {keys.map((k, i) => (
+          <Bar key={k} dataKey={k} stackId="a" fill={PALETTE[i % PALETTE.length]} radius={[2, 2, 0, 0]} barSize={22} />
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function Areas({ datos }: { datos: any }) {
+  const items = asItems(datos).map((it) => ({ ...it, label: String(labelOf(it)) }));
+  const keys = valueKeys(items);
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <AreaChart data={items} margin={{ top: 8, right: 16, left: -10 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#eef0f2" vertical={false} />
+        <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#64748b" }} />
+        <YAxis tick={{ fontSize: 11, fill: "#64748b" }} allowDecimals={false} />
+        <Tooltip />
+        {keys.length > 1 && <Legend wrapperStyle={{ fontSize: 12 }} />}
+        {keys.map((k, i) => (
+          <Area key={k} type="monotone" dataKey={k} stroke={PALETTE[i % PALETTE.length]}
+            fill={PALETTE[i % PALETTE.length]} fillOpacity={0.18} strokeWidth={2} />
+        ))}
+      </AreaChart>
     </ResponsiveContainer>
   );
 }
@@ -132,11 +171,13 @@ export function CanvasArtifact({ artifact }: { artifact: Artifact }) {
       <h3 className="font-display text-base text-brand-ink uppercase leading-tight mb-1">{titulo}</h3>
       {descripcion && <p className="text-xs text-brand-slate mb-3">{descripcion}</p>}
       {tipo === "bar" && <Bars datos={datos} />}
+      {(tipo === "stacked-bar" || tipo === "stacked_bar") && <StackedBars datos={datos} />}
       {tipo === "line" && <Lines datos={datos} />}
+      {tipo === "area" && <Areas datos={datos} />}
       {tipo === "donut" && <Donut datos={datos} />}
       {tipo === "table" && <Tabla datos={datos} />}
       {tipo === "kpis" && <Kpis datos={datos} />}
-      {(tipo === "markdown" || !["bar", "line", "donut", "table", "kpis"].includes(tipo)) && <Markdown datos={datos} />}
+      {(tipo === "markdown" || !["bar", "stacked-bar", "stacked_bar", "line", "area", "donut", "table", "kpis"].includes(tipo)) && <Markdown datos={datos} />}
     </div>
   );
 }

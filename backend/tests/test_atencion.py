@@ -195,6 +195,40 @@ def test_pii_redaccion():
     assert "[cliente]" in d and "grúa" in d
 
 
+def test_sql_guardas():
+    import pytest
+    from app.services.agent.sql_tool import validar_select
+
+    # Válido: se agrega LIMIT
+    _, q = validar_select("SELECT estado, count(*) FROM atencion_gestion_items GROUP BY estado")
+    assert "limit" in q.lower()
+    # LIMIT excesivo se capea a 200
+    _, q2 = validar_select("SELECT * FROM atencion_gestion_items LIMIT 9999")
+    assert "LIMIT 200" in q2
+    # Tabla fuera de whitelist
+    with pytest.raises(ValueError):
+        validar_select("SELECT * FROM users")
+    # No-SELECT
+    with pytest.raises(ValueError):
+        validar_select("DELETE FROM atencion_gestion_items")
+    # Multi-statement
+    with pytest.raises(ValueError):
+        validar_select("SELECT 1 FROM atencion_gestion_items; DROP TABLE x")
+    # Token destructivo
+    with pytest.raises(ValueError):
+        validar_select("SELECT * FROM atencion_gestion_items WHERE 1=1; update atencion_gestion_items set estado='x'")
+
+
+def test_pii_redactar_row():
+    from app.services.agent.pii import redactar_row
+    row = redactar_row({"estado": "Cerrado", "cliente": "Ana Perez",
+                        "telefono": "0982 111", "documento": "8.297.729",
+                        "descripcion": "Ana Perez al 0982 111"})
+    assert row["estado"] == "Cerrado"
+    assert row["cliente"] == "[cliente]" and row["telefono"] == "[tel]" and row["documento"] == "[doc]"
+    assert "Ana" not in row["descripcion"]
+
+
 def test_voz_cliente_temas_y_frases():
     from app.services.analyzers.voz_cliente import analizar_voz_cliente
 
