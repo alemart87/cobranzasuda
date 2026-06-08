@@ -58,6 +58,17 @@ class Settings(BaseSettings):
     brand_primary_color: str = "#0066B3"
     brand_logo_path: str = "/logo-voicenter-color.png"
 
+    # --- Agente de Experiencia (OpenAI Agents SDK) ---
+    openai_api_key: str = ""
+    agent_model: str = "gpt-5.4"
+    agent_reasoning_effort: str = "medium"  # minimal | low | medium | high
+    agent_max_history: int = 20             # mensajes de contexto por conversación
+    agent_max_tool_turns: int = 8           # iteraciones máximas de tools por respuesta
+
+    @property
+    def agent_enabled(self) -> bool:
+        return bool(self.openai_api_key)
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

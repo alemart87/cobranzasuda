@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1 import (
-    atencion, audit, auth, bases_adicionales, calls, gestiones, modules, overview,
+    agent, atencion, audit, auth, bases_adicionales, calls, gestiones, modules, overview,
     publications, reports, uploads, users,
 )
 from .core.config import settings
@@ -47,6 +47,7 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "photo_url", "VARCHAR(500)"),
     ("users", "last_login_at", "TIMESTAMP WITH TIME ZONE"),
     ("users", "allowed_modules", "JSON"),
+    ("users", "can_use_agent", "BOOLEAN NOT NULL DEFAULT false"),
     ("reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
     ("reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
     ("reports", "published_by", "VARCHAR(36)"),
@@ -250,3 +251,4 @@ app.include_router(bases_adicionales.router, prefix="/api/v1")
 app.include_router(publications.router, prefix="/api/v1")
 app.include_router(overview.router, prefix="/api/v1")
 app.include_router(atencion.router, prefix="/api/v1")
+app.include_router(agent.router, prefix="/api/v1")

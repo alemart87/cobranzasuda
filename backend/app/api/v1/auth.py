@@ -169,6 +169,7 @@ async def me(user: CurrentUser = Depends(get_current_user)) -> dict:
         "allowed_modules": user.allowed_modules,
         "can_upload": user.can_upload,
         "can_manage_publish": user.can_manage_publish,
+        "can_use_agent": user.is_superadmin or user.can_use_agent,
         # El superadmin no puede autoeditar perfil/contraseña (vive en .env).
         "can_edit_profile": user.role != "superadmin",
     }

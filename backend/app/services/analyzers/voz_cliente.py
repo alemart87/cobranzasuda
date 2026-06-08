@@ -116,6 +116,13 @@ def _tema_principal(text_norm: str) -> str:
     return "Otros"
 
 
+def clasificar_tema(descripcion: str) -> str:
+    """Tema principal de una descripción suelta (para persistir por fila)."""
+    if not descripcion or not descripcion.strip():
+        return "Sin descripción"
+    return _tema_principal(_norm(fix_text(descripcion)))
+
+
 def analizar_voz_cliente(rows: list[dict[str, Any]]) -> dict[str, Any]:
     descripciones: list[tuple[str, str, dict]] = []  # (original, normalizado, row)
     for r in rows:

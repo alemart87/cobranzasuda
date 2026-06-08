@@ -54,6 +54,7 @@ async def create_user(
         full_name=payload.full_name,
         role=payload.role,
         allowed_modules=allowed,
+        can_use_agent=bool(payload.can_use_agent),
         created_by=user.id if user.id != "superadmin" else None,
     )
     db.add(new_user)
@@ -103,6 +104,9 @@ async def update_user(
     if "allowed_modules" in payload.model_fields_set and target.role == "client":
         target.allowed_modules = filter_valid_slugs(payload.allowed_modules)
         changes["allowed_modules"] = target.allowed_modules
+    if payload.can_use_agent is not None:
+        target.can_use_agent = payload.can_use_agent
+        changes["can_use_agent"] = payload.can_use_agent
 
     await db.commit()
     await db.refresh(target)

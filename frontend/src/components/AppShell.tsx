@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Brand } from "./Brand";
 import { Avatar } from "./Avatar";
-import { CurrentUserInfo, clearSession, getToken, getUser } from "@/lib/api";
+import { CurrentUserInfo, apiFetch, clearSession, getToken, getUser } from "@/lib/api";
 
 interface NavItem {
   href: string;
@@ -62,6 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<CurrentUserInfo | null>(null);
+  const [canUseAgent, setCanUseAgent] = useState(false);
   const [uploadsOpen, setUploadsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -72,6 +73,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       return;
     }
     setUser(getUser());
+    // Refrescar capacidad de agente desde el backend (no viene en el login).
+    apiFetch<{ can_use_agent?: boolean }>("/api/v1/auth/me")
+      .then((me) => setCanUseAgent(!!me.can_use_agent))
+      .catch(() => {});
   }, [router]);
 
   // Cerrar menús al navegar.
@@ -191,6 +196,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       {item.label}
                     </Link>
                   ))}
+                  {canUseAgent && (
+                    <Link href="/atencion/agente" className={mobilePill(isActive("/atencion/agente"))}>Agente IA</Link>
+                  )}
                   {canManage && (
                     <Link href="/atencion/publicaciones" className={mobilePill(isActive("/atencion/publicaciones"))}>Publicaciones</Link>
                   )}
@@ -354,6 +362,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {item.label}
                 </Link>
               ))}
+
+              {canUseAgent && (
+                <>
+                  {navDivider}
+                  <Link href="/atencion/agente" className={`${pill(isActive("/atencion/agente"))} inline-flex items-center gap-1.5 ring-1 ring-brand-cyan/40`}>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                    Agente IA
+                  </Link>
+                </>
+              )}
 
               {canManage && (
                 <>

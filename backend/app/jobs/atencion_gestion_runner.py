@@ -13,16 +13,37 @@ from sqlalchemy import select
 
 from ..core.database import session_scope
 from ..core.logging import logger
+from ..models.atencion_gestion_item import AtencionGestionItem
 from ..models.atencion_gestion_report import AtencionGestionReport
 from ..models.atencion_gestion_upload import AtencionGestionUpload
 from ..services.analyzers import analyze_atencion_gestiones
+from ..services.analyzers.voz_cliente import clasificar_tema
 from ..services.parsers import parse_atencion_gestiones
 
 
-def _build_analysis(file_path: str) -> dict[str, Any]:
-    """Trabajo pesado (sync). Se corre en un thread aparte."""
+def _build(file_path: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Trabajo pesado (sync) en thread: análisis agregado + filas granulares."""
     rows = parse_atencion_gestiones(file_path)
-    return analyze_atencion_gestiones(rows)
+    analysis = analyze_atencion_gestiones(rows)
+    items: list[dict[str, Any]] = []
+    for r in rows:
+        dt = r.get("fecha_llamada_dt")
+        items.append({
+            "fecha": dt.date() if dt else None,
+            "cliente": (r.get("cliente") or "")[:255] or None,
+            "documento": (r.get("documento") or "")[:60] or None,
+            "telefono": (r.get("telefono") or "")[:60] or None,
+            "tipo_caso": (r.get("tipo_caso") or "")[:80] or None,
+            "estado": (r.get("estado") or "")[:60] or None,
+            "motivo": (r.get("motivo") or "")[:255] or None,
+            "departamento": (r.get("departamento") or "")[:120] or None,
+            "responsable": (r.get("responsable") or "")[:160] or None,
+            "canal": (r.get("canal") or "")[:60] or None,
+            "seccion": (r.get("seccion") or "")[:80] or None,
+            "tema": clasificar_tema(r.get("descripcion", "")),
+            "descripcion": (r.get("descripcion") or "") or None,
+        })
+    return analysis, items
 
 
 async def run_atencion_gestion(upload_id: str) -> None:
@@ -45,7 +66,7 @@ async def run_atencion_gestion(upload_id: str) -> None:
         period = upload.period_month or datetime.utcnow().date().replace(day=1)
 
     try:
-        analysis = await asyncio.to_thread(_build_analysis, file_path)
+        analysis, items = await asyncio.to_thread(_build, file_path)
         k = analysis["kpis"]
 
         async with session_scope() as db:
@@ -59,6 +80,9 @@ async def run_atencion_gestion(upload_id: str) -> None:
                 data=analysis,
             )
             db.add(report)
+            await db.flush()  # report.id disponible para los items
+            for it in items:
+                db.add(AtencionGestionItem(report_id=report.id, period_month=period, **it))
             up = await db.get(AtencionGestionUpload, upload_id)
             up.status = "completed"
             up.completed_at = datetime.utcnow()

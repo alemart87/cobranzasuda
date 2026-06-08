@@ -9,6 +9,7 @@ export interface CurrentUserInfo {
   full_name: string;
   photo_url?: string | null;
   allowed_modules?: string[] | null; // null = acceso a todos
+  can_use_agent?: boolean;
 }
 
 export function setSession(token: string, refreshToken: string, user: CurrentUserInfo) {
