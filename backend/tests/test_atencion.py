@@ -162,5 +162,15 @@ def test_analyze_gestiones_distribuciones():
     assert g["top_motivos"][0]["label"] == "Estado de siniestro"
     assert len(g["por_dia"]) == 2
 
+    # Cruce Responsable × Estado + totales
+    assert g["estados_lista"] == ["Cerrado", "Pendiente"]  # orden preferido
+    pre = g["por_responsable_estado"]
+    assert pre["totales"] == {"Cerrado": 2, "Pendiente": 1, "total": 3}
+    x = next(r for r in pre["responsables"] if r["responsable"] == "x")
+    assert x["por_estado"] == {"Cerrado": 2, "Pendiente": 0} and x["total"] == 2
+    # Serie por día y estado
+    dia1 = next(s for s in g["serie_estado_dia"] if s["dia"] == "2026-05-01")
+    assert dia1["Cerrado"] == 1 and dia1["Pendiente"] == 1
+
     import json
     json.dumps(g)
