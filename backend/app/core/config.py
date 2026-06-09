@@ -53,7 +53,10 @@ class Settings(BaseSettings):
     # Procesamiento aislado de archivos (subproceso con límites) para que un
     # archivo malo NUNCA pueda tumbar la API.
     upload_proc_timeout_s: int = 180        # mata el subproceso si tarda más
-    upload_proc_mem_mb: int = 1024          # tope de memoria del subproceso
+    # Tope de memoria del subproceso (MB). 0 = SIN tope (recomendado): RLIMIT_AS
+    # mide memoria virtual y en hosts multi-core dispara MemoryError con archivos
+    # válidos. La protección real es: aislamiento + timeout + tope de filas.
+    upload_proc_mem_mb: int = 0
     upload_max_rows: int = 300000           # tope de filas por hoja al leer Excel
 
     log_level: str = "INFO"

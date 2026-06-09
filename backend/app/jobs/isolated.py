@@ -18,20 +18,21 @@ from ..core.logging import logger
 
 
 def _init_limits(max_bytes: int) -> None:
-    try:
-        import resource
-        resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
-    except Exception:  # pragma: no cover - depende del SO
-        pass
+    if max_bytes and max_bytes > 0:
+        try:
+            import resource
+            resource.setrlimit(resource.RLIMIT_AS, (max_bytes, max_bytes))
+        except Exception:  # pragma: no cover - depende del SO
+            pass
 
 
 async def run_isolated(func: Callable[..., Any], *args: Any) -> Any:
-    """Ejecuta `func(*args)` en un subproceso con memoria y tiempo acotados.
-
-    Lanza TimeoutError, MemoryError o BrokenProcessPool si el subproceso excede
-    los límites o muere; el runner que llama debe capturarlo y marcar 'failed'.
+    """Ejecuta `func(*args)` en un subproceso con tiempo (y opcionalmente memoria)
+    acotados. Lanza TimeoutError / BrokenProcessPool / la excepción del worker si
+    algo falla; el runner que llama lo captura y marca el job 'failed'.
     """
-    mem_bytes = max(256, settings.upload_proc_mem_mb) * 1024 * 1024
+    mem_mb = max(0, settings.upload_proc_mem_mb)
+    mem_bytes = mem_mb * 1024 * 1024  # 0 = sin RLIMIT
     timeout = max(10, settings.upload_proc_timeout_s)
     ctx = multiprocessing.get_context("spawn")
     executor = concurrent.futures.ProcessPoolExecutor(
