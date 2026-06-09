@@ -28,10 +28,20 @@ def _is_xls(path: Path) -> bool:
     return str(path).lower().endswith(".xls")
 
 
+def _max_rows() -> int:
+    """Tope de filas por hoja (insurance contra archivos absurdos). 0 = sin tope."""
+    try:
+        from ...core.config import settings
+        return int(settings.upload_max_rows) or 0
+    except Exception:
+        return 300000
+
+
 def _load_xlsx(path: Path) -> dict[str, list[list[Any]]]:
     import openpyxl
     # read_only=True → lectura en streaming (memoria acotada); sin él, openpyxl
     # carga TODO el workbook en RAM y un archivo grande revienta el proceso.
+    cap = _max_rows()
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     out: dict[str, list[list[Any]]] = {}
     try:
@@ -40,6 +50,11 @@ def _load_xlsx(path: Path) -> dict[str, list[list[Any]]]:
             rows: list[list[Any]] = []
             for row in ws.iter_rows(values_only=True):
                 rows.append(list(row))
+                if cap and len(rows) >= cap:
+                    raise ValueError(
+                        f"La hoja '{sname}' supera el máximo de {cap} filas. "
+                        f"El archivo parece demasiado grande o tener formato incorrecto."
+                    )
             out[sname] = rows
     finally:
         wb.close()
@@ -50,10 +65,16 @@ def _load_xls(path: Path) -> dict[str, list[list[Any]]]:
     import xlrd
     from xlrd import xldate_as_tuple
 
+    cap = _max_rows()
     book = xlrd.open_workbook(str(path))
     out: dict[str, list[list[Any]]] = {}
     for sname in book.sheet_names():
         sheet = book.sheet_by_name(sname)
+        if cap and sheet.nrows > cap:
+            raise ValueError(
+                f"La hoja '{sname}' supera el máximo de {cap} filas. "
+                f"El archivo parece demasiado grande o tener formato incorrecto."
+            )
         rows: list[list[Any]] = []
         for r in range(sheet.nrows):
             row: list[Any] = []

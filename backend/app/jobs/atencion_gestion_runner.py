@@ -19,6 +19,7 @@ from ..models.atencion_gestion_upload import AtencionGestionUpload
 from ..services.analyzers import analyze_atencion_gestiones
 from ..services.analyzers.voz_cliente import clasificar_tema
 from ..services.parsers import parse_atencion_gestiones
+from .isolated import run_isolated
 
 
 def _build(file_path: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -66,7 +67,9 @@ async def run_atencion_gestion(upload_id: str) -> None:
         period = upload.period_month or datetime.utcnow().date().replace(day=1)
 
     try:
-        analysis, items = await asyncio.to_thread(_build, file_path)
+        # Parseo aislado en subproceso (memoria + timeout acotados): un archivo
+        # malo puede morir acá sin afectar a la API.
+        analysis, items = await run_isolated(_build, file_path)
         k = analysis["kpis"]
 
         async with session_scope() as db:
