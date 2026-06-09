@@ -227,6 +227,30 @@ async def trigger_migrations(token: str | None = None) -> dict:
     }
 
 
+@app.post("/api/v1/admin/cancel-atencion-jobs")
+async def cancel_atencion_jobs(token: str | None = None) -> dict:
+    """Emergencia: marca como 'failed' todos los jobs de Atención en pending/processing.
+    Corta un crash-loop al instante. Auth: ?token=<SECRET_KEY>.
+    """
+    from fastapi import HTTPException, status
+    from sqlalchemy import text
+    if token != settings.secret_key:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Token invalido")
+    cancelled = 0
+    async with engine.begin() as conn:
+        for table in ["atencion_gestion_uploads", "atencion_llamadas_uploads"]:
+            try:
+                r = await conn.execute(text(
+                    f"UPDATE {table} SET status='failed', "
+                    f"last_error='Cancelado manualmente (admin).' "
+                    f"WHERE status IN ('pending','processing')"
+                ))
+                cancelled += r.rowcount or 0
+            except Exception as exc:
+                logger.error(f"[cancel-jobs] {table}: {exc}")
+    return {"cancelled": cancelled}
+
+
 @app.get("/api/v1/admin/db-info")
 async def db_info(token: str | None = None) -> dict:
     """Diagnóstico: cuántas filas hay en cada tabla principal."""

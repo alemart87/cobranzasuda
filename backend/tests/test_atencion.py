@@ -113,25 +113,31 @@ def test_queue_claim_atomico_y_reset():
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
 
-        uid = "queue-test-claim"
+        stuck = "queue-test-stuck"
+        pend = "queue-test-pending"
         async with session_scope() as db:
-            await db.execute(delete(AtencionGestionUpload).where(AtencionGestionUpload.id == uid))
-            db.add(AtencionGestionUpload(id=uid, uploaded_by="u", status="processing",
+            await db.execute(delete(AtencionGestionUpload).where(
+                AtencionGestionUpload.id.in_([stuck, pend])))
+            db.add(AtencionGestionUpload(id=stuck, uploaded_by="u", status="processing",
+                                         file_path="/inexistente.xlsx"))
+            db.add(AtencionGestionUpload(id=pend, uploaded_by="u", status="pending",
                                          file_path="/inexistente.xlsx"))
             await db.commit()
 
-        # Interrumpido (processing) -> pending al bootear.
+        # Fail-safe: un job 'processing' al bootear se marca 'failed' (no se reprocesa).
         await _reset_stale_processing()
         async with session_scope() as db:
-            assert (await db.get(AtencionGestionUpload, uid)).status == "pending"
+            assert (await db.get(AtencionGestionUpload, stuck)).status == "failed"
+            assert (await db.get(AtencionGestionUpload, pend)).status == "pending"
 
-        # Primer claim lo toma; el segundo no devuelve el mismo (ya no está pending).
+        # El claim atómico toma el pendiente; el segundo no devuelve el mismo.
         job = await _claim_next()
-        assert job == ("gestiones", uid)
+        assert job == ("gestiones", pend)
         assert await _claim_next() is None
         async with session_scope() as db:
-            assert (await db.get(AtencionGestionUpload, uid)).status == "processing"
-            await db.execute(delete(AtencionGestionUpload).where(AtencionGestionUpload.id == uid))
+            assert (await db.get(AtencionGestionUpload, pend)).status == "processing"
+            await db.execute(delete(AtencionGestionUpload).where(
+                AtencionGestionUpload.id.in_([stuck, pend])))
             await db.commit()
 
     asyncio.run(_run())
