@@ -39,6 +39,10 @@ def _concurrency() -> int:
 
 
 _POLL_SECONDS = 5.0
+# Tras este número de reintentos, un job que sigue en 'processing' al bootear se
+# marca como 'failed' (poison) para NO reprocesarlo y evitar un crash-loop
+# (p.ej. un archivo que provoca OOM y mata el contenedor).
+_MAX_ATTEMPTS = 3
 _wakeup = asyncio.Event()
 
 # kind → (modelo de upload, runner)
@@ -54,17 +58,32 @@ def signal_atencion_queue() -> None:
 
 
 async def _reset_stale_processing() -> int:
-    """Jobs interrumpidos (processing) → pending, para que el worker los retome."""
+    """Jobs interrumpidos (processing) → pending. Si ya superaron el límite de
+    intentos, se marcan 'failed' para cortar un eventual crash-loop.
+    """
     reset = 0
+    failed = 0
     async with session_scope() as db:
         for Model, _ in _KINDS.values():
-            res = await db.execute(
-                update(Model).where(Model.status == "processing").values(status="pending")
+            # Poison: superaron los intentos → fallido (no se reprocesa).
+            r1 = await db.execute(
+                update(Model)
+                .where(Model.status == "processing", Model.retry_count >= _MAX_ATTEMPTS)
+                .values(status="failed",
+                        last_error="Reprocesamiento abortado tras varios intentos "
+                                   "(posible archivo problemático u OOM).")
             )
-            reset += res.rowcount or 0
+            failed += r1.rowcount or 0
+            # El resto: volver a pending incrementando el contador de intentos.
+            r2 = await db.execute(
+                update(Model)
+                .where(Model.status == "processing")
+                .values(status="pending", retry_count=Model.retry_count + 1)
+            )
+            reset += r2.rowcount or 0
         await db.commit()
-    if reset:
-        logger.warning(f"[atencion-queue] reset {reset} jobs 'processing' -> 'pending'")
+    if reset or failed:
+        logger.warning(f"[atencion-queue] reset {reset} a 'pending', {failed} a 'failed' (poison)")
     return reset
 
 

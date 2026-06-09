@@ -12,13 +12,11 @@ from typing import Any, AsyncIterator, Optional
 
 from ...core.config import settings
 
-# Import guardado: `@function_tool` resuelve los type-hints (RunContextWrapper)
-# contra los globals de este módulo. Si el SDK no está, queda None y nunca se
-# llega a decorar (build_agent corta antes con AgentNotConfigured).
-try:
-    from agents import RunContextWrapper  # type: ignore
-except ImportError:  # pragma: no cover
-    RunContextWrapper = None  # type: ignore
+# OJO: el SDK `openai-agents` (pesado: trae openai + mcp) NO se importa a nivel
+# módulo para no inflar la memoria del boot. Se carga recién dentro de
+# `_build_agent`, que además inyecta `RunContextWrapper` en los globals de este
+# módulo para que `@function_tool` resuelva los type-hints.
+RunContextWrapper = None  # type: ignore  # se setea en _build_agent
 
 from .sql_tool import describe_schema_impl, run_select_impl
 from .tools import (
@@ -79,10 +77,15 @@ def _build_agent():
     """Construye el Agent con sus tools. Importa el SDK de forma perezosa."""
     try:
         from agents import Agent, function_tool, set_default_openai_key
+        from agents import RunContextWrapper as _RCW
     except ImportError as exc:  # SDK no instalado
         raise AgentNotConfigured(
             "El SDK 'openai-agents' no está instalado en el servidor."
         ) from exc
+
+    # Inyectar en los globals del módulo para que get_type_hints (que usa
+    # @function_tool) resuelva las anotaciones RunContextWrapper[AgentContext].
+    globals()["RunContextWrapper"] = _RCW
 
     if not settings.openai_api_key:
         raise AgentNotConfigured("Falta OPENAI_API_KEY en la configuración del servidor.")
