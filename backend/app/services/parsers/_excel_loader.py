@@ -30,14 +30,19 @@ def _is_xls(path: Path) -> bool:
 
 def _load_xlsx(path: Path) -> dict[str, list[list[Any]]]:
     import openpyxl
-    wb = openpyxl.load_workbook(path, data_only=True)
+    # read_only=True → lectura en streaming (memoria acotada); sin él, openpyxl
+    # carga TODO el workbook en RAM y un archivo grande revienta el proceso.
+    wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     out: dict[str, list[list[Any]]] = {}
-    for sname in wb.sheetnames:
-        ws = wb[sname]
-        rows: list[list[Any]] = []
-        for row in ws.iter_rows(values_only=True):
-            rows.append(list(row))
-        out[sname] = rows
+    try:
+        for sname in wb.sheetnames:
+            ws = wb[sname]
+            rows: list[list[Any]] = []
+            for row in ws.iter_rows(values_only=True):
+                rows.append(list(row))
+            out[sname] = rows
+    finally:
+        wb.close()
     return out
 
 
