@@ -29,6 +29,7 @@ from ...core.database import get_db
 from ...jobs.atencion_queue import signal_atencion_queue
 from ...models.atencion_gestion_report import AtencionGestionReport
 from ...models.atencion_gestion_upload import AtencionGestionUpload
+from ...models.atencion_gestion_item import AtencionGestionItem
 from ...models.atencion_llamadas_report import AtencionLlamadasReport
 from ...models.atencion_llamadas_upload import AtencionLlamadasUpload
 from ...schemas.atencion import (
@@ -305,6 +306,69 @@ async def list_gestion_reports(
         items=[AtencionGestionReportSummary.model_validate(r) for r in items], total=len(items))
 
 
+async def _backfill_series_desde_items(db: AsyncSession, report: AtencionGestionReport) -> None:
+    """Auto-reparación: si el reporte no tiene serie por día / cruce responsable×estado
+    guardados (reportes viejos o de la ventana del incidente), los reconstruye desde
+    `atencion_gestion_items` y los persiste."""
+    from collections import defaultdict
+    from ...services.parsers._text import strip_accents
+
+    data = dict(report.data or {})
+    if data.get("serie_estado_dia") and data.get("por_responsable_estado"):
+        return  # ya están
+
+    items = (await db.execute(
+        select(AtencionGestionItem.estado, AtencionGestionItem.fecha, AtencionGestionItem.responsable)
+        .where(AtencionGestionItem.report_id == report.id)
+    )).all()
+    if not items:
+        return
+
+    PREF = ["Cerrado", "En proceso", "Pendiente"]
+
+    def lab(e):
+        return (e or "").strip() or "(sin estado)"
+
+    presentes: dict[str, str] = {}
+    for est, _f, _r in items:
+        e = lab(est)
+        presentes.setdefault(strip_accents(e), e)
+    estados, seen = [], set()
+    for p in PREF:
+        k = strip_accents(p)
+        if k in presentes and k not in seen:
+            estados.append(presentes[k]); seen.add(k)
+    for k in sorted(presentes):
+        if k not in seen:
+            estados.append(presentes[k]); seen.add(k)
+
+    dia: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    resp: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    rtot: dict[str, int] = defaultdict(int)
+    for est, fecha, responsable in items:
+        e = lab(est)
+        if fecha:
+            dia[fecha.isoformat()][e] += 1
+        r = (responsable or "").strip() or "(sin responsable)"
+        resp[r][e] += 1
+        rtot[r] += 1
+
+    data["estados_lista"] = estados
+    data["serie_estado_dia"] = [
+        {"dia": d, **{e: dia[d].get(e, 0) for e in estados}} for d in sorted(dia)
+    ]
+    data["por_responsable_estado"] = {
+        "estados": estados,
+        "responsables": [
+            {"responsable": r, "por_estado": {e: resp[r].get(e, 0) for e in estados}, "total": rtot[r]}
+            for r in sorted(resp, key=lambda x: -rtot[x])
+        ],
+        "totales": {**{e: sum(resp[r].get(e, 0) for r in resp) for e in estados},
+                    "total": sum(rtot.values())},
+    }
+    report.data = data  # persiste en el commit del record_action (self-healing)
+
+
 @router.get("/gestiones/reports/{report_id}", response_model=AtencionGestionReportDetail)
 async def get_gestion_report(
     report_id: str,
@@ -317,6 +381,10 @@ async def get_gestion_report(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Reporte no encontrado")
     if user.is_client and not report.is_published:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Reporte no publicado")
+    try:
+        await _backfill_series_desde_items(db, report)
+    except Exception:
+        pass
     await record_action(
         db, user_id=user.id, action="view_atencion_gestion_report",
         resource_type="atencion_gestion_report", resource_id=report_id,
