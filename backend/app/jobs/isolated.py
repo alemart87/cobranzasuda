@@ -50,3 +50,19 @@ async def run_isolated(func: Callable[..., Any], *args: Any) -> Any:
             except Exception:
                 pass
         executor.shutdown(wait=False, cancel_futures=True)
+
+
+def friendly_error(exc: BaseException) -> str:
+    """Mensaje claro para el usuario sobre por qué falló su carga."""
+    import concurrent.futures
+    if isinstance(exc, TimeoutError):
+        return ("El procesamiento tardó demasiado. El archivo parece muy grande o tener un "
+                "formato incorrecto. Revisalo y volvé a subirlo.")
+    if isinstance(exc, MemoryError):
+        return ("El archivo consumió demasiada memoria. Verificá que sea el archivo correcto "
+                "y que no esté dañado, y volvé a subirlo.")
+    if isinstance(exc, concurrent.futures.process.BrokenProcessPool):
+        return ("No se pudo procesar el archivo (posible formato inválido, dañado o demasiado "
+                "grande). Corregilo y volvé a subirlo.")
+    msg = str(exc).strip()
+    return msg[:300] if msg else ("No se pudo procesar el archivo. Verificá el formato y volvé a subirlo.")
