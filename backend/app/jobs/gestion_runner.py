@@ -9,6 +9,12 @@ from ..models.gestion_report import GestionReport
 from ..models.gestion_upload import GestionUpload
 from ..services.analyzers import analyze_gestiones
 from ..services.parsers import parse_gestiones
+from .isolated import friendly_error, run_isolated
+
+
+def _build(file_path: str) -> dict:
+    """Parseo + análisis (sync). Corre AISLADO en subproceso."""
+    return analyze_gestiones(parse_gestiones(file_path))
 
 
 async def process_gestion_upload(upload_id: str) -> None:
@@ -21,10 +27,10 @@ async def process_gestion_upload(upload_id: str) -> None:
         upload.status = "processing"
         upload.started_at = datetime.utcnow()
         await db.commit()
+        file_path = upload.file_path
 
     try:
-        rows = parse_gestiones(upload.file_path)
-        analysis = analyze_gestiones(rows)
+        analysis = await run_isolated(_build, file_path)
 
         async with session_scope() as db:
             period = upload.period_month or datetime.utcnow().date().replace(day=1)
@@ -53,6 +59,6 @@ async def process_gestion_upload(upload_id: str) -> None:
             up = await db.get(GestionUpload, upload_id)
             if up:
                 up.status = "failed"
-                up.last_error = str(exc)[:500]
+                up.last_error = friendly_error(exc)
                 up.retry_count = (up.retry_count or 0) + 1
                 await db.commit()

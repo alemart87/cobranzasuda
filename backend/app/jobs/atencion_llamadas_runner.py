@@ -19,6 +19,7 @@ from ..models.atencion_llamadas_report import AtencionLlamadasReport
 from ..models.atencion_llamadas_upload import AtencionLlamadasUpload
 from ..services.analyzers import analyze_atencion_llamadas
 from ..services.parsers import parse_colas, parse_entrantes, parse_estados, parse_intervalo
+from .isolated import run_isolated
 
 
 def _build_analysis(entrantes_path: str, estados_path: str,
@@ -53,7 +54,8 @@ async def run_atencion_llamadas(upload_id: str) -> None:
         period = upload.period_month or datetime.utcnow().date().replace(day=1)
 
     try:
-        analysis = await asyncio.to_thread(_build_analysis, *paths)
+        # Parseo aislado en subproceso (memoria + timeout acotados).
+        analysis = await run_isolated(_build_analysis, *paths)
         k = analysis["kpis"]
 
         async with session_scope() as db:

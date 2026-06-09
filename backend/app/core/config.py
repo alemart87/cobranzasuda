@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     upload_dir: str = "./uploads"
     max_upload_size_mb: int = 20
 
+    # Procesamiento aislado de archivos (subproceso con límites) para que un
+    # archivo malo NUNCA pueda tumbar la API.
+    upload_proc_timeout_s: int = 180        # mata el subproceso si tarda más
+    upload_proc_mem_mb: int = 1024          # tope de memoria del subproceso
+    upload_max_rows: int = 300000           # tope de filas por hoja al leer Excel
+
     log_level: str = "INFO"
     audit_retention_days: int = 365
 
