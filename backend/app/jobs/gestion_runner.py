@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Any
+
 from ..core.database import session_scope
 from ..core.logging import logger
+from ..models.gestion_item import GestionItem
 from ..models.gestion_report import GestionReport
 from ..models.gestion_upload import GestionUpload
 from ..services.analyzers import analyze_gestiones
@@ -12,9 +15,24 @@ from ..services.parsers import parse_gestiones
 from .isolated import friendly_error, run_isolated
 
 
-def _build(file_path: str) -> dict:
-    """Parseo + análisis (sync). Corre AISLADO en subproceso."""
-    return analyze_gestiones(parse_gestiones(file_path))
+def _build(file_path: str) -> tuple[dict, list[dict[str, Any]]]:
+    """Parseo + análisis + filas granulares (sync). Corre AISLADO en subproceso."""
+    rows = parse_gestiones(file_path)
+    analysis = analyze_gestiones(rows)
+    items: list[dict[str, Any]] = []
+    for r in rows:
+        f = r.get("fecha")
+        items.append({
+            "fecha": f.date() if f else None,
+            "subestado": (r.get("subestado") or "")[:120] or None,
+            "estado": (r.get("estado") or "")[:120] or None,
+            "usuario": (r.get("usuario") or "")[:160] or None,
+            "campana": (r.get("campana") or "")[:160] or None,
+            "cliente": (r.get("lead") or "")[:255] or None,
+            "poliza": (str(r.get("poliza_raw")) if r.get("poliza_raw") else None or "")[:60] or None,
+            "poliza_key": r.get("poliza_key"),
+        })
+    return analysis, items
 
 
 async def process_gestion_upload(upload_id: str) -> None:
@@ -30,7 +48,7 @@ async def process_gestion_upload(upload_id: str) -> None:
         file_path = upload.file_path
 
     try:
-        analysis = await run_isolated(_build, file_path)
+        analysis, items = await run_isolated(_build, file_path)
 
         async with session_scope() as db:
             period = upload.period_month or datetime.utcnow().date().replace(day=1)
@@ -46,6 +64,9 @@ async def process_gestion_upload(upload_id: str) -> None:
                 data=analysis,
             )
             db.add(report)
+            await db.flush()
+            for it in items:
+                db.add(GestionItem(report_id=report.id, period_month=period, **it))
             up = await db.get(GestionUpload, upload_id)
             up.status = "completed"
             up.completed_at = datetime.utcnow()

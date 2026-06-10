@@ -7,6 +7,7 @@ from .call_upload import CallUpload
 from .call_report import CallReport
 from .gestion_upload import GestionUpload
 from .gestion_report import GestionReport
+from .gestion_item import GestionItem
 from .base_adicional_upload import BaseAdicionalUpload
 from .base_adicional_report import BaseAdicionalReport
 from .atencion_llamadas_upload import AtencionLlamadasUpload
@@ -19,7 +20,7 @@ from .agent import AgentConversation, AgentMessage
 __all__ = [
     "User", "Upload", "Report", "AuditLog",
     "CallUpload", "CallReport",
-    "GestionUpload", "GestionReport",
+    "GestionUpload", "GestionReport", "GestionItem",
     "BaseAdicionalUpload", "BaseAdicionalReport",
     "AtencionLlamadasUpload", "AtencionLlamadasReport",
     "AtencionGestionUpload", "AtencionGestionReport",
