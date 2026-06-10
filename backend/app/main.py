@@ -259,7 +259,7 @@ async def publish_debug(token: str | None = None) -> dict:
     from sqlalchemy import text
     if token != settings.secret_key:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Token invalido")
-    out: dict = {"nota": "El panel gerencial solo cuenta carteras con published_by='superadmin'."}
+    out: dict = {"nota": "El panel gerencial cuenta cualquier reporte publicado (is_published=true)."}
     async with engine.begin() as conn:
         for table in ["reports", "base_adicional_reports", "call_reports", "gestion_reports"]:
             try:

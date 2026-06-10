@@ -1,8 +1,8 @@
 """Overview gerencial: panel consolidado del mes, de un vistazo.
 
-Reglas de fuente (definidas con el cliente):
-* Carteras (DXP + Bases Adicionales): SOLO reportes publicados por el superadmin.
-* Llamadas y Gestiones: cualquier reporte publicado.
+Reglas de fuente:
+* Todos los bloques (carteras, llamadas, gestiones) cuentan cualquier reporte
+  PUBLICADO, sin importar quién lo publicó (superadmin o analista).
 * Se toma el MES más reciente que tenga datos publicados.
 
 Rendimiento estimativo = total_gestiones / pólizas_totales_cartera * 100.
@@ -27,7 +27,6 @@ from ..deps import CurrentUser, get_current_user
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 
-SUPERADMIN_ID = "superadmin"
 _MORA_KEYS = ("h_30", "h_60", "h_90", "h_120", "h_150", "m_150")
 _BASE_LABELS = {"debitos_automaticos": "Base Débitos Automáticos", "bancard": "Base Bancard"}
 
@@ -144,9 +143,7 @@ async def get_overview(
             if pm is not None:
                 months.append(pm)
 
-    # Carteras: para el NAVEGADOR de meses cuenta cualquier publicada (si no,
-    # un mes con cartera publicada por un analista desaparecería del selector);
-    # el BLOQUE de carteras del panel sigue exigiendo publicación del superadmin.
+    # Carteras: cualquier reporte publicado (superadmin o analista).
     await _collect(
         select(Report.period_month).where(Report.is_published == True)  # noqa: E712
     )
@@ -173,14 +170,13 @@ async def get_overview(
         target = max(months)
     start, end = _month_range(target)
 
-    # --- 2) Carteras del mes (publicadas por superadmin) ---
+    # --- 2) Carteras del mes (cualquier reporte publicado) ---
     items: list[CarteraItem] = []
 
     dxp = (await db.execute(
         select(Report)
         .where(
             Report.is_published == True,  # noqa: E712
-            Report.published_by == SUPERADMIN_ID,
             Report.period_month >= start, Report.period_month < end,
         )
         .order_by(Report.generated_at.desc())
@@ -195,7 +191,6 @@ async def get_overview(
             .where(
                 BaseAdicionalReport.tipo == tipo,
                 BaseAdicionalReport.is_published == True,  # noqa: E712
-                BaseAdicionalReport.published_by == SUPERADMIN_ID,
                 BaseAdicionalReport.period_month >= start, BaseAdicionalReport.period_month < end,
             )
             .order_by(BaseAdicionalReport.generated_at.desc())
@@ -220,27 +215,10 @@ async def get_overview(
         )
     else:
         # Falla NO silenciosa: explicar por qué el bloque viene vacío.
-        otros = (await db.execute(
-            select(Report.id).where(
-                Report.is_published == True,  # noqa: E712
-                Report.published_by != SUPERADMIN_ID,
-                Report.period_month >= start, Report.period_month < end,
-            ).limit(1)
-        )).first() or (await db.execute(
-            select(BaseAdicionalReport.id).where(
-                BaseAdicionalReport.is_published == True,  # noqa: E712
-                BaseAdicionalReport.published_by != SUPERADMIN_ID,
-                BaseAdicionalReport.period_month >= start, BaseAdicionalReport.period_month < end,
-            ).limit(1)
-        )).first()
-        if otros:
-            carteras_alerta = (
-                "Hay reportes de cartera de este mes publicados por un analista. "
-                "El panel gerencial solo muestra carteras publicadas por el superadmin: "
-                "despublicá y volvé a publicarlos con el usuario superadmin desde el Centro de Publicaciones."
-            )
-        else:
-            carteras_alerta = "No hay reporte de cartera publicado para este mes."
+        carteras_alerta = (
+            "No hay reporte de cartera publicado para este mes. "
+            "Procesá la cartera y publicala desde el Centro de Publicaciones."
+        )
 
     # --- 3) Llamadas del mes (cualquier publicado) ---
     call = (await db.execute(
