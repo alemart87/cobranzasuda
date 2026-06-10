@@ -8,8 +8,15 @@ import {
 } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
+import { PrintButton, PrintHeader } from "@/components/PrintButton";
 import { apiFetch } from "@/lib/api";
+import { downloadCsv } from "@/lib/csv";
 import { formatDate, formatInt } from "@/lib/format";
+
+interface DrillCliente {
+  cliente: string | null; poliza: string | null; campana: string | null;
+  asesor: string | null; estado: string | null; subestado: string | null; fecha: string | null;
+}
 
 interface FunnelMetrics {
   gestiones: number;
@@ -46,12 +53,26 @@ export default function GestionReportDetailPage() {
   const params = useParams<{ id: string }>();
   const [report, setReport] = useState<GestionReportDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [drill, setDrill] = useState<{ subestado: string; clientes: DrillCliente[]; loading: boolean; error?: string } | null>(null);
 
   useEffect(() => {
     apiFetch<GestionReportDetail>(`/api/v1/gestiones/reports/${params.id}`)
       .then(setReport)
       .catch((e) => setError(e.message));
   }, [params.id]);
+
+  const openDrill = async (subestado: string) => {
+    if (!subestado) return;
+    setDrill({ subestado, clientes: [], loading: true });
+    try {
+      const d = await apiFetch<{ clientes: DrillCliente[] }>(
+        `/api/v1/gestiones/reports/${params.id}/clientes?subestado=${encodeURIComponent(subestado)}`,
+      );
+      setDrill({ subestado, clientes: d.clientes, loading: false });
+    } catch (e: any) {
+      setDrill({ subestado, clientes: [], loading: false, error: e.message });
+    }
+  };
 
   if (error) return <AppShell><div className="text-brand-primary">{error}</div></AppShell>;
   if (!report) return <AppShell><div className="text-brand-slate">Cargando…</div></AppShell>;
@@ -61,11 +82,15 @@ export default function GestionReportDetailPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
-        <h1 className="font-display text-3xl text-brand-ink uppercase">Reporte de Gestiones</h1>
-        <p className="text-sm text-brand-slate mt-1">
-          Período: <b>{report.period_month ?? "—"}</b> · Generado: {formatDate(report.generated_at)}
-        </p>
+      <PrintHeader titulo="Reporte de Gestiones" subtitulo={`Período: ${report.period_month ?? "—"} · Generado: ${formatDate(report.generated_at)}`} />
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl text-brand-ink uppercase">Reporte de Gestiones</h1>
+          <p className="text-sm text-brand-slate mt-1">
+            Período: <b>{report.period_month ?? "—"}</b> · Generado: {formatDate(report.generated_at)}
+          </p>
+        </div>
+        <PrintButton />
       </div>
 
       {/* KPIs hero del funnel */}
@@ -105,24 +130,28 @@ export default function GestionReportDetailPage() {
         <h2 className="font-display text-xl text-brand-ink uppercase mb-1">Distribución por subestado</h2>
         <p className="text-xs text-brand-slate mb-4">
           Composición de las {formatInt(f.gestiones)} gestiones del período.
+          <span className="text-brand-cyan font-medium"> Clickeá un subestado para ver y descargar los clientes.</span>
         </p>
         <div className="grid md:grid-cols-2 gap-6 items-center">
           <ResponsiveContainer width="100%" height={320}>
             <PieChart>
-              <Pie data={subPieData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={120} paddingAngle={2}>
+              <Pie data={subPieData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={120} paddingAngle={2}
+                onClick={(d: any) => openDrill(d?.name)} className="cursor-pointer">
                 {subPieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
               </Pie>
               <Tooltip />
             </PieChart>
           </ResponsiveContainer>
-          <div className="space-y-1.5 max-h-80 overflow-y-auto">
+          <div className="space-y-1 max-h-80 overflow-y-auto">
             {report.data.subestados.map((s, i) => (
-              <div key={s.subestado} className="flex items-center gap-2 text-sm">
+              <button key={s.subestado} onClick={() => openDrill(s.subestado)}
+                className="w-full flex items-center gap-2 text-sm text-left px-2 py-1.5 rounded hover:bg-brand-bg transition-colors group">
                 <span className="w-3 h-3 rounded shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                <span className="flex-1 text-brand-graphite">{s.subestado}</span>
+                <span className="flex-1 text-brand-graphite group-hover:text-brand-cyan">{s.subestado}</span>
                 <span className="font-semibold text-brand-ink">{formatInt(s.cantidad)}</span>
                 <span className="text-xs text-brand-slate w-12 text-right">{s.pct.toFixed(1)} %</span>
-              </div>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-brand-mist group-hover:text-brand-cyan"><path d="m9 18 6-6-6-6" /></svg>
+              </button>
             ))}
           </div>
         </div>
@@ -178,6 +207,73 @@ export default function GestionReportDetailPage() {
             </BarChart>
           </ResponsiveContainer>
         </section>
+      )}
+
+      {/* Modal drilldown de clientes por subestado */}
+      {drill && (
+        <div className="no-print fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={() => setDrill(null)}>
+          <div className="card w-full max-w-4xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 px-5 py-3.5 border-b border-brand-border">
+              <div>
+                <h3 className="font-display text-lg text-brand-ink uppercase leading-tight">Clientes · {drill.subestado}</h3>
+                <p className="text-xs text-brand-slate">{drill.loading ? "Cargando…" : `${formatInt(drill.clientes.length)} gestión(es)`}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                {drill.clientes.length > 0 && (
+                  <button
+                    onClick={() => downloadCsv(
+                      `clientes_${drill.subestado.replace(/[^a-z0-9]+/gi, "_")}_${report.period_month ?? ""}`,
+                      drill.clientes,
+                      [
+                        { key: "cliente", label: "Cliente" }, { key: "poliza", label: "Póliza" },
+                        { key: "campana", label: "Campaña" }, { key: "asesor", label: "Asesor" },
+                        { key: "estado", label: "Estado" }, { key: "subestado", label: "Subestado" },
+                        { key: "fecha", label: "Fecha" },
+                      ],
+                    )}
+                    className="btn-primary text-xs inline-flex items-center gap-1.5"
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m7 10 5 5 5-5" /><path d="M12 15V3" /></svg>
+                    Descargar CSV
+                  </button>
+                )}
+                <button onClick={() => setDrill(null)} className="text-brand-mist hover:text-brand-ink text-xl leading-none px-1">×</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-auto">
+              {drill.error && <p className="p-6 text-brand-primary text-sm">{drill.error}</p>}
+              {!drill.loading && !drill.error && drill.clientes.length === 0 && (
+                <p className="p-8 text-center text-brand-slate text-sm">
+                  Sin detalle de clientes para este subestado. Si el reporte se procesó con una versión anterior, volvé a subir el archivo de Gestiones.
+                </p>
+              )}
+              {drill.clientes.length > 0 && (
+                <table className="w-full text-sm">
+                  <thead className="bg-brand-bg border-b border-brand-border sticky top-0">
+                    <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
+                      <th className="px-4 py-2.5 text-left">Cliente</th>
+                      <th className="px-4 py-2.5 text-left">Póliza</th>
+                      <th className="px-4 py-2.5 text-left">Campaña</th>
+                      <th className="px-4 py-2.5 text-left">Asesor</th>
+                      <th className="px-4 py-2.5 text-left">Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {drill.clientes.map((c, i) => (
+                      <tr key={i} className="border-t border-brand-border hover:bg-brand-bg-soft">
+                        <td className="px-4 py-2 font-medium text-brand-ink">{c.cliente || "—"}</td>
+                        <td className="px-4 py-2 text-brand-slate">{c.poliza || "—"}</td>
+                        <td className="px-4 py-2 text-brand-slate">{c.campana || "—"}</td>
+                        <td className="px-4 py-2 text-brand-slate">{c.asesor || "—"}</td>
+                        <td className="px-4 py-2 text-brand-slate">{c.fecha || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </AppShell>
   );

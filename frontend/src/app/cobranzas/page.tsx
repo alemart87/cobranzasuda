@@ -5,6 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { MonthNavigator } from "@/components/MonthNavigator";
+import { PrintButton, PrintHeader } from "@/components/PrintButton";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
 import { getPreferredMonth, monthLabel, pickInitialMonth, setPreferredMonth, toMonth } from "@/lib/month";
@@ -186,6 +187,14 @@ const ICONS = {
 };
 
 const VIEW_ACTIONS: ActionTile[] = [
+  {
+    href: "/cobranzas/informe-general",
+    title: "Informe General del Mes",
+    description: "Consolidá gerencial + llamadas + gestiones en un solo PDF. Elegís qué incluir y el título.",
+    icon: ICONS.clipboard,
+    variant: "primary",
+    forRoles: ["superadmin", "analyst"],
+  },
   {
     href: "/cobranzas/carteras-totales",
     title: "Carteras Totales",
@@ -430,12 +439,13 @@ export default function CobranzasHubPage() {
 
   return (
     <AppShell>
-      <div className="mb-2 text-xs text-brand-slate">
+      <PrintHeader titulo="Resumen Gerencial · Cobranzas" subtitulo={month ? `Período: ${monthLabel(month)}` : undefined} />
+      <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/operativas" className="hover:text-brand-primary">Operativas</Link>
         <span className="mx-2">/</span>
         <span className="text-brand-ink font-semibold">Cobranzas</span>
       </div>
-      <div className="mb-8 pb-5 border-b border-brand-border">
+      <div className="mb-8 pb-5 border-b border-brand-border no-print">
         <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Cobranzas</h1>
         <p className="text-sm text-brand-slate mt-1 max-w-2xl">
           Cartera, recupero del mes, reporte operativo de contact center y proyecciones.
@@ -448,8 +458,9 @@ export default function CobranzasHubPage() {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <SectionLabel>Resumen gerencial</SectionLabel>
             <div className="flex items-center gap-3">
-              <span className="text-[11px] text-brand-mist hidden sm:inline">Solo datos publicados</span>
-              <MonthNavigator months={ov.available_months} value={month} onChange={onMonth} />
+              <span className="text-[11px] text-brand-mist hidden sm:inline no-print">Solo datos publicados</span>
+              <div className="no-print"><MonthNavigator months={ov.available_months} value={month} onChange={onMonth} /></div>
+              <PrintButton />
             </div>
           </div>
 
@@ -624,7 +635,7 @@ export default function CobranzasHubPage() {
       )}
 
       {/* Ver reportes */}
-      <section className="mb-10">
+      <section className="mb-10 no-print">
         <SectionLabel>Ver reportes</SectionLabel>
         <div className="grid md:grid-cols-2 gap-4">
           {viewActions.map((a) => (
@@ -635,7 +646,7 @@ export default function CobranzasHubPage() {
 
       {/* Cargar datos — solo analista/superadmin */}
       {uploadActions.length > 0 && (
-        <section>
+        <section className="no-print">
           <SectionLabel>Cargar datos</SectionLabel>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
             {uploadActions.map((a) => (

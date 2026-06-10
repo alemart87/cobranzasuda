@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.config import settings
 from ...core.database import get_db
 from ...jobs.gestion_runner import process_gestion_upload
+from ...models.gestion_item import GestionItem
 from ...models.gestion_report import GestionReport
 from ...models.gestion_upload import GestionUpload
 from ...schemas.gestiones import (
@@ -140,6 +141,38 @@ async def get_gestion_report(
         ip=client_ip(request), extra={"role": user.role},
     )
     return report
+
+
+@router.get("/reports/{report_id}/clientes")
+async def get_gestion_clientes(
+    report_id: str,
+    subestado: str,
+    limit: int = 1000,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Clientes (gestiones) que cayeron en un subestado dado, para drilldown/descarga."""
+    report = await db.get(GestionReport, report_id)
+    if not report:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Reporte no encontrado")
+    if user.is_client and not report.is_published:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Reporte no publicado")
+
+    limit = max(1, min(limit, 5000))
+    rows = (await db.execute(
+        select(GestionItem)
+        .where(GestionItem.report_id == report_id, GestionItem.subestado == subestado)
+        .order_by(GestionItem.usuario.asc())
+        .limit(limit)
+    )).scalars().all()
+
+    items = [{
+        "cliente": r.cliente, "poliza": r.poliza, "campana": r.campana,
+        "asesor": r.usuario, "estado": r.estado, "subestado": r.subestado,
+        "fecha": r.fecha.isoformat() if r.fecha else None,
+    } for r in rows]
+    return {"subestado": subestado, "cantidad": len(items), "limite": limit, "clientes": items,
+            "detalle_disponible": True}
 
 
 @router.post("/reports/{report_id}/publish", response_model=GestionReportSummary)
