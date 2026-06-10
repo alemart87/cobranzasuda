@@ -8,6 +8,7 @@ import {
 } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
+import { PrintButton, PrintHeader } from "@/components/PrintButton";
 import { apiFetch } from "@/lib/api";
 import { formatDate, formatInt } from "@/lib/format";
 
@@ -61,11 +62,15 @@ export default function GestionReportDetailPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
-        <h1 className="font-display text-3xl text-brand-ink uppercase">Reporte de Gestiones</h1>
-        <p className="text-sm text-brand-slate mt-1">
-          Período: <b>{report.period_month ?? "—"}</b> · Generado: {formatDate(report.generated_at)}
-        </p>
+      <PrintHeader titulo="Reporte de Gestiones" subtitulo={`Período: ${report.period_month ?? "—"} · Generado: ${formatDate(report.generated_at)}`} />
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl text-brand-ink uppercase">Reporte de Gestiones</h1>
+          <p className="text-sm text-brand-slate mt-1">
+            Período: <b>{report.period_month ?? "—"}</b> · Generado: {formatDate(report.generated_at)}
+          </p>
+        </div>
+        <PrintButton />
       </div>
 
       {/* KPIs hero del funnel */}

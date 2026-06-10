@@ -131,6 +131,24 @@ h3,
   animation: vc-shimmer 1.6s linear infinite;
 }
 
+/* ===== Impresión / Guardar como PDF ===== */
+.print-only { display: none; }
+@media print {
+  /* Ocultar cromo de la app y todo lo marcado como no imprimible */
+  header, footer, .no-print { display: none !important; }
+  .print-only { display: block !important; }
+  body { background: #fff !important; }
+  main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+  /* Tarjetas planas y sin cortes entre páginas */
+  .card, section { box-shadow: none !important; break-inside: avoid; page-break-inside: avoid; }
+  /* Gráficos: escalar el SVG al ancho de página y colores exactos */
+  .recharts-responsive-container, .recharts-wrapper { width: 100% !important; }
+  svg.recharts-surface { width: 100% !important; height: auto !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  a[href]:after { content: ""; }  /* no imprimir URLs */
+  @page { size: A4; margin: 12mm; }
+}
+
 /* Scrollbar corporativo en navegadores Webkit */
 ::-webkit-scrollbar {
   width: 10px;

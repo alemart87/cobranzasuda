@@ -4,6 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
+import { PrintButton, PrintHeader } from "@/components/PrintButton";
 import { AsesoresDetalleTabla } from "@/components/charts/AsesoresDetalleTabla";
 import { AsesoresLlamadasChart } from "@/components/charts/AsesoresLlamadasChart";
 import { LlamadasPorDiaChart } from "@/components/charts/LlamadasPorDiaChart";
@@ -70,13 +71,15 @@ export default function CallReportDetailPage() {
 
   return (
     <AppShell>
-      <div className="mb-6 flex items-baseline justify-between">
+      <PrintHeader titulo="Reporte de Llamadas" subtitulo={`Período: ${report.period_month ?? "—"} · Generado: ${formatDate(report.generated_at)}`} />
+      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-brand-secondary">Reporte de Llamadas</h1>
           <p className="text-sm text-brand-neutral-500">
             Período: <b>{report.period_month ?? "—"}</b> · Generado: {formatDate(report.generated_at)}
           </p>
         </div>
+        <PrintButton />
       </div>
 
       {/* KPIs equipo */}
