@@ -1,8 +1,8 @@
 """Overview gerencial: panel consolidado del mes, de un vistazo.
 
-Reglas de fuente (definidas con el cliente):
-* Carteras (DXP + Bases Adicionales): SOLO reportes publicados por el superadmin.
-* Llamadas y Gestiones: cualquier reporte publicado.
+Reglas de fuente:
+* Todos los bloques (carteras, llamadas, gestiones) cuentan cualquier reporte
+  PUBLICADO, sin importar quién lo publicó (superadmin o analista).
 * Se toma el MES más reciente que tenga datos publicados.
 
 Rendimiento estimativo = total_gestiones / pólizas_totales_cartera * 100.
@@ -27,7 +27,6 @@ from ..deps import CurrentUser, get_current_user
 
 router = APIRouter(prefix="/overview", tags=["overview"])
 
-SUPERADMIN_ID = "superadmin"
 _MORA_KEYS = ("h_30", "h_60", "h_90", "h_120", "h_150", "m_150")
 _BASE_LABELS = {"debitos_automaticos": "Base Débitos Automáticos", "bancard": "Base Bancard"}
 
@@ -84,6 +83,8 @@ class OverviewResponse(BaseModel):
     period_month: Optional[date] = None
     available_months: list[str] = []  # YYYY-MM con datos publicados, desc
     carteras: Optional[CarterasBlock] = None
+    # Motivo por el que el bloque de carteras viene vacío (falla NO silenciosa).
+    carteras_alerta: Optional[str] = None
     llamadas: Optional[LlamadasBlock] = None
     gestiones: Optional[GestionesBlock] = None
     rendimiento: Optional[RendimientoBlock] = None
@@ -142,17 +143,13 @@ async def get_overview(
             if pm is not None:
                 months.append(pm)
 
-    # Carteras: SOLO publicadas por superadmin.
+    # Carteras: cualquier reporte publicado (superadmin o analista).
     await _collect(
-        select(Report.period_month).where(
-            Report.is_published == True,  # noqa: E712
-            Report.published_by == SUPERADMIN_ID,
-        )
+        select(Report.period_month).where(Report.is_published == True)  # noqa: E712
     )
     await _collect(
         select(BaseAdicionalReport.period_month).where(
             BaseAdicionalReport.is_published == True,  # noqa: E712
-            BaseAdicionalReport.published_by == SUPERADMIN_ID,
         )
     )
     # Llamadas / Gestiones: cualquier publicado.
@@ -173,14 +170,13 @@ async def get_overview(
         target = max(months)
     start, end = _month_range(target)
 
-    # --- 2) Carteras del mes (publicadas por superadmin) ---
+    # --- 2) Carteras del mes (cualquier reporte publicado) ---
     items: list[CarteraItem] = []
 
     dxp = (await db.execute(
         select(Report)
         .where(
             Report.is_published == True,  # noqa: E712
-            Report.published_by == SUPERADMIN_ID,
             Report.period_month >= start, Report.period_month < end,
         )
         .order_by(Report.generated_at.desc())
@@ -195,7 +191,6 @@ async def get_overview(
             .where(
                 BaseAdicionalReport.tipo == tipo,
                 BaseAdicionalReport.is_published == True,  # noqa: E712
-                BaseAdicionalReport.published_by == SUPERADMIN_ID,
                 BaseAdicionalReport.period_month >= start, BaseAdicionalReport.period_month < end,
             )
             .order_by(BaseAdicionalReport.generated_at.desc())
@@ -205,6 +200,7 @@ async def get_overview(
             items.append(_cartera_from_base(base))
 
     carteras: Optional[CarterasBlock] = None
+    carteras_alerta: Optional[str] = None
     if items:
         # Recupero del mes: solo la cartera DXP recibe pagos.
         recupero = float(dxp.recupero_total or 0) if dxp else 0.0
@@ -216,6 +212,12 @@ async def get_overview(
             saldo_mora=sum(c.saldo_mora for c in items),
             asegurados_mora=sum(c.asegurados_mora for c in items),
             recupero=recupero,
+        )
+    else:
+        # Falla NO silenciosa: explicar por qué el bloque viene vacío.
+        carteras_alerta = (
+            "No hay reporte de cartera publicado para este mes. "
+            "Procesá la cartera y publicala desde el Centro de Publicaciones."
         )
 
     # --- 3) Llamadas del mes (cualquier publicado) ---
@@ -275,6 +277,7 @@ async def get_overview(
         period_month=start,
         available_months=available,
         carteras=carteras,
+        carteras_alerta=carteras_alerta,
         llamadas=llamadas,
         gestiones=gestiones,
         rendimiento=rendimiento,

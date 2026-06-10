@@ -251,6 +251,33 @@ async def cancel_atencion_jobs(token: str | None = None) -> dict:
     return {"cancelled": cancelled}
 
 
+@app.get("/api/v1/admin/publish-debug")
+async def publish_debug(token: str | None = None) -> dict:
+    """Diagnóstico del panel gerencial: estado de publicación de cada reporte
+    (período, publicado, POR QUIÉN). Auth: ?token=<SECRET_KEY>."""
+    from fastapi import HTTPException, status
+    from sqlalchemy import text
+    if token != settings.secret_key:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Token invalido")
+    out: dict = {"nota": "El panel gerencial cuenta cualquier reporte publicado (is_published=true)."}
+    async with engine.begin() as conn:
+        for table in ["reports", "base_adicional_reports", "call_reports", "gestion_reports"]:
+            try:
+                r = await conn.execute(text(
+                    f"SELECT id, period_month, is_published, published_by, generated_at "
+                    f"FROM {table} ORDER BY generated_at DESC LIMIT 25"
+                ))
+                out[table] = [
+                    {"id": str(row[0])[:8], "period_month": str(row[1]),
+                     "is_published": bool(row[2]), "published_by": row[3],
+                     "generated_at": str(row[4])}
+                    for row in r
+                ]
+            except Exception as exc:
+                out[table] = f"ERROR: {exc}"
+    return out
+
+
 @app.get("/api/v1/admin/db-info")
 async def db_info(token: str | None = None) -> dict:
     """Diagnóstico: cuántas filas hay en cada tabla principal."""
