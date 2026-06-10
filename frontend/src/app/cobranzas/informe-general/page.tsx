@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
-  Cell, Pie, PieChart, ResponsiveContainer, Tooltip,
+  Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { MonthNavigator } from "@/components/MonthNavigator";
 import { PrintButton } from "@/components/PrintButton";
 import { AsesoresDetalleTabla } from "@/components/charts/AsesoresDetalleTabla";
+import { AsesoresLlamadasChart } from "@/components/charts/AsesoresLlamadasChart";
 import { LlamadasPorDiaChart } from "@/components/charts/LlamadasPorDiaChart";
+import { TalkPorDiaChart } from "@/components/charts/TalkPorDiaChart";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatGs, formatInt, formatPct } from "@/lib/format";
 import { monthLabel } from "@/lib/month";
@@ -170,22 +172,38 @@ function Block({ title, children }: { title: string; children: React.ReactNode }
 
 function GerencialPreview({ ov }: { ov: any }) {
   const c = ov.carteras;
+  const g = ov.gestiones;
+  const l = ov.llamadas;
+  const pctMora = c && c.asegurados ? (c.asegurados_mora / c.asegurados) * 100 : 0;
   return (
     <Block title="Resumen Gerencial">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      {/* Operación del mes */}
+      <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold mb-2">Operación del mes</h3>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
         {ov.rendimiento && <KpiCard label="Rendimiento estimativo" value={`${ov.rendimiento.pct}%`} hint={`${formatInt(ov.rendimiento.gestiones)} gest. / ${formatInt(ov.rendimiento.asegurados)} aseg.`} accent="primary" />}
-        {ov.llamadas && <KpiCard label="Llamadas" value={formatInt(ov.llamadas.total_llamadas)} hint={`${formatInt(ov.llamadas.efectivas_total)} efectivas`} accent="purple" />}
-        {ov.llamadas && <KpiCard label="Total hablado" value={`${(ov.llamadas.total_talk_seg / 3600).toFixed(1)} hs`} hint={`AHT ${fmtMinSeg(ov.llamadas.aht_seg)}`} accent="cyan" />}
-        {ov.gestiones && <KpiCard label="Gestiones" value={formatInt(ov.gestiones.total_gestiones)} hint={`${formatInt(ov.gestiones.promesas_totales)} promesas`} accent="secondary" />}
+        {l && <KpiCard label="Llamadas" value={formatInt(l.total_llamadas)} hint={`${formatInt(l.efectivas_total)} efectivas`} accent="purple" />}
+        {l && <KpiCard label="Total hablado" value={`${(l.total_talk_seg / 3600).toFixed(1)} hs`} hint={`AHT ${fmtMinSeg(l.aht_seg)}`} accent="cyan" />}
+        {l && <KpiCard label="Asesores activos" value={formatInt(l.asesores_activos)} accent="neutral" />}
       </div>
+      {g && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
+          <KpiCard label="Gestiones" value={formatInt(g.total_gestiones)} accent="secondary" />
+          <KpiCard label="Contactos efectivos" value={formatInt(g.contactos_efectivos)} hint={`${formatPct(g.pct_contactos_efectivos)}`} accent="primary" />
+          <KpiCard label="Promesas obtenidas" value={formatInt(g.promesas_totales)} hint={`${formatPct(g.pct_promesas)}`} accent="cyan" />
+          <KpiCard label="Promesas cumplidas" value={formatInt(g.cobros_totales)} hint={`${formatPct(g.pct_promesas_cumplidas)}`} accent="orange" />
+        </div>
+      )}
+
       {c && (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+          <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold mb-2">Cartera consolidada</h3>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
             <KpiCard label="Pólizas" value={formatInt(c.polizas)} accent="secondary" />
             <KpiCard label="Asegurados" value={formatInt(c.asegurados)} accent="cyan" />
-            <KpiCard label="Clientes en mora" value={formatInt(c.asegurados_mora)} accent="orange" />
+            <KpiCard label="Clientes en mora" value={formatInt(c.asegurados_mora)} hint={`${formatPct(pctMora)} de la cartera`} accent="orange" />
             <KpiCard label="Saldo total" value={formatGs(c.saldo_total)} accent="primary" />
             <KpiCard label="Saldo en mora" value={formatGs(c.saldo_mora)} accent="orange" />
+            <KpiCard label="Recupero" value={formatGs(c.recupero)} accent="neutral" />
           </div>
           <div className="card overflow-x-auto">
             <table className="w-full text-sm">
@@ -194,8 +212,10 @@ function GerencialPreview({ ov }: { ov: any }) {
                   <th className="px-3 py-2 text-left">Cartera</th>
                   <th className="px-3 py-2 text-right">Pólizas</th>
                   <th className="px-3 py-2 text-right">Asegurados</th>
+                  <th className="px-3 py-2 text-right">En mora</th>
                   <th className="px-3 py-2 text-right">Saldo total</th>
                   <th className="px-3 py-2 text-right">Saldo en mora</th>
+                  <th className="px-3 py-2 text-right">Recupero</th>
                 </tr>
               </thead>
               <tbody>
@@ -204,11 +224,24 @@ function GerencialPreview({ ov }: { ov: any }) {
                     <td className="px-3 py-2 font-medium text-brand-ink">{it.nombre}</td>
                     <td className="px-3 py-2 text-right">{formatInt(it.polizas)}</td>
                     <td className="px-3 py-2 text-right">{formatInt(it.asegurados)}</td>
+                    <td className="px-3 py-2 text-right">{formatInt(it.asegurados_mora)}</td>
                     <td className="px-3 py-2 text-right">{formatGs(it.saldo_total)}</td>
                     <td className="px-3 py-2 text-right text-brand-orange">{formatGs(it.saldo_mora)}</td>
+                    <td className="px-3 py-2 text-right">{formatGs(it.recupero)}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-brand-ink font-semibold bg-brand-bg">
+                  <td className="px-3 py-2 text-brand-ink">Total</td>
+                  <td className="px-3 py-2 text-right">{formatInt(c.polizas)}</td>
+                  <td className="px-3 py-2 text-right">{formatInt(c.asegurados)}</td>
+                  <td className="px-3 py-2 text-right">{formatInt(c.asegurados_mora)}</td>
+                  <td className="px-3 py-2 text-right">{formatGs(c.saldo_total)}</td>
+                  <td className="px-3 py-2 text-right text-brand-orange">{formatGs(c.saldo_mora)}</td>
+                  <td className="px-3 py-2 text-right">{formatGs(c.recupero)}</td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </>
@@ -221,15 +254,29 @@ function LlamadasPreview({ r }: { r: any }) {
   const k = r.data.kpis;
   return (
     <Block title="Reporte de Llamadas">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        <KpiCard label="Total llamadas" value={formatInt(k.total_llamadas)} accent="primary" />
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+        <KpiCard label="Total llamadas" value={formatInt(k.total_llamadas)} hint={`${formatInt(k.promedio_diario)} /día`} accent="primary" />
         <KpiCard label="Talk time" value={k.total_talk_hms} hint={`${k.total_talk_horas} hs`} accent="cyan" />
         <KpiCard label="Efectivas" value={formatInt(k.efectivas_total)} hint={`${k.pct_efectivas}%`} accent="primary" />
+        <KpiCard label="No efectivas" value={formatInt(k.no_efectivas_total)} accent="orange" />
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
         <KpiCard label="AHT" value={k.aht_hms} accent="neutral" />
+        <KpiCard label="Promedio diario" value={formatInt(k.promedio_diario)} accent="cyan" />
+        <KpiCard label="Días operativos" value={formatInt(k.dias_operativos)} accent="neutral" />
+        <KpiCard label="Asesores activos" value={formatInt(k.asesores_activos)} accent="purple" />
       </div>
       <div className="card p-5 mb-4">
         <h3 className="text-sm font-semibold text-brand-ink mb-3">Llamadas por día y asesor</h3>
         <LlamadasPorDiaChart data={r.data.serie_diaria_llamadas} usuarios={r.data.usuarios} />
+      </div>
+      <div className="card p-5 mb-4">
+        <h3 className="text-sm font-semibold text-brand-ink mb-3">Tiempo hablado por día</h3>
+        <TalkPorDiaChart data={r.data.serie_diaria_talk} usuarios={r.data.usuarios} />
+      </div>
+      <div className="card p-5 mb-4">
+        <h3 className="text-sm font-semibold text-brand-ink mb-3">Ranking de asesores por llamadas</h3>
+        <AsesoresLlamadasChart asesores={r.data.asesores} />
       </div>
       <div className="card p-5">
         <h3 className="text-sm font-semibold text-brand-ink mb-3">Detalle por operador</h3>
@@ -239,31 +286,93 @@ function LlamadasPreview({ r }: { r: any }) {
   );
 }
 
+function MiniFunnelTable({ rows, labelHeader }: { rows: any[]; labelHeader: string }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="bg-brand-bg">
+          <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
+            <th className="px-3 py-2 text-left">{labelHeader}</th>
+            <th className="px-3 py-2 text-right">Gestiones</th>
+            <th className="px-3 py-2 text-right">Contactos</th>
+            <th className="px-3 py-2 text-right">% Cont.</th>
+            <th className="px-3 py-2 text-right">Promesas</th>
+            <th className="px-3 py-2 text-right">% Prom.</th>
+            <th className="px-3 py-2 text-right">Cumplidas</th>
+            <th className="px-3 py-2 text-right">% Cumpl.</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((a) => (
+            <tr key={a.label} className="border-t border-brand-border">
+              <td className="px-3 py-2 font-medium text-brand-ink max-w-xs truncate" title={a.label}>{a.label}</td>
+              <td className="px-3 py-2 text-right font-semibold">{formatInt(a.gestiones)}</td>
+              <td className="px-3 py-2 text-right">{formatInt(a.contactos_efectivos)}</td>
+              <td className="px-3 py-2 text-right font-mono text-brand-primary">{formatPct(a.pct_contactos_efectivos)}</td>
+              <td className="px-3 py-2 text-right text-brand-cyan font-semibold">{formatInt(a.promesas)}</td>
+              <td className="px-3 py-2 text-right font-mono text-brand-cyan">{formatPct(a.pct_promesas_sobre_contactos)}</td>
+              <td className="px-3 py-2 text-right text-brand-orange font-semibold">{formatInt(a.promesas_cumplidas)}</td>
+              <td className="px-3 py-2 text-right font-mono text-brand-orange">{formatPct(a.pct_promesas_cumplidas)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function GestionesPreview({ r }: { r: any }) {
   const f = r.data.funnel_equipo;
   const subs = r.data.subestados || [];
   const pie = subs.map((s: any) => ({ name: s.subestado, value: s.cantidad }));
+  const max = Math.max(f.gestiones, 1);
+  const w = (v: number) => `${Math.max((v / max) * 100, 6)}%`;
+  const funnelRows = [
+    { label: "Total gestiones", value: f.gestiones, hint: "Base del funnel", color: "bg-brand-ink" },
+    { label: "Contactos efectivos", value: f.contactos_efectivos, hint: `${formatPct(f.pct_contactos_efectivos)} sobre gestiones`, color: "bg-brand-primary" },
+    { label: "Promesas obtenidas", value: f.promesas, hint: `${formatPct(f.pct_promesas_sobre_contactos)} sobre contactos`, color: "bg-brand-cyan" },
+    { label: "Promesas cumplidas", value: f.promesas_cumplidas, hint: `${formatPct(f.pct_promesas_cumplidas)} sobre promesas`, color: "bg-brand-orange" },
+  ];
+  const matrix = r.data.matrix_subestados;
   return (
     <Block title="Reporte de Gestiones">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         <KpiCard label="Total gestiones" value={formatInt(f.gestiones)} accent="secondary" />
-        <KpiCard label="Contactos efectivos" value={formatInt(f.contactos_efectivos)} hint={`${f.pct_contactos_efectivos}%`} accent="primary" />
-        <KpiCard label="Promesas" value={formatInt(f.promesas)} hint={`${f.pct_promesas_sobre_contactos}%`} accent="cyan" />
-        <KpiCard label="Cumplidas" value={formatInt(f.promesas_cumplidas)} hint={`${f.pct_promesas_cumplidas}%`} accent="orange" />
+        <KpiCard label="Contactos efectivos" value={formatInt(f.contactos_efectivos)} hint={formatPct(f.pct_contactos_efectivos)} accent="primary" />
+        <KpiCard label="Promesas" value={formatInt(f.promesas)} hint={formatPct(f.pct_promesas_sobre_contactos)} accent="cyan" />
+        <KpiCard label="Cumplidas" value={formatInt(f.promesas_cumplidas)} hint={formatPct(f.pct_promesas_cumplidas)} accent="orange" />
       </div>
-      <div className="card p-5">
+
+      <div className="card p-5 mb-4">
+        <h3 className="text-sm font-semibold text-brand-ink mb-3">Funnel del equipo</h3>
+        <div className="space-y-2.5">
+          {funnelRows.map((row) => (
+            <div key={row.label}>
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="text-sm font-medium text-brand-graphite">{row.label}</span>
+                <span className="text-sm font-bold text-brand-ink">{formatInt(row.value)}</span>
+              </div>
+              <div className="h-6 bg-brand-bg rounded">
+                <div className={`h-full rounded flex items-center justify-end px-3 text-xs text-white ${row.color}`} style={{ width: w(row.value) }}>{row.hint}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card p-5 mb-4">
         <h3 className="text-sm font-semibold text-brand-ink mb-3">Distribución por subestado</h3>
         <div className="grid md:grid-cols-2 gap-5 items-center">
-          <ResponsiveContainer width="100%" height={280}>
+          <ResponsiveContainer width="100%" height={300}>
             <PieChart>
-              <Pie data={pie} dataKey="value" nameKey="name" innerRadius={55} outerRadius={110} paddingAngle={2}>
+              <Pie data={pie} dataKey="value" nameKey="name" innerRadius={60} outerRadius={120} paddingAngle={2}>
                 {pie.map((_: any, i: number) => <Cell key={i} fill={PIE[i % PIE.length]} />)}
               </Pie>
               <Tooltip />
             </PieChart>
           </ResponsiveContainer>
           <div className="space-y-1">
-            {subs.slice(0, 14).map((s: any, i: number) => (
+            {subs.map((s: any, i: number) => (
               <div key={s.subestado} className="flex items-center gap-2 text-sm">
                 <span className="w-3 h-3 rounded shrink-0" style={{ background: PIE[i % PIE.length] }} />
                 <span className="flex-1 text-brand-graphite">{s.subestado}</span>
@@ -274,6 +383,51 @@ function GestionesPreview({ r }: { r: any }) {
           </div>
         </div>
       </div>
+
+      {matrix && matrix.data.length > 0 && (
+        <div className="card p-5 mb-4">
+          <h3 className="text-sm font-semibold text-brand-ink mb-3">Subestados por operador</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={matrix.data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="usuario" fontSize={11} interval={0} />
+              <YAxis fontSize={11} />
+              <Tooltip />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
+              {matrix.subestados.map((s: string, i: number) => (
+                <Bar key={s} dataKey={s} stackId="a" fill={PIE[i % PIE.length]} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      <div className="card p-5 mb-4">
+        <h3 className="text-sm font-semibold text-brand-ink mb-3">Funnel por asesor</h3>
+        <MiniFunnelTable rows={r.data.asesores.map((a: any) => ({ ...a, label: a.usuario }))} labelHeader="Asesor" />
+      </div>
+
+      {r.data.campanas?.length > 0 && (
+        <div className="card p-5 mb-4">
+          <h3 className="text-sm font-semibold text-brand-ink mb-3">Funnel por base de datos / campaña</h3>
+          <MiniFunnelTable rows={r.data.campanas.map((c: any) => ({ ...c, label: c.campana }))} labelHeader="Base / Campaña" />
+        </div>
+      )}
+
+      {r.data.serie_diaria?.length > 0 && (
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold text-brand-ink mb-3">Gestiones por día</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={r.data.serie_diaria}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="fecha" fontSize={11} />
+              <YAxis fontSize={11} />
+              <Tooltip />
+              <Bar dataKey="gestiones" fill="#E6332A" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
     </Block>
   );
 }

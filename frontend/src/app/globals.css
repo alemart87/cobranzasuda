@@ -134,19 +134,32 @@ h3,
 /* ===== Impresión / Guardar como PDF ===== */
 .print-only { display: none; }
 @media print {
+  /* Horizontal: los dashboards (tablas anchas, gráficos apilados) entran mucho mejor */
+  @page { size: A4 landscape; margin: 10mm; }
+
   /* Ocultar cromo de la app y todo lo marcado como no imprimible */
   header, footer, .no-print { display: none !important; }
   .print-only { display: block !important; }
-  body { background: #fff !important; }
-  main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
-  /* Tarjetas planas y sin cortes entre páginas */
-  .card, section { box-shadow: none !important; break-inside: avoid; page-break-inside: avoid; }
-  /* Gráficos: escalar el SVG al ancho de página y colores exactos */
-  .recharts-responsive-container, .recharts-wrapper { width: 100% !important; }
-  svg.recharts-surface { width: 100% !important; height: auto !important; }
+
+  html, body { background: #fff !important; }
+  main { padding: 0 !important; margin: 0 !important; max-width: none !important; width: 100% !important; }
+
+  /* Tarjetas planas; evitar cortes feos entre páginas */
+  .card { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
+  .card, section, table, tr, .recharts-wrapper { break-inside: avoid; page-break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+
+  /* Tablas que no se desborden */
+  table { width: 100% !important; font-size: 11px !important; }
+
+  /* Gráficos: solo achicar si el SVG desborda el ancho de página. Usamos
+     max-width (no width) + height:auto; recharts emite viewBox, así que escala
+     proporcional y NO se distorsiona. */
+  svg.recharts-surface { max-width: 100% !important; height: auto !important; }
+
+  /* Colores exactos en gráficos/KPIs (no se respetan por defecto al imprimir). */
   * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-  a[href]:after { content: ""; }  /* no imprimir URLs */
-  @page { size: A4; margin: 12mm; }
+  a[href]:after { content: ""; }
 }
 
 /* Scrollbar corporativo en navegadores Webkit */
