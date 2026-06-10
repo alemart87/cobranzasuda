@@ -84,6 +84,8 @@ class OverviewResponse(BaseModel):
     period_month: Optional[date] = None
     available_months: list[str] = []  # YYYY-MM con datos publicados, desc
     carteras: Optional[CarterasBlock] = None
+    # Motivo por el que el bloque de carteras viene vacío (falla NO silenciosa).
+    carteras_alerta: Optional[str] = None
     llamadas: Optional[LlamadasBlock] = None
     gestiones: Optional[GestionesBlock] = None
     rendimiento: Optional[RendimientoBlock] = None
@@ -142,17 +144,15 @@ async def get_overview(
             if pm is not None:
                 months.append(pm)
 
-    # Carteras: SOLO publicadas por superadmin.
+    # Carteras: para el NAVEGADOR de meses cuenta cualquier publicada (si no,
+    # un mes con cartera publicada por un analista desaparecería del selector);
+    # el BLOQUE de carteras del panel sigue exigiendo publicación del superadmin.
     await _collect(
-        select(Report.period_month).where(
-            Report.is_published == True,  # noqa: E712
-            Report.published_by == SUPERADMIN_ID,
-        )
+        select(Report.period_month).where(Report.is_published == True)  # noqa: E712
     )
     await _collect(
         select(BaseAdicionalReport.period_month).where(
             BaseAdicionalReport.is_published == True,  # noqa: E712
-            BaseAdicionalReport.published_by == SUPERADMIN_ID,
         )
     )
     # Llamadas / Gestiones: cualquier publicado.
@@ -205,6 +205,7 @@ async def get_overview(
             items.append(_cartera_from_base(base))
 
     carteras: Optional[CarterasBlock] = None
+    carteras_alerta: Optional[str] = None
     if items:
         # Recupero del mes: solo la cartera DXP recibe pagos.
         recupero = float(dxp.recupero_total or 0) if dxp else 0.0
@@ -217,6 +218,29 @@ async def get_overview(
             asegurados_mora=sum(c.asegurados_mora for c in items),
             recupero=recupero,
         )
+    else:
+        # Falla NO silenciosa: explicar por qué el bloque viene vacío.
+        otros = (await db.execute(
+            select(Report.id).where(
+                Report.is_published == True,  # noqa: E712
+                Report.published_by != SUPERADMIN_ID,
+                Report.period_month >= start, Report.period_month < end,
+            ).limit(1)
+        )).first() or (await db.execute(
+            select(BaseAdicionalReport.id).where(
+                BaseAdicionalReport.is_published == True,  # noqa: E712
+                BaseAdicionalReport.published_by != SUPERADMIN_ID,
+                BaseAdicionalReport.period_month >= start, BaseAdicionalReport.period_month < end,
+            ).limit(1)
+        )).first()
+        if otros:
+            carteras_alerta = (
+                "Hay reportes de cartera de este mes publicados por un analista. "
+                "El panel gerencial solo muestra carteras publicadas por el superadmin: "
+                "despublicá y volvé a publicarlos con el usuario superadmin desde el Centro de Publicaciones."
+            )
+        else:
+            carteras_alerta = "No hay reporte de cartera publicado para este mes."
 
     # --- 3) Llamadas del mes (cualquier publicado) ---
     call = (await db.execute(
@@ -275,6 +299,7 @@ async def get_overview(
         period_month=start,
         available_months=available,
         carteras=carteras,
+        carteras_alerta=carteras_alerta,
         llamadas=llamadas,
         gestiones=gestiones,
         rendimiento=rendimiento,

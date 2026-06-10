@@ -32,6 +32,7 @@ interface Overview {
     asegurados_mora: number;
     recupero: number;
   } | null;
+  carteras_alerta?: string | null;
   llamadas: {
     total_llamadas: number;
     total_talk_seg: number;
@@ -577,13 +578,31 @@ export default function CobranzasHubPage() {
 
           {/* Cartera — consolidado de todas las carteras */}
           <GroupHeading>Cartera · todas las carteras</GroupHeading>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-            <KpiCard label="Pólizas totales" value={formatInt(ov.carteras?.polizas ?? 0)} hint={`${ov.carteras?.items.length ?? 0} carteras`} accent="secondary" />
-            <KpiCard label="Asegurados" value={formatInt(ov.carteras?.asegurados ?? 0)} accent="cyan" />
-            <KpiCard label="Clientes en mora" value={formatInt(ov.carteras?.asegurados_mora ?? 0)} accent="orange" />
-            <KpiCard label="Saldo total operado" value={formatGs(ov.carteras?.saldo_total ?? 0)} accent="primary" />
-            <KpiCard label="Saldo en mora" value={formatGs(ov.carteras?.saldo_mora ?? 0)} accent="orange" />
-          </div>
+          {ov.carteras ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+              <KpiCard label="Pólizas totales" value={formatInt(ov.carteras.polizas)} hint={`${ov.carteras.items.length} carteras`} accent="secondary" />
+              <KpiCard label="Asegurados" value={formatInt(ov.carteras.asegurados)} accent="cyan" />
+              <KpiCard label="Clientes en mora" value={formatInt(ov.carteras.asegurados_mora)} accent="orange" />
+              <KpiCard label="Saldo total operado" value={formatGs(ov.carteras.saldo_total)} accent="primary" />
+              <KpiCard label="Saldo en mora" value={formatGs(ov.carteras.saldo_mora)} accent="orange" />
+            </div>
+          ) : (
+            <div className="card p-5 mb-6 border-l-[3px] border-l-amber-500 bg-amber-50/60">
+              <div className="flex items-start gap-3">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600 flex-shrink-0 mt-0.5">
+                  <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
+                </svg>
+                <div>
+                  <div className="text-sm font-semibold text-amber-800">
+                    Sin datos de cartera para {month ? monthLabel(month) : "este mes"}
+                  </div>
+                  <p className="text-sm text-amber-700 mt-1">
+                    {ov.carteras_alerta ?? "No hay reporte de cartera publicado para este mes."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Detalle por cartera (colapsable), debajo del consolidado */}
           {detallePorCartera}
