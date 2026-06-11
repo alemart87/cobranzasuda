@@ -127,6 +127,7 @@ interface ActionTile {
   icon: ReactNode;
   variant: Variant;
   forRoles: string[];
+  badge?: string;
 }
 
 /* Íconos de línea (lucide-style), monocromáticos, heredan color del contenedor. */
@@ -194,6 +195,7 @@ const VIEW_ACTIONS: ActionTile[] = [
     icon: ICONS.clipboard,
     variant: "primary",
     forRoles: ["superadmin", "analyst"],
+    badge: "Nuevo",
   },
   {
     href: "/cobranzas/carteras-totales",
@@ -291,7 +293,10 @@ function ActionCard({ a }: { a: ActionTile }) {
         {a.icon}
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="font-display text-lg text-brand-ink uppercase leading-tight">{a.title}</h3>
+        <h3 className="font-display text-lg text-brand-ink uppercase leading-tight inline-flex items-center gap-2">
+          {a.title}
+          {a.badge && <span className="rounded-full bg-brand-primary text-white text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 leading-none">{a.badge}</span>}
+        </h3>
         <p className="text-sm text-brand-slate mt-1 leading-relaxed">{a.description}</p>
         <div className="text-xs text-brand-primary font-semibold mt-3 inline-flex items-center gap-1">
           Abrir
