@@ -8,7 +8,7 @@ import {
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { MonthNavigator } from "@/components/MonthNavigator";
-import { PrintButton } from "@/components/PrintButton";
+import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { AsesoresDetalleTabla } from "@/components/charts/AsesoresDetalleTabla";
 import { AsesoresLlamadasChart } from "@/components/charts/AsesoresLlamadasChart";
 import { LlamadasPorDiaChart } from "@/components/charts/LlamadasPorDiaChart";
@@ -127,14 +127,7 @@ export default function InformeGeneralPage() {
 
       {/* Vista imprimible */}
       <div>
-        <div className="print-only" style={{ borderTop: "4px solid #E6332A", paddingTop: 10, marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-            <div style={{ fontWeight: 800, color: "#E6332A", fontSize: 18 }}>voicenter</div>
-            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#64748b" }}>Operaciones · Sudameris Seguros</div>
-          </div>
-          <h1 style={{ margin: "8px 0 2px", fontSize: 22, textTransform: "uppercase", color: "#0f172a" }}>{titulo || "Informe General"}</h1>
-          <div style={{ fontSize: 12, color: "#64748b" }}>{month ? monthLabel(month) : ""}</div>
-        </div>
+        <PrintCover titulo={titulo} periodo={month ? monthLabel(month) : undefined} />
 
         {/* En pantalla, un encabezado de preview */}
         <div className="no-print mb-3 text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold">Vista previa del informe</div>

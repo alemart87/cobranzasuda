@@ -21,15 +21,35 @@ export function PrintButton({ label = "Imprimir PDF", className = "" }: { label?
 /** Encabezado corporativo que aparece SOLO al imprimir (membrete del informe). */
 export function PrintHeader({ titulo, subtitulo }: { titulo: string; subtitulo?: string }) {
   return (
-    <div className="print-only" style={{ borderTop: "4px solid #E6332A", paddingTop: 10, marginBottom: 14 }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <div style={{ fontWeight: 800, color: "#E6332A", fontSize: 18, letterSpacing: 0.5 }}>voicenter</div>
-        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 1, color: "#64748b" }}>
-          Operaciones · Sudameris Seguros
-        </div>
+    <div className="print-only print-header">
+      <div className="print-header-row">
+        <img src="/logo-voicenter-color.png" alt="Voicenter" style={{ height: 30, width: "auto" }} />
+        <span className="print-header-kicker">Operaciones · Sudameris Seguros</span>
       </div>
-      <h1 style={{ margin: "6px 0 2px", fontSize: 20, textTransform: "uppercase", color: "#0f172a" }}>{titulo}</h1>
-      {subtitulo && <div style={{ fontSize: 12, color: "#64748b" }}>{subtitulo}</div>}
+      <h1 className="print-header-title">{titulo}</h1>
+      {subtitulo && <div className="print-header-sub">{subtitulo}</div>}
+    </div>
+  );
+}
+
+/** Portada corporativa de página completa (solo impresión): logo + título elegido. */
+export function PrintCover({ titulo, periodo }: { titulo: string; periodo?: string }) {
+  const fecha = new Date().toLocaleDateString("es-PY", { day: "2-digit", month: "long", year: "numeric" });
+  return (
+    <div className="print-only print-cover">
+      <div className="print-cover-band" />
+      <div className="print-cover-body">
+        <img src="/logo-voicenter-color.png" alt="Voicenter" style={{ height: 64, width: "auto", marginBottom: 18 }} />
+        <div className="print-cover-kicker">Operaciones · Sudameris Seguros</div>
+        <h1 className="print-cover-title">{titulo || "Informe General"}</h1>
+        <div className="print-cover-rule" />
+        {periodo && <div className="print-cover-period">{periodo}</div>}
+      </div>
+      <div className="print-cover-footer">
+        <span>Plataforma operada por Voicenter S.A.</span>
+        <span>Informe generado el {fecha}</span>
+      </div>
+      <div className="print-cover-band bottom" />
     </div>
   );
 }
