@@ -133,6 +133,47 @@ h3,
 
 /* ===== Impresión / Guardar como PDF ===== */
 .print-only { display: none; }
+
+/* Portada corporativa (solo se ve al imprimir) */
+.print-cover {
+  page-break-after: always;
+  break-after: page;
+  min-height: 172mm;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+.print-cover-band { height: 12mm; background: #E6332A; }
+.print-cover-band.bottom { background: #0F1116; height: 8mm; }
+.print-cover-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 0 24mm;
+}
+.print-cover-kicker { font-size: 12px; letter-spacing: 4px; text-transform: uppercase; color: #64748b; }
+.print-cover-title {
+  font-family: "Barlow Condensed", Impact, "Arial Narrow", sans-serif;
+  font-size: 44px; line-height: 1.05; text-transform: uppercase;
+  color: #0F1116; margin: 14px 0 0; max-width: 230mm; font-weight: 700;
+}
+.print-cover-rule { width: 90px; height: 4px; background: #00B2BF; margin: 18px 0; }
+.print-cover-period { font-size: 19px; color: #E6332A; font-weight: 600; }
+.print-cover-footer {
+  display: flex; justify-content: space-between;
+  padding: 5mm 16mm; font-size: 11px; color: #64748b;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Membrete (encabezado) de los reportes individuales */
+.print-header { border-top: 4px solid #E6332A; padding-top: 10px; margin-bottom: 14px; }
+.print-header-row { display: flex; align-items: center; justify-content: space-between; }
+.print-header-kicker { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #64748b; }
+.print-header-title { font-family: "Barlow Condensed", Impact, sans-serif; margin: 8px 0 2px; font-size: 24px; text-transform: uppercase; color: #0f172a; font-weight: 700; }
+.print-header-sub { font-size: 12px; color: #64748b; }
 @media print {
   /* Horizontal: los dashboards (tablas anchas, gráficos apilados) entran mucho mejor */
   @page { size: A4 landscape; margin: 10mm; }
@@ -140,6 +181,7 @@ h3,
   /* Ocultar cromo de la app y todo lo marcado como no imprimible */
   header, footer, .no-print { display: none !important; }
   .print-only { display: block !important; }
+  .print-cover { display: flex !important; }  /* la portada mantiene su layout en columna */
 
   html, body { background: #fff !important; }
   main { padding: 0 !important; margin: 0 !important; max-width: none !important; width: 100% !important; }
