@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     # Resumen del razonamiento ("auto" | "detailed" | "" para desactivar).
     agent_reasoning_summary: str = "auto"
     agent_max_history: int = 20             # mensajes de contexto por conversación
-    agent_max_tool_turns: int = 8           # iteraciones máximas de tools por respuesta
+    agent_max_tool_turns: int = 30          # iteraciones máximas de tools por respuesta
 
     # Precios del modelo (USD por 1M tokens). Default = gpt-5.4 (oficial OpenAI).
     agent_price_input_per_mtok: float = 2.50
