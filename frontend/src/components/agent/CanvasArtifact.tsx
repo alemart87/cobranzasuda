@@ -17,10 +17,25 @@ const PALETTE = ["#00B2BF", "#662483", "#E6332A", "#F39200", "#2563eb", "#10b981
 
 const num = (v: any) => (typeof v === "number" ? v : parseFloat(v)) || 0;
 
+const META_KEYS = new Set([
+  "columnas", "columns", "filas", "rows", "kpis", "texto", "markdown", "text",
+  "items", "data", "puntos", "series", "titulo", "title", "descripcion",
+]);
+
 // Normaliza una lista de items con label + valor(es), tolerante a varias claves.
+// Fallback: si el modelo manda un objeto plano {etiqueta: numero}, lo convierte.
 function asItems(datos: any): any[] {
-  const arr = datos?.items || datos?.data || datos?.filas || datos?.puntos || [];
-  return Array.isArray(arr) ? arr : [];
+  const arr = datos?.items || datos?.data || datos?.filas || datos?.puntos;
+  if (Array.isArray(arr)) return arr;
+  if (datos && typeof datos === "object" && !Array.isArray(datos)) {
+    const entries = Object.entries(datos).filter(
+      ([k, v]) =>
+        !META_KEYS.has(k) &&
+        (typeof v === "number" || (typeof v === "string" && v.trim() !== "" && !isNaN(parseFloat(v as string)))),
+    );
+    if (entries.length) return entries.map(([k, v]) => ({ label: k, valor: num(v) }));
+  }
+  return [];
 }
 function labelOf(it: any) {
   return it.label ?? it.name ?? it.x ?? it.categoria ?? it.dia ?? it.mes ?? "";
@@ -145,7 +160,17 @@ function Tabla({ datos }: { datos: any }) {
 }
 
 function Kpis({ datos }: { datos: any }) {
-  const kpis: any[] = datos?.kpis || [];
+  let kpis: any[] = Array.isArray(datos?.kpis) ? datos.kpis : [];
+  // Fallback: el modelo mandó items o un objeto plano {label: valor}.
+  if (kpis.length === 0) {
+    if (Array.isArray(datos?.items)) {
+      kpis = datos.items.map((it: any) => ({ label: it.label ?? it.name, valor: it.valor ?? it.value, hint: it.hint }));
+    } else if (datos && typeof datos === "object") {
+      kpis = Object.entries(datos)
+        .filter(([k, v]) => !META_KEYS.has(k) && typeof v !== "object" && v != null)
+        .map(([k, v]) => ({ label: k, valor: v }));
+    }
+  }
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
       {kpis.map((k, i) => (

@@ -71,10 +71,40 @@ async def _resolve(ref: Optional[str]) -> Optional[FacturacionReport]:
         return await db.get(FacturacionReport, ref)
 
 
-async def fact_obtener_reporte_impl(referencia: Optional[str] = None) -> dict[str, Any]:
+async def _resolve_focus(focus_refs: Optional[list[str]]) -> list[FacturacionReport]:
+    out: list[FacturacionReport] = []
+    seen: set[str] = set()
+    for ref in (focus_refs or []):
+        r = await _resolve(ref)
+        if r and r.id not in seen:
+            out.append(r)
+            seen.add(r.id)
+    out.sort(key=lambda r: (r.periodo or ""))
+    return out
+
+
+async def fact_focus_impl(focus_refs: Optional[list[str]]) -> dict[str, Any]:
+    """Devuelve los reportes que el usuario seleccionó como foco del análisis."""
+    reps = await _resolve_focus(focus_refs)
+    if not reps:
+        return {"en_foco": [], "mensaje": "El usuario no seleccionó reportes; trabajá con el más reciente o lo que pida."}
+    return {"en_foco": [_summary(r) for r in reps], "total": len(reps)}
+
+
+async def fact_obtener_reporte_impl(referencia: Optional[str] = None,
+                                    focus_refs: Optional[list[str]] = None) -> dict[str, Any]:
     """Devuelve el detalle de un reporte: KPIs, TODAS las descripciones de concepto,
-    ventas, suspensiones (PFI) y documentación faltante por cohorte de venta."""
-    r = await _resolve(referencia)
+    ventas, suspensiones (PFI) y documentación faltante por cohorte de venta.
+    Si no se indica `referencia` y el usuario seleccionó reportes (foco), usa ese."""
+    r = None
+    if referencia:
+        r = await _resolve(referencia)
+    if r is None:
+        foco = await _resolve_focus(focus_refs)
+        if foco:
+            r = foco[-1]  # el más reciente del foco
+    if r is None:
+        r = await _resolve(referencia)
     if not r:
         return {"sin_datos": True, "mensaje": f"No encontré un reporte para '{referencia}'. Usá fact_listar_reportes."}
     d = r.data or {}
@@ -89,12 +119,16 @@ async def fact_obtener_reporte_impl(referencia: Optional[str] = None) -> dict[st
     }
 
 
-async def fact_comparar_impl(referencias: list[str]) -> dict[str, Any]:
-    """Compara 2+ reportes (por período/liquidación/id): matriz por concepto, drivers y variaciones."""
-    if not referencias or len(referencias) < 2:
-        return {"error": "Indicá al menos 2 referencias (períodos YYYY-MM o números de liquidación)."}
+async def fact_comparar_impl(referencias: Optional[list[str]] = None,
+                             focus_refs: Optional[list[str]] = None) -> dict[str, Any]:
+    """Compara 2+ reportes (por período/liquidación/id): matriz por concepto, drivers, variaciones
+    y la DESCOMPOSICIÓN del cambio del último mes vs el anterior (delta por concepto). Si no se
+    indican `referencias`, usa los reportes en foco (selección del usuario)."""
+    refs = referencias if (referencias and len(referencias) >= 2) else (focus_refs or [])
+    if not refs or len(refs) < 2:
+        return {"error": "Indicá al menos 2 referencias (o seleccioná 2+ reportes en el panel de foco)."}
     resolved = []
-    for ref in referencias[:24]:
+    for ref in refs[:24]:
         r = await _resolve(ref)
         if r:
             resolved.append(r)
