@@ -26,6 +26,9 @@ class AgentContext:
     default_month: str                         # YYYY-MM (mes por defecto = actual)
     canvas: list[dict] = field(default_factory=list)      # artefactos emitidos
     tool_trace: list[dict] = field(default_factory=list)  # auditoría de tools
+    # Reportes seleccionados por el usuario (módulo Facturación): el agente enfoca
+    # su análisis en estas referencias (períodos/ids). Vacío = sin restricción.
+    focus_refs: list[str] = field(default_factory=list)
 
 
 def _bounds(month: str) -> tuple[date, date]:

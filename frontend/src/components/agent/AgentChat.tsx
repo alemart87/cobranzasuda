@@ -11,6 +11,8 @@ import { downloadCanvasHtml } from "@/lib/canvasExport";
 interface Conversation { id: string; title: string | null; last_message_at: string | null; created_at: string; }
 interface Message { role: "user" | "assistant"; content: string; reasoning?: string; artifacts: Artifact[]; streaming?: boolean; error?: boolean; }
 
+export interface FocusOption { id: string; label: string }
+
 export interface AgentChatProps {
   apiBase: string;            // ej. "/api/v1/agent" o "/api/v1/facturacion-agent"
   title: string;
@@ -19,10 +21,16 @@ export interface AgentChatProps {
   placeholder: string;
   suggestions: string[];
   deniedMessage: string;
+  // Si se provee, muestra un selector de archivos/reportes (multi) para enfocar el análisis.
+  loadFocusOptions?: () => Promise<FocusOption[]>;
+  focusLabel?: string;        // ej. "Enfocar en"
 }
 
 export function AgentChat(props: AgentChatProps) {
   const { apiBase } = props;
+  const [focusOptions, setFocusOptions] = useState<FocusOption[]>([]);
+  const [focusSel, setFocusSel] = useState<string[]>([]);
+  const [focusOpen, setFocusOpen] = useState(false);
   const [access, setAccess] = useState<{ configured: boolean; model: string; default_month: string } | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -42,6 +50,7 @@ export function AgentChat(props: AgentChatProps) {
       .then(setAccess)
       .catch(() => setAccessDenied(true));
     loadConversations();
+    if (props.loadFocusOptions) props.loadFocusOptions().then(setFocusOptions).catch(() => {});
   }, [apiBase]);
 
   useEffect(() => {
@@ -94,10 +103,12 @@ export function AgentChat(props: AgentChatProps) {
     setInput(""); setStreaming(true); setToolStatus(null);
     try {
       const token = getToken();
+      const body: any = { content };
+      if (focusSel.length > 0) body.focus_refs = focusSel;
       const res = await fetch(`${apiBase}/conversations/${convId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify(body),
       });
       if (!res.ok || !res.body) throw new Error("No se pudo iniciar el chat");
       const reader = res.body.getReader();
@@ -222,6 +233,39 @@ export function AgentChat(props: AgentChatProps) {
           </div>
 
           <div className="border-t border-brand-border p-3">
+            {focusOptions.length > 0 && (
+              <div className="max-w-3xl mx-auto mb-2 relative">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button onClick={() => setFocusOpen((o) => !o)} className="btn-ghost text-xs inline-flex items-center gap-1">
+                    📎 {props.focusLabel || "Enfocar en archivos"}{focusSel.length ? ` (${focusSel.length})` : ""}
+                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform ${focusOpen ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6" /></svg>
+                  </button>
+                  {focusSel.map((id) => {
+                    const o = focusOptions.find((x) => x.id === id);
+                    return (
+                      <span key={id} className="inline-flex items-center gap-1 text-[11px] bg-[#662483]/10 text-[#662483] px-2 py-0.5 rounded">
+                        {o?.label || id}
+                        <button onClick={() => setFocusSel((s) => s.filter((x) => x !== id))} className="hover:text-brand-primary">✕</button>
+                      </span>
+                    );
+                  })}
+                  {focusSel.length > 0 && (
+                    <button onClick={() => setFocusSel([])} className="text-[11px] text-brand-slate hover:text-brand-primary">limpiar</button>
+                  )}
+                </div>
+                {focusOpen && (
+                  <div className="absolute bottom-full mb-1 z-20 w-72 max-h-60 overflow-y-auto card p-1 shadow-elevated">
+                    {focusOptions.map((o) => (
+                      <label key={o.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-brand-bg cursor-pointer text-sm">
+                        <input type="checkbox" checked={focusSel.includes(o.id)}
+                          onChange={(e) => setFocusSel((s) => e.target.checked ? [...s, o.id] : s.filter((x) => x !== o.id))} />
+                        <span>{o.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="flex items-end gap-2 max-w-3xl mx-auto">
               <textarea value={input} onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}

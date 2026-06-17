@@ -43,6 +43,7 @@ class ConversationRename(BaseModel):
 
 class MessageCreate(BaseModel):
     content: str
+    focus_refs: Optional[list[str]] = None  # reportes seleccionados (períodos/ids)
 
 
 class ConversationRead(BaseModel):
@@ -175,7 +176,17 @@ async def post_message(
     history = list(reversed(rows.scalars().all()))
     messages = [{"role": m.role, "content": m.content} for m in history if m.content]
 
-    context = AgentContext(user_id=user.id, default_month=current_month())
+    focus_refs = [str(x).strip() for x in (payload.focus_refs or []) if str(x).strip()]
+    if focus_refs:
+        # Señal explícita al modelo del alcance seleccionado por el usuario.
+        messages.insert(0, {
+            "role": "user",
+            "content": ("[Contexto del sistema] El usuario seleccionó estos reportes como FOCO: "
+                        + ", ".join(focus_refs) + ". Centrá el análisis en ellos (1 → a fondo; 2+ → "
+                        "comparalos y descomponé el cambio). Llamá fact_focus para confirmarlos."),
+        })
+
+    context = AgentContext(user_id=user.id, default_month=current_month(), focus_refs=focus_refs)
     uid = user.id
     ip = client_ip(request)
 

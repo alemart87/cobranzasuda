@@ -92,6 +92,27 @@ def compare_facturacion(reports: list[dict[str, Any]]) -> dict[str, Any]:
             "valores": [round(vals.get(col["id"], 0.0), 2) for col in cols],
         })
 
+    # Descomposición del cambio: último mes vs anterior (delta por concepto)
+    descomposicion: list[dict[str, Any]] = []
+    delta_total = 0.0
+    if len(cols) >= 2:
+        prev_id, last_id2 = cols[-2]["id"], cols[-1]["id"]
+        delta_total = round(totales[-1] - totales[-2], 2)
+        for desc, vals in conceptos_union.items():
+            a = vals.get(prev_id, 0.0)
+            b = vals.get(last_id2, 0.0)
+            d = round(b - a, 2)
+            if abs(d) < 1:
+                continue
+            descomposicion.append({
+                "descripcion": desc,
+                "anterior": round(a, 2),
+                "ultimo": round(b, 2),
+                "delta": d,
+                "pct_del_cambio": round(d / delta_total * 100, 1) if delta_total else 0.0,
+            })
+        descomposicion.sort(key=lambda x: x["delta"])  # más negativos primero
+
     # Hallazgos automáticos (deterministas)
     hallazgos: list[str] = []
     if len(totales) >= 2:
@@ -119,5 +140,7 @@ def compare_facturacion(reports: list[dict[str, Any]]) -> dict[str, Any]:
         "ventas": ventas,
         "variaciones": variaciones,
         "drivers": drivers,
+        "descomposicion": descomposicion,   # delta por concepto (último vs anterior)
+        "delta_total": delta_total,
         "hallazgos": hallazgos,
     }

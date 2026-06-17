@@ -71,4 +71,6 @@ class CompareResponse(BaseModel):
     ventas: list[int]
     variaciones: list[Optional[float]]
     drivers: list[dict[str, Any]]
-    hallazgos: list[str]
+    descomposicion: list[dict[str, Any]] = []
+    delta_total: float = 0
+    hallazgos: list[str] = []

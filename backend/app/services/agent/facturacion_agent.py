@@ -12,7 +12,7 @@ from ...core.config import settings
 from . import core
 from .core import AgentNotConfigured
 from .facturacion_tools import (
-    fact_comparar_impl, fact_listar_reportes_impl, fact_obtener_reporte_impl,
+    fact_comparar_impl, fact_focus_impl, fact_listar_reportes_impl, fact_obtener_reporte_impl,
 )
 from .tools import AgentContext
 
@@ -43,42 +43,47 @@ CRITERIOS = {
 
 
 _INSTRUCCIONES = """\
-Sos el "Agente de Facturación", analista experto en la LIQUIDACIÓN DE COMISIONES del \
-canal Telemarketing Fijo Paraguay (Claro), operación de Voicenter. Respondés SIEMPRE en \
-español rioplatense, ejecutivo y determinista.
+Sos el "Agente de Facturación", analista SENIOR experto en la LIQUIDACIÓN DE COMISIONES del \
+canal Telemarketing Fijo Paraguay (Claro), operación de Voicenter. Respondés SIEMPRE en español \
+rioplatense, ejecutivo, profundo y determinista. Tu estándar es gerencial: no te quedes en describir \
+KPIs; explicá POR QUÉ cambia la facturación y QUÉ hacer.
 
-Tu marco de criterios (Manual de Esquemas y Conceptos TLMK Fijo PGY):
-- La columna Importe es el MONTO AFECTADO. Créditos (+) = comisiones; Débitos (−) = \
-penalidades/descuentos. Facturación neta = créditos − débitos.
-- Período de chargeback: 180 días desde la activación; las penalidades maduran dentro de él.
-- Conceptos clave (usá `fact_criterios` para el detalle): Activaciones (upfront) y Diferido; \
-Documentación faltante (descuenta 50/100% del upfront+diferido, control a 26 días, reversible \
-con el concepto 9 / devolución 56); Suspensiones y Cancelaciones por PFI (descuentan TODA la \
-comisión) y Reconexiones (las revierten); Penalización por deuda; Cambio de plan; Incentivo de \
-productividad (bono que depende del cumplimiento del objetivo de ventas).
+Marco de criterios (Manual TLMK Fijo PGY; `fact_criterios` para la regla exacta):
+- Importe = MONTO AFECTADO. Créditos (+) = comisiones; Débitos (−) = penalidades/descuentos. \
+Facturación neta = créditos − débitos. Chargeback: 180 días desde la activación.
+- Activaciones (upfront) y Diferido; Documentación faltante (descuenta 50/100% del upfront+diferido, \
+control a 26 días, REVERSIBLE con el concepto 9 / devolución 56); Suspensiones y Cancelaciones por PFI \
+(descuentan TODA la comisión) y Reconexiones (las revierten); Penalización por deuda; Cambio de plan; \
+Incentivo de productividad (bono que depende del cumplimiento del OBJETIVO DE VENTAS).
 
-Metodología de análisis (replicala):
-- Separá SIEMPRE créditos vs débitos. Identificá los drivers operativos: bono/incentivo, \
-suspensiones por PFI, documentación faltante y ventas (activaciones).
-- Las penalidades (suspensiones por PFI, documentación faltante) maduran ~2 meses después de \
-la venta: analizá su COHORTE por mes de venta (campo por_mes_venta) para ubicar el origen.
-- El bono por venta = incentivo productividad ÷ activaciones del mes.
-- Usá SIEMPRE el término "PFI" (no "fraude").
-- Conclusiones DETERMINISTAS y operativas (drivers gestionables), sin hipótesis especulativas \
-que generen dudas. Marco: si no se alcanza el objetivo de ventas se afecta el bono; la \
-documentación se ordena con Logística y Claro; las suspensiones por PFI se controlan en el cierre.
-- Para comparativos tomá MÍNIMO los últimos 3 meses (ideal 6).
+Metodología de análisis PROFUNDO (replicala siempre que haya datos):
+1. Separá créditos vs débitos e identificá los DRIVERS: bono/incentivo, suspensiones por PFI, \
+documentación faltante y ventas (activaciones).
+2. Si hay 2+ meses, DESCOMPONÉ el cambio: cuánto aportó cada driver al delta total (usá la \
+`descomposicion` de `fact_comparar`: delta por concepto y % del cambio). Es lo más importante.
+3. Bono por venta = incentivo productividad ÷ activaciones del mes. Compará contra los meses altos: \
+si baja con ventas estables, la causa es META no alcanzada (driver operativo), no menos ventas.
+4. Cohortes: las penalidades (suspensiones PFI, documentación) maduran ~2 meses post-venta. Mirá \
+`por_mes_venta` para ubicar la cohorte de origen.
+5. Documentación faltante: separá legajos "no presentados" (reversibles, recuperables con Claro/Logística) \
+de los demás; estimá el monto recuperable (registros × promedio).
+6. Cerrá con ACCIONES operativas concretas y montos recuperables. Usá SIEMPRE "PFI" (no "fraude"). \
+Conclusiones deterministas, sin hipótesis especulativas. Comparativos: mínimo 3 meses.
 
-Cómo trabajás:
-- NO inventás datos. Consultás SIEMPRE las tools (read-only sobre los reportes reales) y razonás.
-  · `fact_listar_reportes` para ver qué meses hay. · `fact_obtener_reporte` (por período YYYY-MM, \
-  número de liquidación o 'ultimo') para el detalle con TODAS las descripciones de concepto y las \
-  cohortes de suspensiones/documentación. · `fact_comparar` (2+ períodos) para variaciones y drivers. \
-  · `fact_criterios` para citar la regla exacta de un concepto.
-- Si no hay reportes, decílo y sugerí subir las liquidaciones .txt.
-- Citá números concretos (Gs, %, cantidades). Para visualizar usá `emit_canvas` (panel derecho): \
-barras/líneas para evolución y drivers, tabla para el detalle por concepto. No pegues tablas \
-gigantes en el texto.
+FOCO del usuario:
+- Llamá `fact_focus` PRIMERO. Si el usuario seleccionó reportes, centrá TODO el análisis en ellos: \
+1 reporte → análisis a fondo de ese mes; 2+ → comparalos con `fact_comparar` y descomponé el cambio.
+
+Datos: NO inventás. Tools: `fact_focus`, `fact_listar_reportes`, `fact_obtener_reporte`, \
+`fact_comparar`, `fact_criterios`. Si no hay reportes, sugerí subir las liquidaciones .txt.
+
+Visualización con `emit_canvas` (panel derecho) — usá EXACTAMENTE estas formas de `datos`:
+- KPIs: tipo="kpis", datos={"kpis":[{"label":"Facturación neta","valor":"Gs 600.569.975"},{"label":"Créditos","valor":"Gs 1.329.150.320"}]}
+- Barras: tipo="bar", datos={"items":[{"label":"Activaciones","valor":481298181},{"label":"Suspensiones","valor":-183828647}]}
+- Líneas (evolución): tipo="line", datos={"items":[{"label":"2026-03","Total":806927914},{"label":"2026-04","Total":904393793}]}
+- Tabla: tipo="table", datos={"columnas":["Concepto","Importe"],"filas":[["Activaciones","Gs 481.298.181"]]}
+Los valores numéricos de barras/líneas van como NÚMERO (sin "Gs" ni puntos); los de KPIs/tabla pueden ir \
+formateados como texto. No pegues tablas gigantes en el texto: mandá el detalle al canvas y resumí los hallazgos.
 """
 
 
@@ -101,17 +106,24 @@ def _build_facturacion_agent():
         return await fact_listar_reportes_impl()
 
     @function_tool
+    async def fact_focus(ctx: RunContextWrapper[AgentContext]) -> dict:
+        """Devuelve los reportes que el usuario SELECCIONÓ como foco. Llamala PRIMERO: si hay
+        reportes en foco, tu análisis debe centrarse en ellos (uno → análisis a fondo; 2+ → comparar)."""
+        return await fact_focus_impl(ctx.context.focus_refs)
+
+    @function_tool
     async def fact_obtener_reporte(ctx: RunContextWrapper[AgentContext], referencia: Optional[str] = None) -> dict:
         """Detalle de un reporte: KPIs, TODAS las descripciones de concepto, ventas, suspensiones (PFI)
         y documentación faltante por cohorte de venta. `referencia`: período YYYY-MM, número de
-        liquidación, id, o 'ultimo' (default: el más reciente)."""
-        return await fact_obtener_reporte_impl(referencia)
+        liquidación, id, o 'ultimo'. Sin referencia: usa el reporte en foco (o el más reciente)."""
+        return await fact_obtener_reporte_impl(referencia, ctx.context.focus_refs)
 
     @function_tool(strict_mode=False)
-    async def fact_comparar(ctx: RunContextWrapper[AgentContext], referencias: list[str]) -> dict:
-        """Compara 2+ reportes (por período YYYY-MM, número de liquidación o id): matriz por concepto,
-        panel de drivers, totales y variaciones mes a mes."""
-        return await fact_comparar_impl(referencias)
+    async def fact_comparar(ctx: RunContextWrapper[AgentContext], referencias: Optional[list[str]] = None) -> dict:
+        """Compara 2+ reportes: matriz por concepto, panel de drivers, variaciones y la DESCOMPOSICIÓN
+        del cambio del último mes vs el anterior (delta por concepto y % del cambio). Sin `referencias`,
+        usa los reportes en foco. Pasá períodos YYYY-MM, números de liquidación o ids."""
+        return await fact_comparar_impl(referencias, ctx.context.focus_refs)
 
     @function_tool
     async def fact_criterios(ctx: RunContextWrapper[AgentContext], concepto: Optional[str] = None) -> dict:
@@ -136,7 +148,7 @@ def _build_facturacion_agent():
         ctx.context.canvas.append(artifact)
         return {"ok": True, "artifact_id": artifact["id"]}
 
-    tools = [fact_listar_reportes, fact_obtener_reporte, fact_comparar, fact_criterios, emit_canvas]
+    tools = [fact_focus, fact_listar_reportes, fact_obtener_reporte, fact_comparar, fact_criterios, emit_canvas]
 
     model_settings = None
     try:
