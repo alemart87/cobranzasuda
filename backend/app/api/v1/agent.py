@@ -289,8 +289,14 @@ async def post_message(
             except AgentNotConfigured as exc:
                 await queue.put(("err", str(exc)))
             except Exception as exc:  # noqa: BLE001
-                logger.exception(f"[agent] error en conversación {conv_id}: {exc}")
-                await queue.put(("err", "Ocurrió un error procesando la consulta."))
+                if exc.__class__.__name__ == "MaxTurnsExceeded":
+                    logger.warning(f"[agent] turnos excedidos en conversación {conv_id}: {exc}")
+                    await queue.put(("err",
+                        "La consulta requirió demasiados pasos y se detuvo. "
+                        "Probá acotarla o dividirla en preguntas más simples."))
+                else:
+                    logger.exception(f"[agent] error en conversación {conv_id}: {exc}")
+                    await queue.put(("err", "Ocurrió un error procesando la consulta."))
             finally:
                 await queue.put(("end", None))
 
