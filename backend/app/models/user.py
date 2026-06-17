@@ -29,6 +29,9 @@ class User(Base):
     # Solo aplica a clientes. None = acceso a todos los módulos.
     # Lista (puede ser []) = solo los slugs incluidos.
     allowed_modules: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    # Módulos RESTRINGIDOS habilitados a este usuario (analistas). Lista de slugs.
+    # None/[] = sin acceso a restringidos. Los clientes nunca acceden a restringidos.
+    granted_modules: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     # Habilita el "Agente de Experiencia" (IA) para analistas y clientes.
     can_use_agent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

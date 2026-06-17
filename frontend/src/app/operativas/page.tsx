@@ -40,6 +40,17 @@ const MODULES: ModuleCard[] = [
     badges: ["Reportes de llamadas", "Niveles de servicio", "Reportes de gestiones"],
   },
   {
+    slug: "televentas_claro",
+    href: "/televentas-claro",
+    title: "Televentas Claro · Facturación",
+    description:
+      "Liquidación de comisiones: detalle por concepto, drivers operativos (bono, suspensiones PFI, documentación), comparativos mensuales e impresión.",
+    color: "#662483",
+    bgGradient: "linear-gradient(135deg, #4A1A60 0%, #662483 100%)",
+    available: true,
+    badges: ["Detalle por concepto", "Comparativos", "Drivers operativos"],
+  },
+  {
     slug: "ventas",
     href: "/ventas",
     title: "Ventas",
@@ -52,10 +63,14 @@ const MODULES: ModuleCard[] = [
   },
 ];
 
+// Slugs de módulos restringidos: solo se muestran si el backend lo habilita.
+const RESTRICTED = new Set(["televentas_claro"]);
+
 export default function OperativasPage() {
   const [userName, setUserName] = useState<string>("");
   const [allowed, setAllowed] = useState<string[] | null>(null);
   const [role, setRole] = useState<string>("");
+  const [canFacturacion, setCanFacturacion] = useState<boolean>(false);
 
   useEffect(() => {
     // 1) Pintar rápido con los datos del localStorage para evitar flash.
@@ -63,15 +78,17 @@ export default function OperativasPage() {
     setUserName(u?.full_name?.split(" ")[0] ?? "");
     setAllowed(u?.allowed_modules ?? null);
     setRole(u?.role ?? "");
+    setCanFacturacion(!!u?.can_view_facturacion);
     // 2) Refrescar contra /auth/me para que cambios del superadmin
     //    se reflejen sin necesidad de re-login.
-    apiFetch<{ full_name: string; role: string; allowed_modules: string[] | null }>(
+    apiFetch<{ full_name: string; role: string; allowed_modules: string[] | null; can_view_facturacion: boolean }>(
       "/api/v1/auth/me",
     )
       .then((me) => {
         setUserName(me.full_name?.split(" ")[0] ?? "");
         setAllowed(me.allowed_modules ?? null);
         setRole(me.role ?? "");
+        setCanFacturacion(!!me.can_view_facturacion);
         // Sincronizar el localStorage para que otras pantallas vean lo mismo.
         if (typeof window !== "undefined") {
           const raw = localStorage.getItem("vc_user");
@@ -81,6 +98,7 @@ export default function OperativasPage() {
               stored.full_name = me.full_name;
               stored.role = me.role;
               stored.allowed_modules = me.allowed_modules ?? null;
+              stored.can_view_facturacion = me.can_view_facturacion;
               localStorage.setItem("vc_user", JSON.stringify(stored));
             } catch {
               /* ignore */
@@ -96,6 +114,8 @@ export default function OperativasPage() {
   // Para cliente, filtrar módulos según allowed_modules.
   // null = acceso a todos; lista = solo los listados.
   const visibleModules = MODULES.filter((m) => {
+    // Módulos restringidos: solo si el backend habilitó al usuario (nunca clientes).
+    if (RESTRICTED.has(m.slug)) return m.slug === "televentas_claro" ? canFacturacion : false;
     if (role !== "client") return true;
     if (allowed === null) return true;
     return allowed.includes(m.slug);

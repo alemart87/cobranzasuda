@@ -16,6 +16,8 @@ from .atencion_gestion_upload import AtencionGestionUpload
 from .atencion_gestion_report import AtencionGestionReport
 from .atencion_gestion_item import AtencionGestionItem
 from .agent import AgentConversation, AgentMessage
+from .facturacion_upload import FacturacionUpload
+from .facturacion_report import FacturacionReport
 
 __all__ = [
     "User", "Upload", "Report", "AuditLog",
@@ -26,4 +28,5 @@ __all__ = [
     "AtencionGestionUpload", "AtencionGestionReport",
     "AtencionGestionItem",
     "AgentConversation", "AgentMessage",
+    "FacturacionUpload", "FacturacionReport",
 ]

@@ -31,6 +31,8 @@ class CurrentUser:
     photo_url: Optional[str] = None
     # Solo aplica a clientes. None = acceso a todos los módulos. Lista = restringido.
     allowed_modules: Optional[list[str]] = None
+    # Módulos RESTRINGIDOS habilitados (analistas). Superadmin accede a todo.
+    granted_modules: Optional[list[str]] = None
     # Habilita el Agente de Experiencia (IA). Superadmin siempre True.
     can_use_agent: bool = False
 
@@ -61,6 +63,15 @@ class CurrentUser:
         if self.allowed_modules is None:
             return True  # cliente sin restricción explícita
         return slug in self.allowed_modules
+
+    def has_restricted_module(self, slug: str) -> bool:
+        """Módulo restringido: superadmin siempre; analista solo si está habilitado;
+        cliente NUNCA."""
+        if self.is_superadmin:
+            return True
+        if self.is_analyst:
+            return slug in (self.granted_modules or [])
+        return False
 
 
 async def get_current_user(
@@ -102,6 +113,7 @@ async def get_current_user(
         id=user.id, email=user.email, role=user.role,
         full_name=user.full_name, photo_url=user.photo_url,
         allowed_modules=user.allowed_modules,
+        granted_modules=user.granted_modules,
         can_use_agent=bool(user.can_use_agent),
     )
 
@@ -123,6 +135,26 @@ async def require_agent_access(user: CurrentUser = Depends(get_current_user)) ->
     """Acceso al Agente de Experiencia: superadmin o usuario habilitado."""
     if not (user.is_superadmin or user.can_use_agent):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso al Agente de Experiencia")
+    return user
+
+
+# --- Facturación (Televentas Claro): módulo restringido ---
+_FACTURACION_SLUG = "televentas_claro"
+
+
+async def require_facturacion_access(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Lectura del módulo Facturación: superadmin o analista habilitado. Clientes NUNCA."""
+    if not user.has_restricted_module(_FACTURACION_SLUG):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso al módulo de Facturación")
+    return user
+
+
+async def require_facturacion_manage(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Gestión (subir/publicar/eliminar): superadmin o analista habilitado."""
+    if not user.has_restricted_module(_FACTURACION_SLUG):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso al módulo de Facturación")
+    if user.role not in ("superadmin", "analyst"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Requiere rol analista o superadmin")
     return user
 
 

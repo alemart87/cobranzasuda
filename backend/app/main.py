@@ -7,13 +7,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1 import (
-    agent, atencion, audit, auth, bases_adicionales, calls, gestiones, modules, overview,
-    publications, reports, uploads, users,
+    agent, atencion, audit, auth, bases_adicionales, calls, facturacion, facturacion_agent,
+    gestiones, modules, overview, publications, reports, uploads, users,
 )
 from .core.config import settings
 from .core.database import Base, engine
 from .core.logging import configure_logging, logger
-from .jobs import atencion_worker, resume_pending_jobs
+from .jobs import atencion_worker, facturacion_worker, resume_pending_jobs
 
 
 MIGRATIONS_IDEMPOTENT = [
@@ -47,6 +47,7 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "photo_url", "VARCHAR(500)"),
     ("users", "last_login_at", "TIMESTAMP WITH TIME ZONE"),
     ("users", "allowed_modules", "JSON"),
+    ("users", "granted_modules", "JSON"),
     ("users", "can_use_agent", "BOOLEAN NOT NULL DEFAULT false"),
     ("reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
     ("reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
@@ -175,14 +176,16 @@ async def lifespan(app: FastAPI):
     count = await resume_pending_jobs()
     logger.info(f"Boot: re-queued {count} jobs")
 
-    # Worker de cola del módulo Atención (Postgres + disco, concurrencia limitada).
+    # Workers de cola (Postgres + disco, concurrencia limitada, parseo aislado).
     import asyncio
     worker_task = asyncio.create_task(atencion_worker())
-    logger.info("Boot: atencion queue worker started")
+    facturacion_task = asyncio.create_task(facturacion_worker())
+    logger.info("Boot: atencion + facturacion queue workers started")
 
     yield
 
     worker_task.cancel()
+    facturacion_task.cancel()
     logger.info("Shutdown")
 
 
@@ -311,3 +314,5 @@ app.include_router(publications.router, prefix="/api/v1")
 app.include_router(overview.router, prefix="/api/v1")
 app.include_router(atencion.router, prefix="/api/v1")
 app.include_router(agent.router, prefix="/api/v1")
+app.include_router(facturacion.router, prefix="/api/v1")
+app.include_router(facturacion_agent.router, prefix="/api/v1")

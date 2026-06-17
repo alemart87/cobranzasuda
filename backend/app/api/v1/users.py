@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import settings
 from ...core.database import get_db
-from ...core.modules import MODULES, filter_valid_slugs
+from ...core.modules import MODULES, filter_restricted_slugs, filter_valid_slugs
 from ...core.security import hash_password
 from ...models.user import User
 from ...schemas.user import PasswordReset, UserCreate, UserRead, UserUpdate
@@ -48,12 +48,16 @@ async def create_user(
     if payload.role == "client" and payload.allowed_modules is not None:
         allowed = filter_valid_slugs(payload.allowed_modules)
 
+    # granted_modules (módulos restringidos): solo analistas; clientes nunca.
+    granted = filter_restricted_slugs(payload.granted_modules) if payload.role == "analyst" else []
+
     new_user = User(
         email=email,
         hashed_password=hash_password(payload.password),
         full_name=payload.full_name,
         role=payload.role,
         allowed_modules=allowed,
+        granted_modules=granted,
         can_use_agent=bool(payload.can_use_agent),
         created_by=user.id if user.id != "superadmin" else None,
     )
@@ -104,6 +108,10 @@ async def update_user(
     if "allowed_modules" in payload.model_fields_set and target.role == "client":
         target.allowed_modules = filter_valid_slugs(payload.allowed_modules)
         changes["allowed_modules"] = target.allowed_modules
+    # granted_modules (restringidos): solo aplica a analistas.
+    if "granted_modules" in payload.model_fields_set and target.role == "analyst":
+        target.granted_modules = filter_restricted_slugs(payload.granted_modules)
+        changes["granted_modules"] = target.granted_modules
     if payload.can_use_agent is not None:
         target.can_use_agent = payload.can_use_agent
         changes["can_use_agent"] = payload.can_use_agent

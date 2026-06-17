@@ -197,18 +197,21 @@ def _build_agent():
 
 
 async def stream_agent(
-    messages: list[dict], context: AgentContext,
+    messages: list[dict], context: AgentContext, build_fn=None,
 ) -> AsyncIterator[dict]:
     """Corre el agente en streaming. Emite eventos:
     {type:'token', text}, {type:'tool', name}, {type:'canvas', artifact},
     {type:'done', content}, {type:'error', message}.
+
+    `build_fn` permite inyectar otro agente especializado (ej. Facturación).
+    Default = Agente de Experiencia (Atención).
     """
     try:
         from agents import Runner
     except ImportError as exc:
         raise AgentNotConfigured("El SDK 'openai-agents' no está instalado.") from exc
 
-    agent = _build_agent()
+    agent = (build_fn or _build_agent)()
     result = Runner.run_streamed(
         agent, input=messages, context=context, max_turns=settings.agent_max_tool_turns,
     )
