@@ -14,6 +14,7 @@ interface UserRow {
   is_active: boolean;
   photo_url: string | null;
   allowed_modules: string[] | null;
+  granted_modules: string[] | null;
   can_use_agent: boolean;
   created_at: string;
   last_login_at: string | null;
@@ -139,6 +140,17 @@ export default function AdminUsersPage() {
     await apiFetch(`/api/v1/users/${u.id}`, {
       method: "PATCH",
       body: JSON.stringify({ can_use_agent: !u.can_use_agent }),
+    });
+    load();
+  };
+
+  const toggleFacturacion = async (u: UserRow) => {
+    const cur = u.granted_modules || [];
+    const has = cur.includes("televentas_claro");
+    const next = has ? cur.filter((s) => s !== "televentas_claro") : [...cur, "televentas_claro"];
+    await apiFetch(`/api/v1/users/${u.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ granted_modules: next }),
     });
     load();
   };
@@ -336,6 +348,7 @@ export default function AdminUsersPage() {
                 modules={modules}
                 onToggle={toggleActive}
                 onToggleAgent={toggleAgent}
+                onToggleFacturacion={toggleFacturacion}
                 onResetPwd={() => setResetUserId(u.id)}
                 onUploadPhoto={onUploadPhoto}
                 onEditModules={() => openEditModules(u)}
@@ -441,6 +454,7 @@ function UserListItem({
   modules,
   onToggle,
   onToggleAgent,
+  onToggleFacturacion,
   onResetPwd,
   onUploadPhoto,
   onEditModules,
@@ -449,6 +463,7 @@ function UserListItem({
   modules: ModuleInfo[];
   onToggle: (u: UserRow) => void;
   onToggleAgent: (u: UserRow) => void;
+  onToggleFacturacion: (u: UserRow) => void;
   onResetPwd: () => void;
   onUploadPhoto: (u: UserRow, f: File) => void;
   onEditModules: () => void;
@@ -531,6 +546,11 @@ function UserListItem({
         <button onClick={() => onToggleAgent(user)} className={`text-xs px-2.5 py-1 rounded border ${user.can_use_agent ? "border-brand-cyan text-brand-cyan" : "border-brand-border hover:border-brand-cyan hover:text-brand-cyan"}`}>
           {user.can_use_agent ? "Agente IA: ON" : "Agente IA: OFF"}
         </button>
+        {user.role === "analyst" && (
+          <button onClick={() => onToggleFacturacion(user)} className={`text-xs px-2.5 py-1 rounded border ${(user.granted_modules || []).includes("televentas_claro") ? "border-[#662483] text-[#662483]" : "border-brand-border hover:border-[#662483] hover:text-[#662483]"}`}>
+            {(user.granted_modules || []).includes("televentas_claro") ? "Facturación: ON" : "Facturación: OFF"}
+          </button>
+        )}
         <button onClick={onResetPwd} className="text-xs px-2.5 py-1 rounded border border-brand-border hover:border-brand-cyan hover:text-brand-cyan">
           Resetear PWD
         </button>

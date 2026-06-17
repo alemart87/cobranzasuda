@@ -169,7 +169,7 @@ async def list_conversations(
 ) -> list[AgentConversation]:
     rows = await db.execute(
         select(AgentConversation)
-        .where(AgentConversation.user_id == user.id)
+        .where(AgentConversation.user_id == user.id, AgentConversation.scope == "atencion")
         .order_by(AgentConversation.last_message_at.desc().nullslast(),
                   AgentConversation.created_at.desc())
         .limit(100)

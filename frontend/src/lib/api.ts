@@ -9,7 +9,9 @@ export interface CurrentUserInfo {
   full_name: string;
   photo_url?: string | null;
   allowed_modules?: string[] | null; // null = acceso a todos
+  granted_modules?: string[] | null; // módulos restringidos habilitados (analistas)
   can_use_agent?: boolean;
+  can_view_facturacion?: boolean; // módulo Televentas Claro
 }
 
 export function setSession(token: string, refreshToken: string, user: CurrentUserInfo) {
