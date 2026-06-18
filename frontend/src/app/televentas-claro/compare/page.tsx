@@ -136,13 +136,18 @@ function CompareResult({ result }: { result: any }) {
     .map((d: any) => ({ label: d.descripcion, delta: d.delta, pct: d.pct_del_cambio }));
   const deltaTotal: number = result.delta_total || 0;
 
-  // Drivers a lo largo de los meses (multi-línea)
+  // Drivers a lo largo de los meses (multi-línea).
+  // Se grafica la MAGNITUD (valor absoluto): así "más alto = más grande" para todos.
+  // Plotear penalidades en negativo invierte la lectura (más suspensiones quedaría "más abajo").
+  const driverMeta = (result.drivers || []).map((d: any) => {
+    const isDebito = (d.valores || []).some((v: number) => v < 0);
+    return { key: isDebito ? `${d.nombre} (débito)` : d.nombre, isDebito, valores: d.valores || [] };
+  });
   const driversSerie = labels.map((label, i) => {
     const row: any = { label };
-    (result.drivers || []).forEach((d: any) => { row[d.nombre] = d.valores?.[i] ?? 0; });
+    driverMeta.forEach((d: any) => { row[d.key] = Math.abs(d.valores?.[i] ?? 0); });
     return row;
   });
-  const driverNames: string[] = (result.drivers || []).map((d: any) => d.nombre);
 
   return (
     <div className="space-y-6">
@@ -210,18 +215,19 @@ function CompareResult({ result }: { result: any }) {
       )}
 
       {/* Drivers operativos a lo largo del tiempo */}
-      {driverNames.length > 0 && (
-        <ChartCard title="Drivers operativos" subtitle="Evolución mensual de los conceptos que más mueven la liquidación.">
+      {driverMeta.length > 0 && (
+        <ChartCard title="Drivers operativos"
+          subtitle="Magnitud mensual de cada concepto. Las penalidades (suspensiones, documentación) se muestran en valor absoluto y con línea punteada: más alto = mayor penalidad.">
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={driversSerie} margin={{ top: 8, right: 16, left: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#eef0f2" vertical={false} />
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#64748b" }} />
-              <YAxis tickFormatter={gsM} tick={{ fontSize: 11, fill: "#64748b" }} width={56} />
+              <YAxis tickFormatter={gsM} tick={{ fontSize: 11, fill: "#64748b" }} width={56} domain={[0, "auto"]} />
               <Tooltip formatter={(v: any, k: any) => [gs(Number(v)), k]} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <ReferenceLine y={0} stroke="#cbd5e1" />
-              {driverNames.map((name, i) => (
-                <Line key={name} dataKey={name} type="monotone" stroke={PALETTE[i % PALETTE.length]} strokeWidth={2} dot={{ r: 2 }} />
+              {driverMeta.map((d: any, i: number) => (
+                <Line key={d.key} dataKey={d.key} type="monotone" stroke={PALETTE[i % PALETTE.length]}
+                  strokeWidth={2} strokeDasharray={d.isDebito ? "5 4" : undefined} dot={{ r: 2 }} />
               ))}
             </LineChart>
           </ResponsiveContainer>
