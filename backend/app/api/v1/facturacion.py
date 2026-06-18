@@ -221,7 +221,8 @@ async def compare_reports(
     result = compare_facturacion(payload_data)
     await record_action(
         db, user_id=user.id, action="compare_facturacion_reports",
-        resource_type="facturacion_report", resource_id=",".join(payload.report_ids)[:200],
-        ip=client_ip(request), extra={"count": len(reports)},
+        resource_type="facturacion_report", resource_id=payload.report_ids[0][:100],
+        ip=client_ip(request),
+        extra={"count": len(reports), "report_ids": list(payload.report_ids)},
     )
     return CompareResponse(**result)

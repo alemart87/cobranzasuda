@@ -19,13 +19,18 @@ async def record_action(
     user_agent: Optional[str] = None,
     extra: Optional[dict[str, Any]] = None,
 ) -> None:
+    def _clip(v: Optional[str], n: int) -> Optional[str]:
+        return v[:n] if isinstance(v, str) and len(v) > n else v
+
+    # Truncado defensivo: los campos del audit son VARCHAR acotados; nunca queremos
+    # que un registro de auditoría tumbe (500) la operación que está auditando.
     row = AuditLog(
-        user_id=user_id,
-        action=action,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        ip_address=ip,
-        user_agent=user_agent,
+        user_id=_clip(user_id, 36),
+        action=_clip(action, 100),
+        resource_type=_clip(resource_type, 100),
+        resource_id=_clip(resource_id, 100),
+        ip_address=_clip(ip, 64),
+        user_agent=_clip(user_agent, 500),
         extra=extra or {},
     )
     db.add(row)
