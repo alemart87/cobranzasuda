@@ -14,12 +14,21 @@ export default function AgenteFacturacionPage() {
       deniedMessage="No tenés acceso al Agente de Facturación. Pedile al administrador que te habilite el módulo Televentas Claro."
       focusLabel="Enfocar en liquidaciones"
       loadFocusOptions={async () => {
-        const data = await apiFetch<{ items: { id: string; periodo: string | null; nro_liquidacion: string | null }[] }>(
-          "/api/v1/facturacion/reports",
-        );
+        const data = await apiFetch<{
+          items: { id: string; periodo: string | null; nro_liquidacion: string | null; total: number; is_published: boolean }[];
+        }>("/api/v1/facturacion/reports");
+        const gsM = (v: number) => {
+          const a = Math.abs(v || 0);
+          if (a >= 1e9) return "Gs " + (v / 1e9).toFixed(1).replace(".", ",") + " MM";
+          if (a >= 1e6) return "Gs " + Math.round(v / 1e6) + " M";
+          return "Gs " + Math.round(v).toLocaleString("es-PY");
+        };
         return data.items.map((r) => ({
           id: r.id,
-          label: `${r.periodo || "—"} · Liq ${r.nro_liquidacion || "?"}`,
+          label: r.periodo || "Sin período",
+          sublabel: `Liquidación ${r.nro_liquidacion || "?"}`,
+          badge: gsM(r.total),
+          published: r.is_published,
         }));
       }}
       suggestions={[

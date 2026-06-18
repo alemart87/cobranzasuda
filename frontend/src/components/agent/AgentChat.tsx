@@ -11,7 +11,13 @@ import { downloadCanvasHtml } from "@/lib/canvasExport";
 interface Conversation { id: string; title: string | null; last_message_at: string | null; created_at: string; }
 interface Message { role: "user" | "assistant"; content: string; reasoning?: string; artifacts: Artifact[]; streaming?: boolean; error?: boolean; }
 
-export interface FocusOption { id: string; label: string }
+export interface FocusOption {
+  id: string;
+  label: string;
+  sublabel?: string;   // ej. "Liq 389 · 4.812 mov."
+  badge?: string;      // ej. monto "Gs 904 M"
+  published?: boolean; // estado publicado/borrador
+}
 
 export interface AgentChatProps {
   apiBase: string;            // ej. "/api/v1/agent" o "/api/v1/facturacion-agent"
@@ -30,7 +36,6 @@ export function AgentChat(props: AgentChatProps) {
   const { apiBase } = props;
   const [focusOptions, setFocusOptions] = useState<FocusOption[]>([]);
   const [focusSel, setFocusSel] = useState<string[]>([]);
-  const [focusOpen, setFocusOpen] = useState(false);
   const [access, setAccess] = useState<{ configured: boolean; model: string; default_month: string } | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -234,36 +239,8 @@ export function AgentChat(props: AgentChatProps) {
 
           <div className="border-t border-brand-border p-3">
             {focusOptions.length > 0 && (
-              <div className="max-w-3xl mx-auto mb-2 relative">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button onClick={() => setFocusOpen((o) => !o)} className="btn-ghost text-xs inline-flex items-center gap-1">
-                    📎 {props.focusLabel || "Enfocar en archivos"}{focusSel.length ? ` (${focusSel.length})` : ""}
-                    <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform ${focusOpen ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6" /></svg>
-                  </button>
-                  {focusSel.map((id) => {
-                    const o = focusOptions.find((x) => x.id === id);
-                    return (
-                      <span key={id} className="inline-flex items-center gap-1 text-[11px] bg-[#662483]/10 text-[#662483] px-2 py-0.5 rounded">
-                        {o?.label || id}
-                        <button onClick={() => setFocusSel((s) => s.filter((x) => x !== id))} className="hover:text-brand-primary">✕</button>
-                      </span>
-                    );
-                  })}
-                  {focusSel.length > 0 && (
-                    <button onClick={() => setFocusSel([])} className="text-[11px] text-brand-slate hover:text-brand-primary">limpiar</button>
-                  )}
-                </div>
-                {focusOpen && (
-                  <div className="absolute bottom-full mb-1 z-20 w-72 max-h-60 overflow-y-auto card p-1 shadow-elevated">
-                    {focusOptions.map((o) => (
-                      <label key={o.id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-brand-bg cursor-pointer text-sm">
-                        <input type="checkbox" checked={focusSel.includes(o.id)}
-                          onChange={(e) => setFocusSel((s) => e.target.checked ? [...s, o.id] : s.filter((x) => x !== o.id))} />
-                        <span>{o.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
+              <div className="max-w-3xl mx-auto mb-2">
+                <FocusPicker options={focusOptions} selected={focusSel} onChange={setFocusSel} label={props.focusLabel} />
               </div>
             )}
             <div className="flex items-end gap-2 max-w-3xl mx-auto">
@@ -304,6 +281,115 @@ export function AgentChat(props: AgentChatProps) {
         )}
       </div>
     </AppShell>
+  );
+}
+
+const FOCUS_GRAD = "linear-gradient(135deg,#662483 0%,#00B2BF 100%)";
+
+function FileGlyph({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M9 13h6" /><path d="M9 17h4" />
+    </svg>
+  );
+}
+
+function FocusPicker({ options, selected, onChange, label }: {
+  options: FocusOption[]; selected: string[]; onChange: (s: string[]) => void; label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const active = selected.length > 0;
+  const allSel = selected.length > 0 && selected.length === options.length;
+  const toggle = (id: string) => onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
+  const filtered = options.filter((o) => `${o.label} ${o.sublabel || ""}`.toLowerCase().includes(q.trim().toLowerCase()));
+
+  return (
+    <div className="relative">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <button
+          onClick={() => setOpen((o) => !o)}
+          className={`group inline-flex items-center gap-2 rounded-full py-1 pl-1 pr-3 text-xs font-semibold transition-all duration-200 ${active ? "text-white" : "border border-brand-border bg-white text-brand-graphite hover:border-brand-cyan hover:shadow-sm"}`}
+          style={active ? { backgroundImage: FOCUS_GRAD, boxShadow: "0 6px 18px -6px rgba(102,36,131,.55)" } : undefined}
+        >
+          <span className="flex items-center justify-center w-6 h-6 rounded-full text-white" style={active ? { background: "rgba(255,255,255,.2)" } : { backgroundImage: FOCUS_GRAD }}>
+            <FileGlyph />
+          </span>
+          <span>{label || "Enfocar análisis"}{active ? ` · ${selected.length}` : ""}</span>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" className={`transition-transform ${open ? "rotate-180" : ""}`}><path d="m6 9 6 6 6-6" /></svg>
+        </button>
+
+        {selected.map((id) => {
+          const o = options.find((x) => x.id === id);
+          return (
+            <span key={id} className="inline-flex items-center gap-1 text-[11px] font-medium pl-2 pr-1 py-0.5 rounded-full text-[#5b1f78]" style={{ background: "linear-gradient(135deg,rgba(102,36,131,.12),rgba(0,178,191,.14))" }}>
+              {o?.label || id}
+              <button onClick={() => onChange(selected.filter((x) => x !== id))} className="w-4 h-4 inline-flex items-center justify-center rounded-full hover:bg-white/60 hover:text-brand-primary">✕</button>
+            </span>
+          );
+        })}
+        {active && <button onClick={() => onChange([])} className="text-[11px] text-brand-slate hover:text-brand-primary">limpiar</button>}
+      </div>
+
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-full mb-2 left-0 z-20 w-[23rem] max-w-[92vw] rounded-2xl border border-brand-border bg-white overflow-hidden shadow-elevated animate-pop">
+            <div className="px-4 py-3 text-white" style={{ backgroundImage: FOCUS_GRAD }}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-[10px] uppercase tracking-wider2 font-bold opacity-80">Foco del análisis</div>
+                  <div className="text-sm font-semibold truncate">{active ? `${selected.length} liquidación(es) seleccionada(s)` : "Elegí una o más liquidaciones"}</div>
+                </div>
+                <span className="flex-shrink-0 text-[11px] font-semibold bg-white/20 rounded-full px-2 py-0.5">{options.length}</span>
+              </div>
+            </div>
+
+            <div className="p-2 border-b border-brand-border">
+              <div className="flex items-center gap-2 rounded-lg border border-brand-border bg-brand-bg px-2.5 py-1.5 focus-within:border-brand-cyan">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" className="text-brand-mist"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar período o liquidación…" className="flex-1 bg-transparent text-sm focus:outline-none placeholder:text-brand-mist" />
+              </div>
+            </div>
+
+            <div className="max-h-64 overflow-y-auto p-1.5 space-y-1">
+              {filtered.length === 0 && <p className="text-xs text-brand-slate text-center py-5">Sin resultados.</p>}
+              {filtered.map((o) => {
+                const on = selected.includes(o.id);
+                return (
+                  <button key={o.id} onClick={() => toggle(o.id)}
+                    className={`w-full flex items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors ${on ? "" : "hover:bg-brand-bg"}`}
+                    style={on ? { background: "linear-gradient(135deg,rgba(102,36,131,.08),rgba(0,178,191,.10))" } : undefined}>
+                    <span className={`flex-shrink-0 w-5 h-5 rounded-md flex items-center justify-center border transition-all ${on ? "border-transparent text-white" : "border-brand-mist text-transparent"}`} style={on ? { backgroundImage: FOCUS_GRAD } : undefined}>
+                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12 5 5L20 7" /></svg>
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-semibold text-brand-ink truncate">{o.label}</span>
+                      {o.sublabel && <span className="block text-[11px] text-brand-slate truncate">{o.sublabel}</span>}
+                    </span>
+                    <span className="flex-shrink-0 text-right">
+                      {o.badge && <span className="block text-[11px] font-semibold text-brand-ink tabular-nums">{o.badge}</span>}
+                      {typeof o.published === "boolean" && (
+                        <span className={`inline-block mt-0.5 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${o.published ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>{o.published ? "Publicado" : "Borrador"}</span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between px-3 py-2 border-t border-brand-border bg-brand-bg-soft">
+              <button onClick={() => onChange(allSel ? [] : options.map((o) => o.id))} className="text-[11px] font-semibold text-brand-cyan hover:text-brand-ink">
+                {allSel ? "Quitar todo" : "Seleccionar todo"}
+              </button>
+              <button onClick={() => setOpen(false)} className="text-[11px] font-semibold rounded-full px-3.5 py-1 text-white transition-transform hover:scale-[1.03]" style={{ backgroundImage: FOCUS_GRAD }}>
+                Aplicar{active ? ` (${selected.length})` : ""}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
