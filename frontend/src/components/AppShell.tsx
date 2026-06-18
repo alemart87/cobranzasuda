@@ -53,6 +53,10 @@ const NAV_ATENCION_UPLOADS = [
 ];
 const ATENCION_PREFIXES = ["/atencion"];
 
+// --- Televentas Claro · Facturación (módulo restringido) ---
+const NAV_TELEVENTAS_INICIO = { href: "/televentas-claro", label: "Inicio" };
+const TELEVENTAS_PREFIXES = ["/televentas-claro"];
+
 const ROLE_LABELS: Record<string, string> = {
   superadmin: "Superadmin",
   analyst: "Analista",
@@ -64,6 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [user, setUser] = useState<CurrentUserInfo | null>(null);
   const [canUseAgent, setCanUseAgent] = useState(false);
+  const [canFacturacion, setCanFacturacion] = useState(false);
   const [uploadsOpen, setUploadsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [agentChromeOpen, setAgentChromeOpen] = useState(false);
@@ -76,8 +81,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     setUser(getUser());
     // Refrescar capacidad de agente desde el backend (no viene en el login).
-    apiFetch<{ can_use_agent?: boolean }>("/api/v1/auth/me")
-      .then((me) => setCanUseAgent(!!me.can_use_agent))
+    apiFetch<{ can_use_agent?: boolean; can_view_facturacion?: boolean }>("/api/v1/auth/me")
+      .then((me) => { setCanUseAgent(!!me.can_use_agent); setCanFacturacion(!!me.can_view_facturacion); })
       .catch(() => {});
   }, [router]);
 
@@ -95,11 +100,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   const adminItems = ADMIN_NAV.filter((n) => n.roles.includes(user.role));
-  const inAtencion = ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
-  const inCobranzas = !inAtencion && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inTeleventas = TELEVENTAS_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inAtencion = !inTeleventas && ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inCobranzas = !inAtencion && !inTeleventas && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
   const canManage = user.role === "superadmin" || user.role === "analyst";
-  // En el Agente de Experiencia colapsamos el chrome para un workspace amplio.
-  const isAgent = pathname?.startsWith("/atencion/agente") ?? false;
+  // En los Agentes (Experiencia / Facturación) colapsamos el chrome → workspace amplio.
+  const inFacturacionAgent = pathname?.startsWith("/televentas-claro/agente") ?? false;
+  const isAgent = (pathname?.startsWith("/atencion/agente") || inFacturacionAgent) ?? false;
   const showChrome = !isAgent || agentChromeOpen;
 
   const isActive = (href: string) =>
@@ -193,7 +200,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </>
               )}
 
-              {inAtencion ? (
+              {inTeleventas ? (
+                <>
+                  <div className={mobileGroupLabel}>Televentas Claro · Facturación</div>
+                  <Link href="/televentas-claro" className={mobilePill(pathname === "/televentas-claro")}>Inicio</Link>
+                  <Link href="/televentas-claro/compare" className={mobilePill(isActive("/televentas-claro/compare"))}>Comparar</Link>
+                  <Link href="/televentas-claro/agente" className={mobilePill(isActive("/televentas-claro/agente"))}>Agente IA</Link>
+                  {canManage && (
+                    <Link href="/televentas-claro/upload" className={mobilePill(isActive("/televentas-claro/upload"))}>Subir liquidación</Link>
+                  )}
+                </>
+              ) : inAtencion ? (
                 <>
                   <div className={mobileGroupLabel}>Atención al Cliente</div>
                   <Link href={NAV_ATENCION_INICIO.href} className={mobilePill(pathname === NAV_ATENCION_INICIO.href)}>{NAV_ATENCION_INICIO.label}</Link>
@@ -441,6 +458,43 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         )}
+
+        {/* Nav del módulo Televentas Claro (desktop) */}
+        {inTeleventas && (
+          <div className="bg-brand-ink text-white hidden md:block">
+            <div className="px-4 sm:px-6 py-2 flex items-center gap-1 flex-wrap">
+              <Link href="/operativas" className="text-[10px] uppercase tracking-wider2 font-semibold text-white/55 hover:text-white flex-shrink-0">
+                ← Operativas
+              </Link>
+              {navDivider}
+              <span className="text-[10px] uppercase tracking-wider2 font-bold text-[#a06cc4] flex-shrink-0">
+                Televentas Claro
+              </span>
+              {navDivider}
+              <Link href={NAV_TELEVENTAS_INICIO.href} className={pill(pathname === NAV_TELEVENTAS_INICIO.href)}>
+                {NAV_TELEVENTAS_INICIO.label}
+              </Link>
+              <Link href="/televentas-claro/compare" className={pill(isActive("/televentas-claro/compare"))}>
+                Comparar
+              </Link>
+              <Link href="/televentas-claro/agente" className={`${pill(inFacturacionAgent)} inline-flex items-center gap-1.5 ring-1 ring-[#a06cc4]/40`}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                Agente IA
+              </Link>
+              {canManage && (
+                <>
+                  {navDivider}
+                  <Link href="/televentas-claro/upload" className={`${pill(isActive("/televentas-claro/upload"))} inline-flex items-center gap-1.5`}>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m17 8-5-5-5 5" /><path d="M12 3v12" />
+                    </svg>
+                    Subir liquidación
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </header>
       )}
 
@@ -457,8 +511,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : (
           <div className="sticky top-0 z-30 bg-brand-ink text-white flex items-center justify-between px-3 sm:px-4 py-1.5">
             <div className="flex items-center gap-3 min-w-0">
-              <Link href="/atencion" className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white flex-shrink-0">← Atención</Link>
-              <span className="text-[11px] uppercase tracking-wider2 font-bold text-brand-cyan truncate">Agente de Experiencia</span>
+              <Link href={inFacturacionAgent ? "/televentas-claro" : "/atencion"} className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white flex-shrink-0">
+                {inFacturacionAgent ? "← Televentas Claro" : "← Atención"}
+              </Link>
+              <span className={`text-[11px] uppercase tracking-wider2 font-bold truncate ${inFacturacionAgent ? "text-[#a06cc4]" : "text-brand-cyan"}`}>
+                {inFacturacionAgent ? "Agente de Facturación" : "Agente de Experiencia"}
+              </span>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
               <button onClick={() => setAgentChromeOpen(true)} className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white inline-flex items-center gap-1">
