@@ -50,6 +50,9 @@ export default function FacturacionReportPage() {
   const ventas = d.ventas || {};
   const susp = d.suspensiones || {};
   const doc = d.doc_faltante || {};
+  const planMix: any[] = d.plan_mix || [];
+  const planesRent: any[] = d.planes_rentables || [];
+  const suspDia: any[] = susp.por_dia || [];
 
   const togglePublish = async () => {
     await apiFetch(`/api/v1/facturacion/reports/${id}/publish`, {
@@ -95,6 +98,14 @@ export default function FacturacionReportPage() {
               <li key={i} className="flex gap-2"><span className="text-brand-cyan">›</span><span>{a}</span></li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Mix de planes + curva diaria de suspensiones */}
+      {(planMix.length > 0 || suspDia.length > 0) && (
+        <div className="grid md:grid-cols-2 gap-6 mb-6">
+          {planMix.length > 0 && <PlanMixCard mix={planMix} rentables={planesRent} />}
+          {suspDia.length > 0 && <DailyCurveCard title="Suspensiones por fecha de venta" rows={suspDia} />}
         </div>
       )}
 
@@ -172,6 +183,62 @@ function CohorteCard({ title, monto, rows }: { title: string; monto: string; row
       <h3 className="font-display text-base text-brand-ink uppercase mb-1">{title}</h3>
       <p className="text-sm text-brand-primary font-semibold mb-3">{monto}</p>
       <CohorteRows rows={rows} label="Por mes de venta de la línea" />
+    </div>
+  );
+}
+
+function PlanMixCard({ mix, rentables }: { mix: any[]; rentables: any[] }) {
+  const totalAct = mix.reduce((s, p) => s + (p.activaciones || 0), 0) || 1;
+  const masVendido = mix[0];
+  const masRentable = rentables[0];
+  return (
+    <div className="card p-5">
+      <h3 className="font-display text-base text-brand-ink uppercase mb-1">Mix de planes · {mix.length}</h3>
+      <p className="text-xs text-brand-slate mb-3">
+        Más vendido <b className="text-brand-ink">{masVendido?.plan}</b> · mayor ticket{" "}
+        <b className="text-brand-ink">{masRentable?.plan}</b> ({gs(masRentable?.ticket || 0)}/act.)
+      </p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-wider2 text-brand-slate border-b border-brand-border">
+            <th className="py-1.5">Plan</th>
+            <th className="py-1.5 text-right">Activ.</th>
+            <th className="py-1.5 text-right">Mix</th>
+            <th className="py-1.5 text-right">Ticket</th>
+          </tr>
+        </thead>
+        <tbody>
+          {mix.map((p, i) => (
+            <tr key={i} className="border-b border-brand-border/40">
+              <td className="py-1.5 font-medium">{p.plan}</td>
+              <td className="py-1.5 text-right">{(p.activaciones || 0).toLocaleString("es-PY")}</td>
+              <td className="py-1.5 text-right text-brand-slate">{Math.round((p.activaciones / totalAct) * 100)}%</td>
+              <td className="py-1.5 text-right">{gs(p.ticket || 0)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function DailyCurveCard({ title, rows }: { title: string; rows: any[] }) {
+  const max = Math.max(...rows.map((x) => x.registros || 0), 1);
+  return (
+    <div className="card p-5">
+      <h3 className="font-display text-base text-brand-ink uppercase mb-3">{title}</h3>
+      <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
+        {rows.map((x, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs">
+            <span className="w-20 text-brand-slate tabular-nums">{x.fecha}</span>
+            <div className="flex-1 bg-brand-bg rounded h-3 overflow-hidden">
+              <div className="bg-brand-primary/70 h-full rounded" style={{ width: `${(x.registros / max) * 100}%` }} />
+            </div>
+            <span className="w-8 text-right tabular-nums">{x.registros}</span>
+            <span className="w-24 text-right text-brand-slate tabular-nums">{gs(x.monto || 0)}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -75,6 +75,18 @@ def analyze_facturacion(parsed: dict[str, Any]) -> dict[str, Any]:
             f"(promedio {_fmt_gs(abs(doc['promedio']))}){extra}.".replace(",", ".")
         )
 
+    # Mix de planes + curva de planes más rentables (por ticket de comisión)
+    plan_mix = parsed.get("plan_mix", [])
+    planes_rentables = sorted(plan_mix, key=lambda p: -p.get("ticket", 0))
+    if plan_mix:
+        top_plan = plan_mix[0]
+        rent = planes_rentables[0]
+        analisis.append(
+            f"Mix de planes: {len(plan_mix)} planes; el más vendido es {top_plan['plan']} "
+            f"({top_plan['activaciones']} act.). El de mayor ticket es {rent['plan']} "
+            f"({_fmt_gs(rent['ticket'])}/activación)."
+        )
+
     kpis = {
         "nro_liquidacion": parsed["nro_liquidacion"],
         "periodo": parsed.get("periodo"),
@@ -94,5 +106,8 @@ def analyze_facturacion(parsed: dict[str, Any]) -> dict[str, Any]:
         "ventas": ventas,
         "suspensiones": susp,
         "doc_faltante": doc,
+        "plan_mix": plan_mix,
+        "planes_rentables": planes_rentables,
+        "cohorte_calidad": parsed.get("cohorte_calidad", {}),
         "analisis_rapido": analisis,
     }

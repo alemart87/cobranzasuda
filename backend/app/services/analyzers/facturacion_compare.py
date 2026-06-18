@@ -26,6 +26,86 @@ def _label(rep: dict[str, Any]) -> str:
     return rep.get("title") or rep.get("periodo") or f"Liq {rep.get('nro_liquidacion') or '?'}"
 
 
+def _fecha_key(fecha: str) -> str:
+    f = (fecha or "").strip()
+    if len(f) >= 10 and f[2] == "/" and f[5] == "/":
+        return f"{f[6:10]}-{f[3:5]}-{f[0:2]}"
+    return f
+
+
+_MADURACION_MESES = 2  # una venta tarda ~2 meses en que aparezcan sus penalidades (chargeback)
+
+
+def _mes_de_fecha(fecha: str) -> str:
+    k = _fecha_key(fecha)  # yyyy-mm-dd
+    return k[:7] if len(k) >= 7 else ""
+
+
+def _resta_meses(periodo: str, n: int) -> str:
+    """`yyyy-mm` menos n meses."""
+    try:
+        y, m = int(periodo[:4]), int(periodo[5:7])
+    except (ValueError, IndexError):
+        return periodo
+    idx = (y * 12 + (m - 1)) - n
+    return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
+
+
+def calidad_por_fecha(reports: list[dict[str, Any]], min_act: int = 5) -> dict[str, Any]:
+    """Cruza, ENTRE liquidaciones, las activaciones por fecha de venta contra las penalidades
+    (suspensiones PFI + documentación + cancelaciones) de esa misma fecha → tasa de penalidad.
+    Fechas con tasa baja = ventas de MAYOR calidad; tasa alta = MENOR calidad.
+
+    Solo se rankean las cohortes MADURAS (con ~2 meses para que asomen sus penalidades). Las
+    fechas más recientes se devuelven aparte (inmaduras) para no inflar la calidad artificialmente.
+    """
+    from collections import defaultdict
+    ventas: dict[str, list] = defaultdict(lambda: [0, 0.0])
+    penal: dict[str, list] = defaultdict(lambda: [0, 0.0])
+    for r in reports:
+        ch = (r.get("data") or {}).get("cohorte_calidad", {})
+        for f, v in (ch.get("ventas_por_dia") or {}).items():
+            ventas[f][0] += v[0]; ventas[f][1] += v[1]
+        for f, v in (ch.get("penal_por_dia") or {}).items():
+            penal[f][0] += v[0]; penal[f][1] += v[1]
+
+    # Período más reciente entre las liquidaciones → corte de madurez
+    periodos = [p for p in (r.get("periodo") for r in reports) if p]
+    ultimo_periodo = max(periodos) if periodos else ""
+    corte_maduro = _resta_meses(ultimo_periodo, _MADURACION_MESES) if ultimo_periodo else ""
+
+    filas, inmaduras = [], []
+    for f, va in ventas.items():
+        act = va[0]
+        if act < min_act:
+            continue
+        pen = penal.get(f, [0, 0.0])
+        fila = {
+            "fecha": f,
+            "activaciones": act,
+            "penalidades": pen[0],
+            "monto_penalidad": round(pen[1], 2),
+            "tasa_penalidad": round(pen[0] / act * 100, 1) if act else 0.0,
+            "maduro": (not corte_maduro) or _mes_de_fecha(f) <= corte_maduro,
+        }
+        (filas if fila["maduro"] else inmaduras).append(fila)
+    if not filas and not inmaduras:
+        return {"sin_datos": True, "mensaje": "Necesito al menos 2 liquidaciones para cruzar calidad por fecha."}
+    filas.sort(key=lambda x: _fecha_key(x["fecha"]))
+    inmaduras.sort(key=lambda x: _fecha_key(x["fecha"]))
+    peor = sorted(filas, key=lambda x: -x["tasa_penalidad"])[:8]
+    mejor = sorted(filas, key=lambda x: x["tasa_penalidad"])[:8]
+    return {
+        "por_fecha": filas,
+        "inmaduras": inmaduras,           # cohortes recientes, aún sin penalidades maduradas
+        "menor_calidad": peor,            # mayor tasa de penalidad
+        "mayor_calidad": mejor,           # menor tasa de penalidad
+        "corte_maduro": corte_maduro,     # solo se rankea hasta este mes (inclusive)
+        "nota": f"Ranking sobre cohortes con ~{_MADURACION_MESES} meses de maduración (hasta {corte_maduro}). "
+                f"Las fechas posteriores se listan en 'inmaduras' y aún no reflejan sus penalidades.",
+    }
+
+
 def _sort_key(rep: dict[str, Any]):
     return (rep.get("periodo") or "", rep.get("generated_at") or "")
 

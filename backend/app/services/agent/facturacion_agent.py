@@ -12,7 +12,8 @@ from ...core.config import settings
 from . import core
 from .core import AgentNotConfigured
 from .facturacion_tools import (
-    fact_comparar_impl, fact_focus_impl, fact_listar_reportes_impl, fact_obtener_reporte_impl,
+    fact_calidad_fecha_impl, fact_comparar_impl, fact_focus_impl, fact_listar_reportes_impl,
+    fact_obtener_reporte_impl,
 )
 from .tools import AgentContext
 
@@ -67,7 +68,15 @@ si baja con ventas estables, la causa es META no alcanzada (driver operativo), n
 `por_mes_venta` para ubicar la cohorte de origen.
 5. Documentación faltante: separá legajos "no presentados" (reversibles, recuperables con Claro/Logística) \
 de los demás; estimá el monto recuperable (registros × promedio).
-6. Cerrá con ACCIONES operativas concretas y montos recuperables. Usá SIEMPRE "PFI" (no "fraude"). \
+6. Mix de planes y rentabilidad: en `fact_obtener_reporte` usá `plan_mix` (activaciones por plan) y \
+`planes_rentables` (ranking por ticket de comisión). Distinguí el plan MÁS vendido del de MAYOR ticket.
+7. Curvas diarias: `ventas.por_dia` (curva de ventas) y `suspensiones.por_dia` (suspensiones por fecha) \
+para detectar concentraciones; los cierres de fin de mes suelen cargar suspensiones.
+8. Calidad por fecha de venta: usá `fact_calidad_fecha` (cruza activaciones vs penalidades por fecha \
+ENTRE liquidaciones). Reportá `mayor_calidad` (menor tasa de penalidad) y `menor_calidad` (mayor tasa). \
+Solo se rankean cohortes MADURAS (~2 meses); aclará que las fechas recientes ('inmaduras') aún no reflejan \
+sus penalidades, así no afirmás que un mes reciente es "el de mejor calidad" sin maduración.
+9. Cerrá con ACCIONES operativas concretas y montos recuperables. Usá SIEMPRE "PFI" (no "fraude"). \
 Conclusiones deterministas, sin hipótesis especulativas. Comparativos: mínimo 3 meses.
 
 FOCO del usuario:
@@ -75,7 +84,7 @@ FOCO del usuario:
 1 reporte → análisis a fondo de ese mes; 2+ → comparalos con `fact_comparar` y descomponé el cambio.
 
 Datos: NO inventás. Tools: `fact_focus`, `fact_listar_reportes`, `fact_obtener_reporte`, \
-`fact_comparar`, `fact_criterios`. Si no hay reportes, sugerí subir las liquidaciones .txt.
+`fact_comparar`, `fact_calidad_fecha`, `fact_criterios`. Si no hay reportes, sugerí subir las liquidaciones .txt.
 
 Visualización con `emit_canvas` (panel derecho) — usá EXACTAMENTE estas formas de `datos`:
 - KPIs: tipo="kpis", datos={"kpis":[{"label":"Facturación neta","valor":"Gs 600.569.975"},{"label":"Créditos","valor":"Gs 1.329.150.320"}]}
@@ -125,6 +134,13 @@ def _build_facturacion_agent():
         usa los reportes en foco. Pasá períodos YYYY-MM, números de liquidación o ids."""
         return await fact_comparar_impl(referencias, ctx.context.focus_refs)
 
+    @function_tool(strict_mode=False)
+    async def fact_calidad_fecha(ctx: RunContextWrapper[AgentContext], referencias: Optional[list[str]] = None) -> dict:
+        """Cruza activaciones vs penalidades por FECHA de venta entre 2+ liquidaciones para identificar
+        las fechas de ventas de MAYOR y MENOR calidad (tasa de penalidad). Sin `referencias` usa el foco
+        o todos los reportes. Requiere ≥2 meses (idealmente con ~2 de maduración por el chargeback)."""
+        return await fact_calidad_fecha_impl(referencias, ctx.context.focus_refs)
+
     @function_tool
     async def fact_criterios(ctx: RunContextWrapper[AgentContext], concepto: Optional[str] = None) -> dict:
         """Devuelve los criterios del Manual TLMK Fijo PGY. Sin `concepto`: catálogo completo.
@@ -148,7 +164,8 @@ def _build_facturacion_agent():
         ctx.context.canvas.append(artifact)
         return {"ok": True, "artifact_id": artifact["id"]}
 
-    tools = [fact_focus, fact_listar_reportes, fact_obtener_reporte, fact_comparar, fact_criterios, emit_canvas]
+    tools = [fact_focus, fact_listar_reportes, fact_obtener_reporte, fact_comparar,
+             fact_calidad_fecha, fact_criterios, emit_canvas]
 
     model_settings = None
     try:
