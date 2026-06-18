@@ -112,11 +112,32 @@ async def fact_obtener_reporte_impl(referencia: Optional[str] = None,
         "resumen": _summary(r),
         "kpis": d.get("kpis", {}),
         "conceptos": d.get("conceptos", []),         # TODAS las descripciones
-        "ventas": d.get("ventas", {}),
-        "suspensiones": d.get("suspensiones", {}),
+        "ventas": d.get("ventas", {}),               # incluye por_dia (curva diaria)
+        "suspensiones": d.get("suspensiones", {}),   # incluye por_dia (suspensiones por fecha)
         "doc_faltante": d.get("doc_faltante", {}),
+        "plan_mix": d.get("plan_mix", []),           # mix de planes (activaciones por plan)
+        "planes_rentables": d.get("planes_rentables", []),  # ranking por ticket de comisión
         "analisis_rapido": d.get("analisis_rapido", []),
     }
+
+
+async def fact_calidad_fecha_impl(referencias: Optional[list[str]] = None,
+                                  focus_refs: Optional[list[str]] = None) -> dict[str, Any]:
+    """Cruza activaciones vs penalidades por FECHA de venta entre 2+ liquidaciones → fechas de
+    ventas de MAYOR y MENOR calidad. Necesita ≥2 meses (idealmente con ~2 de maduración)."""
+    from ...services.analyzers.facturacion_compare import calidad_por_fecha
+    refs = referencias if (referencias and len(referencias) >= 2) else (focus_refs or [])
+    reps = await _resolve_focus(refs)
+    if len(reps) < 2:
+        # Si no alcanza el foco, usar todos los reportes disponibles.
+        async with session_scope() as db:
+            reps = (await db.execute(
+                select(FacturacionReport).order_by(FacturacionReport.periodo.asc().nullsfirst()).limit(24)
+            )).scalars().all()
+    if len(reps) < 2:
+        return {"sin_datos": True, "mensaje": "Necesito al menos 2 liquidaciones cargadas para cruzar calidad por fecha."}
+    payload = [{"id": r.id, "periodo": r.periodo, "data": r.data or {}} for r in reps]
+    return calidad_por_fecha(payload)
 
 
 async def fact_comparar_impl(referencias: Optional[list[str]] = None,

@@ -90,10 +90,30 @@ export default function TeleventasClaroHub() {
             Liquidación de comisiones: detalle por concepto, drivers operativos y comparativos mensuales.
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/televentas-claro/agente" className="btn-ghost">Agente IA</Link>
-          <Link href="/televentas-claro/compare" className="btn-outline">Comparar</Link>
-          {canManage && <Link href="/televentas-claro/upload" className="btn-primary">Subir liquidación</Link>}
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Link
+            href="/televentas-claro/agente"
+            className="inline-flex items-center gap-2 rounded-md border border-[#662483]/30 bg-[#662483]/5 text-[#662483] hover:bg-[#662483]/10 px-3.5 py-2 text-sm font-semibold transition-colors"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+            Agente IA
+          </Link>
+          <Link
+            href="/televentas-claro/compare"
+            className="inline-flex items-center gap-2 rounded-md border border-brand-border bg-white text-brand-graphite hover:border-brand-ink hover:text-brand-ink px-3.5 py-2 text-sm font-semibold transition-colors"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="m7 14 3-3 3 3 5-5"/></svg>
+            Comparar
+          </Link>
+          {canManage && (
+            <Link
+              href="/televentas-claro/upload"
+              className="inline-flex items-center gap-2 rounded-md bg-brand-primary text-white hover:bg-brand-primary-dark px-3.5 py-2 text-sm font-semibold shadow-soft transition-colors"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></svg>
+              Subir liquidación
+            </Link>
+          )}
         </div>
       </div>
 
