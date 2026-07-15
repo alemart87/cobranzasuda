@@ -298,7 +298,9 @@ async def televentas_overview(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Overview combinado (llamadas + producción publicadas) para el Gerente de Ventas."""
-    pub_only = user.is_client
+    # El visualizador principal muestra SOLO datos publicados (para todos los roles).
+    # Los borradores se ven en las listas de reportes / publicaciones, no en el overview.
+    pub_only = True
 
     def _base(Model):
         stmt = select(Model.period_month).where(Model.period_month.isnot(None))
