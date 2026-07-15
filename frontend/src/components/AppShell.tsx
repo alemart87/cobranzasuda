@@ -57,6 +57,20 @@ const ATENCION_PREFIXES = ["/atencion"];
 const NAV_TELEVENTAS_INICIO = { href: "/televentas-claro", label: "Inicio" };
 const TELEVENTAS_PREFIXES = ["/televentas-claro"];
 
+// --- Televentas (ventas de pólizas) ---
+const NAV_VENTAS_INICIO = { href: "/televentas", label: "Inicio" };
+const NAV_VENTAS_REPORTS = [
+  { href: "/televentas/llamadas/reports", label: "Llamadas" },
+  { href: "/televentas/produccion/reports", label: "Producción" },
+];
+const NAV_VENTAS_UPLOADS = [
+  { href: "/televentas/llamadas/upload", label: "Llamadas" },
+  { href: "/televentas/produccion/upload", label: "Producción" },
+];
+// OJO: "/televentas" hace prefix-match con "/televentas-claro"; se resuelve
+// chequeando inTeleventas (claro) ANTES que inVentas.
+const VENTAS_PREFIXES = ["/televentas"];
+
 const ROLE_LABELS: Record<string, string> = {
   superadmin: "Superadmin",
   analyst: "Analista",
@@ -101,12 +115,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const adminItems = ADMIN_NAV.filter((n) => n.roles.includes(user.role));
   const inTeleventas = TELEVENTAS_PREFIXES.some((p) => pathname?.startsWith(p));
-  const inAtencion = !inTeleventas && ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
-  const inCobranzas = !inAtencion && !inTeleventas && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
+  // Ventas: "/televentas" pero NO "/televentas-claro" (facturación tiene prioridad).
+  const inVentas = !inTeleventas && VENTAS_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inAtencion = !inTeleventas && !inVentas && ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inCobranzas = !inAtencion && !inTeleventas && !inVentas && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
   const canManage = user.role === "superadmin" || user.role === "analyst";
   // En los Agentes (Experiencia / Facturación) colapsamos el chrome → workspace amplio.
   const inFacturacionAgent = pathname?.startsWith("/televentas-claro/agente") ?? false;
-  const isAgent = (pathname?.startsWith("/atencion/agente") || inFacturacionAgent) ?? false;
+  const inVentasAgent = pathname?.startsWith("/televentas/agente") ?? false;
+  const isAgent = (pathname?.startsWith("/atencion/agente") || inFacturacionAgent || inVentasAgent) ?? false;
   const showChrome = !isAgent || agentChromeOpen;
 
   const isActive = (href: string) =>
@@ -117,6 +134,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }`;
   const uploadsActive = NAV_UPLOADS.some((u) => isActive(u.href));
   const atencionUploadsActive = NAV_ATENCION_UPLOADS.some((u) => isActive(u.href));
+  const ventasUploadsActive = NAV_VENTAS_UPLOADS.some((u) => isActive(u.href));
   const navDivider = <span className="w-px h-4 bg-white/15 mx-1.5 flex-shrink-0" aria-hidden />;
   const mobilePill = (active: boolean) =>
     `block px-3 py-2 rounded-md text-sm font-medium ${
@@ -208,6 +226,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link href="/televentas-claro/agente" className={mobilePill(isActive("/televentas-claro/agente"))}>Agente IA</Link>
                   {canManage && (
                     <Link href="/televentas-claro/upload" className={mobilePill(isActive("/televentas-claro/upload"))}>Subir liquidación</Link>
+                  )}
+                </>
+              ) : inVentas ? (
+                <>
+                  <div className={mobileGroupLabel}>Televentas</div>
+                  <Link href={NAV_VENTAS_INICIO.href} className={mobilePill(pathname === NAV_VENTAS_INICIO.href)}>{NAV_VENTAS_INICIO.label}</Link>
+                  {NAV_VENTAS_REPORTS.map((item) => (
+                    <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>{item.label}</Link>
+                  ))}
+                  {canUseAgent && (
+                    <Link href="/televentas/agente" className={mobilePill(inVentasAgent)}>Agente IA</Link>
+                  )}
+                  {canManage && (
+                    <>
+                      <Link href="/televentas/informe-general" className={mobilePill(isActive("/televentas/informe-general"))}>Informe General</Link>
+                      <Link href="/televentas/publicaciones" className={mobilePill(isActive("/televentas/publicaciones"))}>Publicaciones</Link>
+                    </>
+                  )}
+                  {canManage && (
+                    <>
+                      <div className={mobileGroupLabel}>Cargar datos</div>
+                      {NAV_VENTAS_UPLOADS.map((item) => (
+                        <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>Subir {item.label}</Link>
+                      ))}
+                    </>
                   )}
                 </>
               ) : inAtencion ? (
@@ -490,6 +533,81 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     </svg>
                     Subir liquidación
                   </Link>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Nav del módulo Televentas (ventas de pólizas) — desktop */}
+        {inVentas && (
+          <div className="bg-brand-ink text-white hidden md:block">
+            <div className="px-4 sm:px-6 py-2 flex items-center gap-1 flex-wrap">
+              <Link href="/operativas" className="text-[10px] uppercase tracking-wider2 font-semibold text-white/55 hover:text-white flex-shrink-0">
+                ← Operativas
+              </Link>
+              {navDivider}
+              <span className="text-[10px] uppercase tracking-wider2 font-bold text-brand-orange flex-shrink-0">
+                Televentas
+              </span>
+              {navDivider}
+              <Link href={NAV_VENTAS_INICIO.href} className={pill(pathname === NAV_VENTAS_INICIO.href)}>
+                {NAV_VENTAS_INICIO.label}
+              </Link>
+              {navDivider}
+              <span className="text-[10px] uppercase tracking-wider2 font-semibold text-white/40 px-1.5 flex-shrink-0">
+                Reportes
+              </span>
+              {NAV_VENTAS_REPORTS.map((item) => (
+                <Link key={item.href} href={item.href} className={pill(isActive(item.href))}>
+                  {item.label}
+                </Link>
+              ))}
+              {canUseAgent && (
+                <>
+                  {navDivider}
+                  <Link href="/televentas/agente" className={`${pill(inVentasAgent)} inline-flex items-center gap-1.5 ring-1 ring-brand-orange/40`}>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                    Agente IA
+                  </Link>
+                </>
+              )}
+              {canManage && (
+                <>
+                  {navDivider}
+                  <Link href="/televentas/informe-general" className={`${pill(isActive("/televentas/informe-general"))} inline-flex items-center gap-1.5`}>
+                    Informe General
+                    <span className="rounded-full bg-brand-primary text-white text-[9px] font-bold uppercase tracking-wide px-1.5 py-px leading-none">Nuevo</span>
+                  </Link>
+                  <Link href="/televentas/publicaciones" className={pill(isActive("/televentas/publicaciones"))}>
+                    Publicaciones
+                  </Link>
+                  {navDivider}
+                  <div className="relative flex-shrink-0">
+                    <button type="button" onClick={() => setUploadsOpen((o) => !o)} className={`${pill(ventasUploadsActive)} inline-flex items-center gap-1.5`}>
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="m17 8-5-5-5 5" /><path d="M12 3v12" />
+                      </svg>
+                      Cargar
+                      <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${uploadsOpen ? "rotate-180" : ""}`}>
+                        <path d="m6 9 6 6 6-6" />
+                      </svg>
+                    </button>
+                    {uploadsOpen && (
+                      <>
+                        <div className="fixed inset-0 z-30" onClick={() => setUploadsOpen(false)} />
+                        <div className="absolute left-0 top-full mt-1.5 z-40 min-w-[180px] bg-white text-brand-ink rounded-md shadow-elevated border border-brand-border py-1 overflow-hidden">
+                          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wider2 text-brand-mist font-semibold">Procesar archivos</div>
+                          {NAV_VENTAS_UPLOADS.map((item) => (
+                            <Link key={item.href} href={item.href} onClick={() => setUploadsOpen(false)}
+                              className={`block px-3 py-2 text-sm font-medium hover:bg-brand-bg ${isActive(item.href) ? "text-brand-orange" : "text-brand-graphite"}`}>
+                              {item.label}
+                            </Link>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </>
               )}
             </div>

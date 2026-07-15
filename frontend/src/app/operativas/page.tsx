@@ -52,14 +52,14 @@ const MODULES: ModuleCard[] = [
   },
   {
     slug: "ventas",
-    href: "/ventas",
-    title: "Ventas",
+    href: "/televentas",
+    title: "Televentas",
     description:
-      "Gestión comercial, conversión de leads, performance por canal y asesor, evolución mensual y comparativos.",
+      "Llamadas y producción de ventas: días productivos, ranking de vendedores, tipos de póliza más vendidos y alertas de bajo desempeño.",
     color: "#F39200",
     bgGradient: "linear-gradient(135deg, #C57400 0%, #F39200 100%)",
-    available: false,
-    badges: ["Pipeline", "Conversión", "Ranking comercial"],
+    available: true,
+    badges: ["Producción", "Conversión", "Alertas"],
   },
 ];
 
