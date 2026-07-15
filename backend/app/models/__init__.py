@@ -18,6 +18,11 @@ from .atencion_gestion_item import AtencionGestionItem
 from .agent import AgentConversation, AgentMessage
 from .facturacion_upload import FacturacionUpload
 from .facturacion_report import FacturacionReport
+from .televentas_llamadas_upload import TeleventasLlamadasUpload
+from .televentas_llamadas_report import TeleventasLlamadasReport
+from .televentas_produccion_upload import TeleventasProduccionUpload
+from .televentas_produccion_report import TeleventasProduccionReport
+from .televentas_produccion_item import TeleventasProduccionItem
 
 __all__ = [
     "User", "Upload", "Report", "AuditLog",
@@ -29,4 +34,7 @@ __all__ = [
     "AtencionGestionItem",
     "AgentConversation", "AgentMessage",
     "FacturacionUpload", "FacturacionReport",
+    "TeleventasLlamadasUpload", "TeleventasLlamadasReport",
+    "TeleventasProduccionUpload", "TeleventasProduccionReport",
+    "TeleventasProduccionItem",
 ]

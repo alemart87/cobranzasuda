@@ -6,10 +6,15 @@ from .gestiones import analyze_gestiones
 from .bases_adicionales import analyze_base_adicional
 from .atencion_llamadas import analyze_atencion_llamadas
 from .atencion_gestiones import analyze_atencion_gestiones
+from .televentas_llamadas import analyze_televentas_llamadas
+from .televentas_produccion import analyze_televentas_produccion, build_produccion_items
+from .televentas_overview import combine_televentas
 
 __all__ = [
     "analyze_cartera", "analyze_recupero", "project_recupero",
     "analyze_llamadas", "analyze_gestiones",
     "analyze_base_adicional",
     "analyze_atencion_llamadas", "analyze_atencion_gestiones",
+    "analyze_televentas_llamadas", "analyze_televentas_produccion",
+    "build_produccion_items", "combine_televentas",
 ]

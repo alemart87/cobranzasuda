@@ -8,12 +8,12 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1 import (
     agent, atencion, audit, auth, bases_adicionales, calls, facturacion, facturacion_agent,
-    gestiones, modules, overview, publications, reports, uploads, users,
+    gestiones, modules, overview, publications, reports, televentas, uploads, users,
 )
 from .core.config import settings
 from .core.database import Base, engine
 from .core.logging import configure_logging, logger
-from .jobs import atencion_worker, facturacion_worker, resume_pending_jobs
+from .jobs import atencion_worker, facturacion_worker, resume_pending_jobs, televentas_worker
 
 
 MIGRATIONS_IDEMPOTENT = [
@@ -75,6 +75,14 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("atencion_gestion_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
     ("atencion_gestion_reports", "published_by", "VARCHAR(36)"),
     ("atencion_gestion_reports", "title", "VARCHAR(255)"),
+    ("televentas_llamadas_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("televentas_llamadas_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("televentas_llamadas_reports", "published_by", "VARCHAR(36)"),
+    ("televentas_llamadas_reports", "title", "VARCHAR(255)"),
+    ("televentas_produccion_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("televentas_produccion_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("televentas_produccion_reports", "published_by", "VARCHAR(36)"),
+    ("televentas_produccion_reports", "title", "VARCHAR(255)"),
     # agente: resumen de razonamiento + consumo de tokens/costo (tabla nueva)
     ("agent_messages", "reasoning", "TEXT NOT NULL DEFAULT ''"),
     ("agent_messages", "input_tokens", "INTEGER NOT NULL DEFAULT 0"),
@@ -180,12 +188,14 @@ async def lifespan(app: FastAPI):
     import asyncio
     worker_task = asyncio.create_task(atencion_worker())
     facturacion_task = asyncio.create_task(facturacion_worker())
-    logger.info("Boot: atencion + facturacion queue workers started")
+    televentas_task = asyncio.create_task(televentas_worker())
+    logger.info("Boot: atencion + facturacion + televentas queue workers started")
 
     yield
 
     worker_task.cancel()
     facturacion_task.cancel()
+    televentas_task.cancel()
     logger.info("Shutdown")
 
 
@@ -316,3 +326,4 @@ app.include_router(atencion.router, prefix="/api/v1")
 app.include_router(agent.router, prefix="/api/v1")
 app.include_router(facturacion.router, prefix="/api/v1")
 app.include_router(facturacion_agent.router, prefix="/api/v1")
+app.include_router(televentas.router, prefix="/api/v1")

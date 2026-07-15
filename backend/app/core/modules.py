@@ -33,9 +33,9 @@ MODULES: list[dict] = [
     },
     {
         "slug": "ventas",
-        "name": "Ventas",
-        "description": "Pipeline, conversión, performance comercial.",
-        "available": False,
+        "name": "Televentas",
+        "description": "Llamadas y producción de ventas: días productivos, ranking de vendedores, tipos de póliza y alertas.",
+        "available": True,
         "color": "#F39200",
     },
 ]

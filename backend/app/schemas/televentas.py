@@ -1,0 +1,105 @@
+"""Schemas del módulo Televentas: Reporte de Llamadas + Producción/Ventas."""
+from datetime import datetime, date
+from typing import Any, List, Optional
+
+from pydantic import BaseModel, ConfigDict
+
+
+# ----------------------------- Llamadas -----------------------------
+class TeleventasLlamadasUploadRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    uploaded_by: str
+    period_month: Optional[date]
+    status: str
+    filename: Optional[str] = None
+    uploaded_at: datetime
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    last_error: Optional[str]
+
+
+class TeleventasLlamadasUploadList(BaseModel):
+    items: List[TeleventasLlamadasUploadRead]
+    total: int
+
+
+class TeleventasLlamadasReportSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    upload_id: str
+    period_month: Optional[date]
+    generated_at: datetime
+    total_llamadas: int
+    contestadas: int
+    no_contestadas: int
+    pct_contestadas: float
+    tmo_seg: float
+    vendedores_activos: int
+    dias_operativos: int
+    is_published: bool = False
+    published_at: Optional[datetime] = None
+    title: Optional[str] = None
+
+
+class TeleventasLlamadasReportDetail(TeleventasLlamadasReportSummary):
+    data: dict[str, Any]
+
+
+class TeleventasLlamadasReportList(BaseModel):
+    items: List[TeleventasLlamadasReportSummary]
+    total: int
+
+
+# ----------------------------- Producción -----------------------------
+class TeleventasProduccionUploadRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    uploaded_by: str
+    period_month: Optional[date]
+    status: str
+    filename: Optional[str] = None
+    uploaded_at: datetime
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    last_error: Optional[str]
+
+
+class TeleventasProduccionUploadList(BaseModel):
+    items: List[TeleventasProduccionUploadRead]
+    total: int
+
+
+class TeleventasProduccionReportSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    upload_id: str
+    period_month: Optional[date]
+    generated_at: datetime
+    polizas_emitidas: int
+    prima_emitida: float
+    polizas_anuladas: int
+    prima_anulada: float
+    ticket_promedio: float
+    dias_productivos: int
+    is_published: bool = False
+    published_at: Optional[datetime] = None
+    title: Optional[str] = None
+
+
+class TeleventasProduccionReportDetail(TeleventasProduccionReportSummary):
+    data: dict[str, Any]
+
+
+class TeleventasProduccionReportList(BaseModel):
+    items: List[TeleventasProduccionReportSummary]
+    total: int
+
+
+class PublishRequest(BaseModel):
+    is_published: bool
+    title: Optional[str] = None
