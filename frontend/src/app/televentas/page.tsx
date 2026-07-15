@@ -40,7 +40,12 @@ export default function TeleventasHubPage() {
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { setUser(getUser()); load(); }, []);
+  const [canUseAgent, setCanUseAgent] = useState(false);
+  useEffect(() => {
+    setUser(getUser());
+    load();
+    apiFetch<{ can_use_agent?: boolean }>("/api/v1/auth/me").then((me) => setCanUseAgent(!!me.can_use_agent)).catch(() => {});
+  }, []);
 
   const role = user?.role;
   const canManage = role === "superadmin" || role === "analyst";
@@ -196,6 +201,9 @@ export default function TeleventasHubPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <HubCard href="/televentas/llamadas/reports" title="Reportes de Llamadas" desc="Contestadas, TMO y producción telefónica por vendedor y por día." bar="bg-brand-cyan" />
           <HubCard href="/televentas/produccion/reports" title="Reportes de Producción" desc="Emisiones y anulaciones, ticket, mix de productos y ranking de vendedores." bar="bg-brand-orange" />
+          {canUseAgent && (
+            <HubCard href="/televentas/agente" title="Agente de Ventas" desc="Preguntá en lenguaje natural: conversión, ranking, alertas y gráficos al instante." bar="bg-brand-purple" badge="IA" />
+          )}
         </div>
       </section>
 

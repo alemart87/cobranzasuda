@@ -122,7 +122,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const canManage = user.role === "superadmin" || user.role === "analyst";
   // En los Agentes (Experiencia / Facturación) colapsamos el chrome → workspace amplio.
   const inFacturacionAgent = pathname?.startsWith("/televentas-claro/agente") ?? false;
-  const isAgent = (pathname?.startsWith("/atencion/agente") || inFacturacionAgent) ?? false;
+  const inVentasAgent = pathname?.startsWith("/televentas/agente") ?? false;
+  const isAgent = (pathname?.startsWith("/atencion/agente") || inFacturacionAgent || inVentasAgent) ?? false;
   const showChrome = !isAgent || agentChromeOpen;
 
   const isActive = (href: string) =>
@@ -234,6 +235,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {NAV_VENTAS_REPORTS.map((item) => (
                     <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>{item.label}</Link>
                   ))}
+                  {canUseAgent && (
+                    <Link href="/televentas/agente" className={mobilePill(inVentasAgent)}>Agente IA</Link>
+                  )}
                   {canManage && (
                     <>
                       <Link href="/televentas/informe-general" className={mobilePill(isActive("/televentas/informe-general"))}>Informe General</Link>
@@ -559,6 +563,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {item.label}
                 </Link>
               ))}
+              {canUseAgent && (
+                <>
+                  {navDivider}
+                  <Link href="/televentas/agente" className={`${pill(inVentasAgent)} inline-flex items-center gap-1.5 ring-1 ring-brand-orange/40`}>
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                    Agente IA
+                  </Link>
+                </>
+              )}
               {canManage && (
                 <>
                   {navDivider}

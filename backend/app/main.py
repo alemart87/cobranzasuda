@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .api.v1 import (
     agent, atencion, audit, auth, bases_adicionales, calls, facturacion, facturacion_agent,
-    gestiones, modules, overview, publications, reports, televentas, uploads, users,
+    gestiones, modules, overview, publications, reports, televentas, televentas_agent, uploads, users,
 )
 from .core.config import settings
 from .core.database import Base, engine
@@ -327,3 +327,4 @@ app.include_router(agent.router, prefix="/api/v1")
 app.include_router(facturacion.router, prefix="/api/v1")
 app.include_router(facturacion_agent.router, prefix="/api/v1")
 app.include_router(televentas.router, prefix="/api/v1")
+app.include_router(televentas_agent.router, prefix="/api/v1")
