@@ -20,3 +20,7 @@ pytest==8.3.3
 pytest-asyncio==0.24.0
 # Agente de Experiencia (OpenAI Agents SDK). Trae también `openai` y `mcp`.
 openai-agents==0.17.4
+# openai 2.45.0 volvió `cache_write_tokens` (InputTokensDetails) un campo REQUERIDO
+# que openai-agents 0.17.4 no envía → ValidationError al parsear el uso de tokens
+# de CADA respuesta (rompe los 3 agentes). Pineamos a la última versión compatible.
+openai==2.44.0
