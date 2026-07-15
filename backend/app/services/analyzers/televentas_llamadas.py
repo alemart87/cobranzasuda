@@ -9,7 +9,9 @@ from collections import defaultdict
 from typing import Any
 
 
-UMBRAL_CONTESTADA_SEG = 10
+# Una llamada se cuenta como CONTESTADA (contacto efectivo) a partir de 34 segundos.
+# El TMO y el nivel de contacto se calculan sobre ese piso.
+UMBRAL_CONTESTADA_SEG = 34
 
 
 def _hms(seg: float) -> str:
@@ -87,6 +89,7 @@ def analyze_televentas_llamadas(rows: list[dict[str, Any]], umbral: int = UMBRAL
             "contestadas": n_cont,
             "no_contestadas": total - n_cont,
             "pct_contestadas": _pct(n_cont, total),
+            "nivel_contacto_pct": _pct(n_cont, total),  # contactabilidad (piso 34s)
             "total_talk_seg": round(talk_total),
             "total_talk_hms": _hms(talk_total),
             "total_talk_horas": round(talk_total / 3600, 1),

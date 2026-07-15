@@ -629,11 +629,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : (
           <div className="sticky top-0 z-30 bg-brand-ink text-white flex items-center justify-between px-3 sm:px-4 py-1.5">
             <div className="flex items-center gap-3 min-w-0">
-              <Link href={inFacturacionAgent ? "/televentas-claro" : "/atencion"} className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white flex-shrink-0">
-                {inFacturacionAgent ? "← Televentas Claro" : "← Atención"}
+              <Link href={inFacturacionAgent ? "/televentas-claro" : inVentasAgent ? "/televentas" : "/atencion"} className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white flex-shrink-0">
+                {inFacturacionAgent ? "← Televentas Claro" : inVentasAgent ? "← Televentas" : "← Atención"}
               </Link>
-              <span className={`text-[11px] uppercase tracking-wider2 font-bold truncate ${inFacturacionAgent ? "text-[#a06cc4]" : "text-brand-cyan"}`}>
-                {inFacturacionAgent ? "Agente de Facturación" : "Agente de Experiencia"}
+              <span className={`text-[11px] uppercase tracking-wider2 font-bold truncate ${inFacturacionAgent ? "text-[#a06cc4]" : inVentasAgent ? "text-brand-orange" : "text-brand-cyan"}`}>
+                {inFacturacionAgent ? "Agente de Facturación" : inVentasAgent ? "Agente de Ventas" : "Agente de Experiencia"}
               </span>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">

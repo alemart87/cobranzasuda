@@ -207,7 +207,8 @@ async def post_message(
                     await queue.put(("err", "La consulta requirió demasiados pasos y se detuvo. Probá acotarla."))
                 else:
                     logger.exception(f"[televentas-agent] error en {conv_id}: {exc}")
-                    await queue.put(("err", "Ocurrió un error procesando la consulta."))
+                    detalle = f"{exc.__class__.__name__}: {str(exc)[:200]}".strip()
+                    await queue.put(("err", f"Ocurrió un error procesando la consulta. ({detalle})"))
             finally:
                 await queue.put(("end", None))
 
