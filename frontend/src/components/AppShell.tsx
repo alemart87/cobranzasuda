@@ -235,7 +235,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <Link key={item.href} href={item.href} className={mobilePill(isActive(item.href))}>{item.label}</Link>
                   ))}
                   {canManage && (
-                    <Link href="/televentas/publicaciones" className={mobilePill(isActive("/televentas/publicaciones"))}>Publicaciones</Link>
+                    <>
+                      <Link href="/televentas/informe-general" className={mobilePill(isActive("/televentas/informe-general"))}>Informe General</Link>
+                      <Link href="/televentas/publicaciones" className={mobilePill(isActive("/televentas/publicaciones"))}>Publicaciones</Link>
+                    </>
                   )}
                   {canManage && (
                     <>
@@ -559,6 +562,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               {canManage && (
                 <>
                   {navDivider}
+                  <Link href="/televentas/informe-general" className={`${pill(isActive("/televentas/informe-general"))} inline-flex items-center gap-1.5`}>
+                    Informe General
+                    <span className="rounded-full bg-brand-primary text-white text-[9px] font-bold uppercase tracking-wide px-1.5 py-px leading-none">Nuevo</span>
+                  </Link>
                   <Link href="/televentas/publicaciones" className={pill(isActive("/televentas/publicaciones"))}>
                     Publicaciones
                   </Link>

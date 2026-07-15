@@ -203,6 +203,7 @@ export default function TeleventasHubPage() {
         <section>
           <SectionLabel>Cargar datos · gestión</SectionLabel>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <HubCard href="/televentas/informe-general" title="Informe General" desc="Consolidá gerencial + llamadas + producción en un PDF corporativo." bar="bg-brand-primary" badge="Nuevo" />
             <HubCard href="/televentas/llamadas/upload" title="Subir Llamadas" desc="Procesar el export de voz saliente del período." bar="bg-brand-cyan" />
             <HubCard href="/televentas/produccion/upload" title="Subir Producción" desc="Procesar el Libro de Producción (ventas de pólizas)." bar="bg-brand-orange" />
             <HubCard href="/televentas/publicaciones" title="Publicaciones" desc="Publicar/despublicar reportes. Los clientes solo ven lo publicado." bar="bg-brand-primary" />
@@ -213,12 +214,15 @@ export default function TeleventasHubPage() {
   );
 }
 
-function HubCard({ href, title, desc, bar }: { href: string; title: string; desc: string; bar: string }) {
+function HubCard({ href, title, desc, bar, badge }: { href: string; title: string; desc: string; bar: string; badge?: string }) {
   return (
     <Link href={href} className="card group p-5 flex items-start gap-4 hover:shadow-elevated hover:-translate-y-0.5 transition-all relative overflow-hidden">
       <div className={`absolute top-0 bottom-0 left-0 w-1 ${bar}`} />
       <div className="flex-1 min-w-0">
-        <h3 className="font-display text-lg text-brand-ink uppercase leading-tight">{title}</h3>
+        <h3 className="font-display text-lg text-brand-ink uppercase leading-tight inline-flex items-center gap-2">
+          {title}
+          {badge && <span className="rounded-full bg-brand-primary text-white text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 leading-none">{badge}</span>}
+        </h3>
         <p className="text-sm text-brand-slate mt-1 leading-relaxed">{desc}</p>
         <div className="text-xs text-brand-primary font-semibold mt-3 inline-flex items-center gap-1">Abrir <span className="transition-transform group-hover:translate-x-0.5" aria-hidden>→</span></div>
       </div>
