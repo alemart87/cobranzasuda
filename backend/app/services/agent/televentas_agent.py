@@ -12,8 +12,9 @@ from ...core.config import settings
 from . import core
 from .core import AgentNotConfigured
 from .televentas_tools import (
-    tv_buscar_polizas_impl, tv_focus_impl, tv_listar_periodos_impl, tv_llamadas_impl,
-    tv_overview_impl, tv_produccion_impl, tv_ranking_vendedores_impl,
+    tv_buscar_polizas_impl, tv_caidas_vendedores_impl, tv_comparar_meses_impl, tv_focus_impl,
+    tv_listar_periodos_impl, tv_llamadas_impl, tv_overview_impl, tv_produccion_impl,
+    tv_proyeccion_impl, tv_ranking_vendedores_impl,
 )
 from .tools import AgentContext
 
@@ -47,6 +48,12 @@ anulaciones (prima_anulada por vendedor). Distinguí SIEMPRE prima emitida de pr
 6. Mix de productos (`tv_produccion` → por_producto): separá el producto MÁS vendido (volumen) del de \
 MAYOR prima/ticket. Recomendá dónde empujar.
 7. Tendencia: usá llamadas por día y producción por día para detectar concentraciones o caídas.
+8. Proyección de cierre: si preguntan cómo va a cerrar el mes o el ritmo, usá `tv_proyeccion` \
+(run-rate por día hábil). Aclarar el % de avance y que es lineal; si el mes está completo, decilo.
+9. Comparativo mensual: para "¿cómo venimos vs el mes pasado?" usá `tv_comparar_meses` (deltas de \
+KPIs, por vendedor y por producto). Comentá los drivers del cambio (quién/qué producto explica el delta).
+10. Caídas de vendedores: usá `tv_caidas_vendedores` para señalar quién bajó fuerte (prima, pólizas o \
+llamadas) vs el mes anterior, con el % de caída y una acción. Requiere 2+ meses; si hay uno solo, decilo.
 
 FOCO del usuario: llamá `tv_focus` PRIMERO. Si seleccionó reportes, centrá el análisis en ellos.
 
@@ -55,7 +62,7 @@ Si no hay nada, sugerí subir y publicar los reportes. La identidad de los asegu
 ([cliente]): no la pidas ni la inventes; el análisis es de performance comercial, no de clientes.
 
 Tools: `tv_focus`, `tv_listar_periodos`, `tv_overview`, `tv_ranking_vendedores`, `tv_produccion`, \
-`tv_llamadas`, `tv_buscar_polizas`.
+`tv_llamadas`, `tv_buscar_polizas`, `tv_proyeccion`, `tv_comparar_meses`, `tv_caidas_vendedores`.
 
 Visualización con `emit_canvas` (panel derecho) — usá EXACTAMENTE estas formas de `datos`:
 - KPIs: tipo="kpis", datos={"kpis":[{"label":"Prima emitida","valor":"Gs 300.362.597"},{"label":"Conversión","valor":"3,0 %"}]}
@@ -120,6 +127,26 @@ def _build_televentas_agent():
         return await tv_buscar_polizas_impl(mes, vendedor, producto, tipo, limite)
 
     @function_tool(strict_mode=False)
+    async def tv_proyeccion(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None) -> dict:
+        """Proyección de CIERRE de mes: prima y pólizas emitidas proyectadas al fin de mes según el
+        run-rate por día hábil (usa el último día con venta como referencia). Incluye % de avance."""
+        return await tv_proyeccion_impl(mes)
+
+    @function_tool(strict_mode=False)
+    async def tv_comparar_meses(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None,
+                                mes_previo: Optional[str] = None) -> dict:
+        """Compara un mes vs el anterior: deltas de KPIs (prima, pólizas, conversión, llamadas…),
+        por vendedor y por producto. Sin argumentos usa los dos meses más recientes con datos."""
+        return await tv_comparar_meses_impl(mes, mes_previo)
+
+    @function_tool(strict_mode=False)
+    async def tv_caidas_vendedores(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None,
+                                   mes_previo: Optional[str] = None, umbral_pct: float = 30.0) -> dict:
+        """Detecta vendedores del equipo con CAÍDA significativa (prima, pólizas o llamadas) vs el mes
+        anterior. `umbral_pct` = caída mínima para alertar (default 30%)."""
+        return await tv_caidas_vendedores_impl(mes, mes_previo, umbral_pct)
+
+    @function_tool(strict_mode=False)
     async def emit_canvas(ctx: RunContextWrapper[AgentContext], tipo: str, titulo: str, datos: dict,
                           descripcion: Optional[str] = None) -> dict:
         """Dibuja un artefacto en el canvas (panel derecho). `tipo`: 'bar' | 'stacked-bar' | 'line' |
@@ -132,7 +159,8 @@ def _build_televentas_agent():
         return {"ok": True, "artifact_id": artifact["id"]}
 
     tools = [tv_focus, tv_listar_periodos, tv_overview, tv_ranking_vendedores, tv_produccion,
-             tv_llamadas, tv_buscar_polizas, emit_canvas]
+             tv_llamadas, tv_buscar_polizas, tv_proyeccion, tv_comparar_meses, tv_caidas_vendedores,
+             emit_canvas]
 
     model_settings = None
     try:

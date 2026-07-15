@@ -7,6 +7,7 @@ from app.services.analyzers._nombres import best_match, name_tokens
 from app.services.analyzers.televentas_llamadas import analyze_televentas_llamadas
 from app.services.analyzers.televentas_produccion import analyze_televentas_produccion, build_produccion_items
 from app.services.analyzers.televentas_overview import combine_televentas
+from app.services.analyzers.televentas_tendencias import proyeccion_cierre, comparar_meses, caidas_vendedores
 
 
 def _llam(usuario, fecha, dur):
@@ -86,3 +87,42 @@ def test_overview_combina_y_alerta():
     assert "Beto Sosa" in alertados
     # las alertas solo cubren al equipo (con llamadas), no producción-only
     assert all(any(f["vendedor"] == a["vendedor"] and f["es_equipo"] for f in o["por_vendedor"]) for a in o["alertas"])
+
+
+def test_proyeccion_media_de_mes():
+    # 5 días hábiles con venta (lun-vie 1ª semana de junio 2026), run-rate lineal
+    prod = {"kpis": {"prima_emitida": 50_000_000, "polizas_emitidas": 50},
+            "por_dia": [{"fecha": f"2026-06-0{d}", "prima": 10_000_000, "polizas": 10} for d in range(1, 6)]}
+    p = proyeccion_cierre(prod)
+    assert p["mes"] == "2026-06"
+    assert p["dias_habiles_transcurridos"] == 5
+    assert p["mes_completo"] is False
+    # proyección = run-rate * días hábiles del mes (>= lo actual)
+    assert p["proyeccion_prima_cierre"] > p["prima_emitida_actual"]
+
+
+def _ov(prima, polizas, vendedores):
+    return {"kpis": {"prima_emitida": prima, "polizas_emitidas": polizas, "conversion_pct": 3.0,
+                     "total_llamadas": 1000, "contestadas": 900, "prima_anulada": 0,
+                     "ticket_promedio": prima // max(polizas, 1), "dias_productivos": 15},
+            "por_vendedor": vendedores, "por_producto": []}
+
+
+def test_comparar_meses_y_caidas():
+    prev = _ov(200_000_000, 100, [
+        {"vendedor": "Luis", "es_equipo": True, "prima_emitida": 100_000_000, "polizas": 50, "llamadas": 1000, "contestadas": 900},
+        {"vendedor": "Ana", "es_equipo": True, "prima_emitida": 100_000_000, "polizas": 50, "llamadas": 1000, "contestadas": 900},
+    ])
+    curr = _ov(150_000_000, 70, [
+        {"vendedor": "Luis", "es_equipo": True, "prima_emitida": 120_000_000, "polizas": 55, "llamadas": 1100, "contestadas": 990},
+        {"vendedor": "Ana", "es_equipo": True, "prima_emitida": 30_000_000, "polizas": 15, "llamadas": 300, "contestadas": 250},
+    ])
+    cmp = comparar_meses(prev, curr, "2026-05", "2026-06")
+    prima_kpi = next(k for k in cmp["kpis"] if k["metric"] == "Prima emitida")
+    assert prima_kpi["delta"] == -50_000_000 and prima_kpi["pct"] == -25.0
+    # Ana debe ser la mayor caída (orden ascendente por delta)
+    assert cmp["por_vendedor"][0]["vendedor"] == "Ana"
+
+    cd = caidas_vendedores(prev, curr, "2026-05", "2026-06", umbral_pct=30.0)
+    nombres = {c["vendedor"] for c in cd["caidas"]}
+    assert "Ana" in nombres and "Luis" not in nombres  # Luis subió, Ana cayó 70%

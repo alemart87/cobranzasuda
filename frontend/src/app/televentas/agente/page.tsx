@@ -33,9 +33,10 @@ export default function AgenteTeleventasPage() {
       }}
       suggestions={[
         "Resumí el overview del mes y las alertas de vendedores",
-        "Ranking de vendedores por prima neta y conversión",
-        "¿Cuál es la conversión llamada→póliza y quién la mueve?",
-        "Mostrame el mix de productos en un gráfico",
+        "¿Cómo va a cerrar el mes? Proyectá prima y pólizas",
+        "Compará este mes contra el anterior y explicá el cambio",
+        "¿Qué vendedores cayeron vs el mes pasado?",
+        "Ranking por prima neta y conversión, con un gráfico",
       ]}
     />
   );

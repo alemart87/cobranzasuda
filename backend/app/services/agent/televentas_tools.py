@@ -16,6 +16,9 @@ from ...models.televentas_llamadas_report import TeleventasLlamadasReport
 from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_item import TeleventasProduccionItem
 from ...services.analyzers.televentas_overview import combine_televentas
+from ...services.analyzers.televentas_tendencias import (
+    caidas_vendedores, comparar_meses, proyeccion_cierre,
+)
 
 
 def _bounds(month: str) -> tuple[date, date]:
@@ -139,6 +142,56 @@ async def tv_buscar_polizas_impl(mes: Optional[str] = None, vendedor: Optional[s
                 "tipo": "anulada" if r.es_anulacion else "emitida",
                 "fecha": r.fecha.isoformat() if r.fecha else None} for r in rows]
     return {"mes": month, "cantidad": len(polizas), "polizas": polizas}
+
+
+async def _overview_for(month: str) -> dict:
+    ll = await _latest(TeleventasLlamadasReport, month)
+    pr = await _latest(TeleventasProduccionReport, month)
+    return combine_televentas(ll.data if ll else None, pr.data if pr else None)
+
+
+async def _dos_meses(mes: Optional[str], mes_previo: Optional[str]) -> Optional[tuple[str, str]]:
+    """Resuelve (mes_previo, mes_actual). Sin args usa los dos meses más recientes con datos."""
+    periodos = await _periodos()  # desc
+    if mes and mes_previo and mes in periodos and mes_previo in periodos:
+        a, b = sorted([mes, mes_previo])
+        return a, b
+    if mes and mes in periodos:
+        anteriores = [p for p in periodos if p < mes]
+        if anteriores:
+            return anteriores[0], mes
+        return None
+    if len(periodos) >= 2:
+        return periodos[1], periodos[0]
+    return None
+
+
+async def tv_proyeccion_impl(mes: Optional[str] = None) -> dict[str, Any]:
+    """Proyección de cierre de mes (prima y pólizas emitidas) con run-rate por día hábil."""
+    month = await _resolve_month(mes)
+    pr = await _latest(TeleventasProduccionReport, month) if month else None
+    if not pr:
+        return {"sin_datos": True, "mensaje": f"No hay producción para {month or 'ningún mes'}."}
+    return proyeccion_cierre(pr.data or {})
+
+
+async def tv_comparar_meses_impl(mes: Optional[str] = None, mes_previo: Optional[str] = None) -> dict[str, Any]:
+    """Comparativo mes vs mes anterior: deltas de KPIs, por vendedor y por producto."""
+    par = await _dos_meses(mes, mes_previo)
+    if not par:
+        return {"sin_datos": True, "mensaje": "Necesito al menos 2 meses con datos para comparar."}
+    prev, curr = par
+    return comparar_meses(await _overview_for(prev), await _overview_for(curr), prev, curr)
+
+
+async def tv_caidas_vendedores_impl(mes: Optional[str] = None, mes_previo: Optional[str] = None,
+                                    umbral_pct: float = 30.0) -> dict[str, Any]:
+    """Vendedores con caída significativa (prima/pólizas/llamadas) vs el mes anterior."""
+    par = await _dos_meses(mes, mes_previo)
+    if not par:
+        return {"sin_datos": True, "mensaje": "Necesito al menos 2 meses con datos para detectar caídas."}
+    prev, curr = par
+    return caidas_vendedores(await _overview_for(prev), await _overview_for(curr), prev, curr, umbral_pct)
 
 
 async def tv_focus_impl(focus_refs: Optional[list[str]]) -> dict[str, Any]:

@@ -9,6 +9,7 @@ from .atencion_gestiones import analyze_atencion_gestiones
 from .televentas_llamadas import analyze_televentas_llamadas
 from .televentas_produccion import analyze_televentas_produccion, build_produccion_items
 from .televentas_overview import combine_televentas
+from .televentas_tendencias import proyeccion_cierre, comparar_meses, caidas_vendedores
 
 __all__ = [
     "analyze_cartera", "analyze_recupero", "project_recupero",
@@ -17,4 +18,5 @@ __all__ = [
     "analyze_atencion_llamadas", "analyze_atencion_gestiones",
     "analyze_televentas_llamadas", "analyze_televentas_produccion",
     "build_produccion_items", "combine_televentas",
+    "proyeccion_cierre", "comparar_meses", "caidas_vendedores",
 ]
