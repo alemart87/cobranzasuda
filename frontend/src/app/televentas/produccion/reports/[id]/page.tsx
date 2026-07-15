@@ -58,11 +58,10 @@ export default function TeleventasProduccionDetailPage() {
         <KpiCard label="Pólizas emitidas" value={formatInt(k.polizas_emitidas)} accent="primary" />
         <KpiCard label="Prima emitida" value={formatGs(k.prima_emitida)} accent="cyan" />
         <KpiCard label="Ticket promedio" value={formatGs(k.ticket_promedio)} accent="purple" />
-        <KpiCard label="Suma asegurada" value={formatGs(k.suma_asegurada_total)} accent="neutral" />
+        <KpiCard label="Prima neta" value={formatGs(k.prima_neta)} accent="cyan" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard label="Pólizas anuladas" value={formatInt(k.polizas_anuladas)} hint={formatGs(k.prima_anulada)} accent="orange" />
-        <KpiCard label="Prima neta" value={formatGs(k.prima_neta)} accent="cyan" />
         <KpiCard label="Días productivos" value={`${k.dias_productivos} / ${k.dias_calendario}`} hint={`${k.dias_no_productivos} sin ventas`} accent="primary" />
         <KpiCard label="Vendedores activos" value={formatInt(k.vendedores_activos)} accent="neutral" />
       </div>
