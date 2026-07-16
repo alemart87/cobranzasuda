@@ -7,7 +7,9 @@ from app.services.analyzers._nombres import best_match, name_tokens
 from app.services.analyzers.televentas_llamadas import analyze_televentas_llamadas
 from app.services.analyzers.televentas_produccion import analyze_televentas_produccion, build_produccion_items
 from app.services.analyzers.televentas_overview import combine_televentas
-from app.services.analyzers.televentas_tendencias import proyeccion_cierre, comparar_meses, caidas_vendedores
+from app.services.analyzers.televentas_tendencias import (
+    proyeccion_cierre, comparar_meses, caidas_vendedores, comparativo_televentas,
+)
 
 
 def _llam(usuario, fecha, dur):
@@ -28,6 +30,43 @@ def test_llamadas_contestadas_por_umbral():
     assert a["kpis"]["dias_operativos"] == 2
     assert a["kpis"]["tmo_seg"] == 90  # (60+120)/2
     assert a["por_vendedor"][0]["vendedor"] == "Ana Pérez"
+
+
+def test_llamadas_profundidad_y_insights():
+    # Ana marca 2 días desde el 1; "Nuevo" arranca el día 15 (arranca tarde).
+    rows = []
+    for d in (1, 2):
+        rows += [_llam("Ana Perez", datetime(2026, 6, d, 9, 0), 60) for _ in range(10)]
+    rows += [_llam("Nuevo Juan", datetime(2026, 6, 15, 10, 0), 60) for _ in range(5)]
+    a = analyze_televentas_llamadas(rows, umbral=34)
+    k = a["kpis"]
+    assert k["promedio_llamadas_asesor_dia"] > 0
+    assert a["por_dia"][0]["asesores_activos"] == 1
+    assert "promedio_por_asesor" in a["por_dia"][0]
+    assert len(a["distribucion_duracion"]) == 5
+    ana = next(v for v in a["por_vendedor"] if v["vendedor"] == "Ana Perez")
+    assert ana["dias_activos"] == 2 and ana["primer_dia"] == "2026-06-01"
+    # Debe detectar operador iniciando.
+    assert any(i["tipo"] == "operador_nuevo" for i in a["insights"])
+
+
+def test_comparativo_televentas():
+    prev = _ov(200_000_000, 100, [
+        {"vendedor": "Luis", "es_equipo": True, "prima_emitida": 100_000_000, "polizas": 50, "llamadas": 1000, "contestadas": 600, "pct_contestadas": 60, "conversion_pct": 4.0},
+        {"vendedor": "Ana", "es_equipo": True, "prima_emitida": 100_000_000, "polizas": 50, "llamadas": 900, "contestadas": 500, "pct_contestadas": 55, "conversion_pct": 3.8},
+    ])
+    prev["kpis"].update({"pct_contestadas": 58.0, "conversion_pct": 3.9})
+    curr = _ov(150_000_000, 70, [
+        {"vendedor": "Luis", "es_equipo": True, "prima_emitida": 130_000_000, "polizas": 55, "llamadas": 1100, "contestadas": 660, "pct_contestadas": 60, "conversion_pct": 4.1},
+        {"vendedor": "Ana", "es_equipo": True, "prima_emitida": 20_000_000, "polizas": 15, "llamadas": 300, "contestadas": 120, "pct_contestadas": 40, "conversion_pct": 1.0},
+        {"vendedor": "Nuevo", "es_equipo": True, "prima_emitida": 5_000_000, "polizas": 3, "llamadas": 100, "contestadas": 50, "pct_contestadas": 50, "conversion_pct": 2.0},
+    ])
+    curr["kpis"].update({"pct_contestadas": 52.0, "conversion_pct": 3.0})
+    c = comparativo_televentas(prev, curr, "2026-05", "2026-06")
+    tipos = {i["tipo"] for i in c["insights"]}
+    assert "operador_nuevo" in tipos          # apareció "Nuevo"
+    assert "base_datos" in tipos              # contactabilidad cayó
+    assert any(o["vendedor"] == "Ana" and o["estado"] == "cayo" for o in c["por_operador"])
 
 
 def _prod(vendedor, prima, producto="VIDA", suma=1_000_000, fecha=None):

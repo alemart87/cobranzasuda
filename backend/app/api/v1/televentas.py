@@ -30,7 +30,7 @@ from ...schemas.televentas import (
     TeleventasProduccionReportDetail, TeleventasProduccionReportList, TeleventasProduccionReportSummary,
     TeleventasProduccionUploadList, TeleventasProduccionUploadRead,
 )
-from ...services.analyzers import combine_televentas
+from ...services.analyzers import combine_televentas, comparativo_televentas
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
@@ -340,3 +340,46 @@ async def televentas_overview(
         "llamadas_report_id": ll.id if ll else None,
         "produccion_report_id": pr.id if pr else None,
     }
+
+
+async def _overview_del_mes(db: AsyncSession, month: str) -> dict:
+    start, end = _month_bounds(month)
+
+    async def _latest(Model):
+        return (await db.execute(
+            select(Model).where(Model.period_month >= start, Model.period_month < end,
+                                Model.is_published == True)  # noqa: E712
+            .order_by(Model.generated_at.desc()).limit(1)
+        )).scalars().first()
+
+    ll = await _latest(TeleventasLlamadasReport)
+    pr = await _latest(TeleventasProduccionReport)
+    return combine_televentas(ll.data if ll else None, pr.data if pr else None)
+
+
+@router.get("/comparativo")
+async def televentas_comparativo(
+    month: Optional[str] = Query(None, description="YYYY-MM (mes actual). Se compara con el anterior con datos."),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Comparativo del mes vs el mes anterior (publicados): KPIs, por operador
+    (conversión, contactabilidad, llamadas, prima) e insights del cambio."""
+    months = set()
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport):
+        for (pm,) in (await db.execute(
+            select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
+        )).all():
+            if pm:
+                months.add(pm.strftime("%Y-%m"))
+    available = sorted(months, reverse=True)
+    curr = month if month in months else (available[0] if available else None)
+    if not curr:
+        return {"disponible": False, "available_months": [], "mensaje": "No hay meses publicados."}
+    anteriores = [m for m in available if m < curr]
+    if not anteriores:
+        return {"disponible": False, "available_months": available, "mes_actual": curr,
+                "mensaje": "Se necesita al menos un mes anterior publicado para comparar."}
+    prev = anteriores[0]
+    comp = comparativo_televentas(await _overview_del_mes(db, prev), await _overview_del_mes(db, curr), prev, curr)
+    return {"disponible": True, "available_months": available, **comp}
