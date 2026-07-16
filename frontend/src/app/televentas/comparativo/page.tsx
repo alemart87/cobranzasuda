@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, ComposedChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { apiFetch } from "@/lib/api";
@@ -30,6 +30,9 @@ export default function TeleventasTendenciasPage() {
 
   const meses: any[] = tend?.meses ?? [];
   const chartData = meses.map((m) => ({ ...m, label: m.mes }));
+  const pctLbl = (v: any) => `${v}%`;
+  const intLbl = (v: any) => formatInt(v as number);
+  const mLbl = (v: any) => { const n = Number(v); return n >= 1e6 ? `${Math.round(n / 1e6)}M` : formatInt(n); };
 
   return (
     <AppShell>
@@ -56,39 +59,51 @@ export default function TeleventasTendenciasPage() {
 
           <div className="grid lg:grid-cols-2 gap-6 mb-6">
             <ChartCard title="Conversión mensual (%)">
-              <LineChart data={chartData}>
+              <LineChart data={chartData} margin={{ top: 22, right: 16, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} /><YAxis fontSize={11} />
-                <Tooltip formatter={(v: any) => `${v}%`} />
-                <Line dataKey="conversion_pct" name="Conversión" stroke="#662483" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Tooltip formatter={pctLbl} />
+                <Line dataKey="conversion_pct" name="Conversión" stroke="#662483" strokeWidth={2.5} dot={{ r: 3 }}>
+                  <LabelList dataKey="conversion_pct" position="top" formatter={pctLbl} fontSize={11} fontWeight={700} fill="#662483" />
+                </Line>
               </LineChart>
             </ChartCard>
 
             <ChartCard title="Contactabilidad mensual (%)">
-              <LineChart data={chartData}>
+              <LineChart data={chartData} margin={{ top: 22, right: 16, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} /><YAxis fontSize={11} />
-                <Tooltip formatter={(v: any) => `${v}%`} />
-                <Line dataKey="contactabilidad" name="Contactabilidad" stroke="#00B2BF" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Tooltip formatter={pctLbl} />
+                <Line dataKey="contactabilidad" name="Contactabilidad" stroke="#00B2BF" strokeWidth={2.5} dot={{ r: 3 }}>
+                  <LabelList dataKey="contactabilidad" position="top" formatter={pctLbl} fontSize={11} fontWeight={700} fill="#0891a3" />
+                </Line>
               </LineChart>
             </ChartCard>
 
             <ChartCard title="Llamadas: total y promedio por asesor/día">
-              <ComposedChart data={chartData}>
+              <ComposedChart data={chartData} margin={{ top: 22, right: 8, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} />
                 <YAxis yAxisId="l" fontSize={11} /><YAxis yAxisId="r" orientation="right" fontSize={11} />
                 <Tooltip />
-                <Bar yAxisId="l" dataKey="total_llamadas" name="Total llamadas" fill="#CBD5E1" radius={[3, 3, 0, 0]} />
-                <Line yAxisId="r" dataKey="llamadas_prom_asesor_dia" name="Prom./asesor/día" stroke="#E6332A" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Bar yAxisId="l" dataKey="total_llamadas" name="Total llamadas" fill="#CBD5E1" radius={[3, 3, 0, 0]}>
+                  <LabelList dataKey="total_llamadas" position="top" formatter={intLbl} fontSize={10} fontWeight={600} fill="#64748b" />
+                </Bar>
+                <Line yAxisId="r" dataKey="llamadas_prom_asesor_dia" name="Prom./asesor/día" stroke="#E6332A" strokeWidth={2.5} dot={{ r: 3 }}>
+                  <LabelList dataKey="llamadas_prom_asesor_dia" position="top" formatter={intLbl} fontSize={11} fontWeight={700} fill="#E6332A" />
+                </Line>
               </ComposedChart>
             </ChartCard>
 
             <ChartCard title="Agentes activos y prima emitida">
-              <ComposedChart data={chartData}>
+              <ComposedChart data={chartData} margin={{ top: 22, right: 8, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} />
                 <YAxis yAxisId="l" fontSize={11} tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`} />
                 <YAxis yAxisId="r" orientation="right" fontSize={11} />
                 <Tooltip formatter={(v: any, n: any) => (n === "Prima emitida" ? formatGs(v as number) : v)} />
-                <Bar yAxisId="l" dataKey="prima_emitida" name="Prima emitida" fill="#F39200" radius={[3, 3, 0, 0]} />
-                <Line yAxisId="r" dataKey="agentes_activos" name="Agentes activos" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3 }} />
+                <Bar yAxisId="l" dataKey="prima_emitida" name="Prima emitida" fill="#F39200" radius={[3, 3, 0, 0]}>
+                  <LabelList dataKey="prima_emitida" position="top" formatter={mLbl} fontSize={10} fontWeight={600} fill="#b06f00" />
+                </Bar>
+                <Line yAxisId="r" dataKey="agentes_activos" name="Agentes activos" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3 }}>
+                  <LabelList dataKey="agentes_activos" position="top" formatter={intLbl} fontSize={11} fontWeight={700} fill="#0F1116" />
+                </Line>
               </ComposedChart>
             </ChartCard>
           </div>
