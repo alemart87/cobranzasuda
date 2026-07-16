@@ -44,7 +44,7 @@ export default function TeleventasClaroHub() {
           setDenied(true);
           return;
         }
-        setCanManage(me.role === "superadmin" || me.role === "analyst");
+        setCanManage(me.role === "superadmin" || me.role === "analyst" || me.role === "facturacion");
         await load();
       } catch (e: any) {
         setError(e.message);

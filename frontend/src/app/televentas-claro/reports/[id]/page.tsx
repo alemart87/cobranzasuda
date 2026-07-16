@@ -36,7 +36,7 @@ export default function FacturacionReportPage() {
     (async () => {
       try {
         const me = await apiFetch<{ role: string }>("/api/v1/auth/me");
-        setCanManage(me.role === "superadmin" || me.role === "analyst");
+        setCanManage(me.role === "superadmin" || me.role === "analyst" || me.role === "facturacion");
         await load();
       } catch (e: any) { setError(e.message); }
     })();

@@ -8,7 +8,7 @@ class UserCreate(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8)
     full_name: str = Field(min_length=2, max_length=255)
-    role: str = Field(default="analyst", pattern="^(analyst|client)$")
+    role: str = Field(default="analyst", pattern="^(analyst|client|facturacion)$")
     # Solo aplica a clientes; null = acceso total
     allowed_modules: Optional[List[str]] = None
     # Módulos restringidos habilitados (analistas). Lista de slugs.

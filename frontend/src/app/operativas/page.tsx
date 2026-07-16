@@ -116,6 +116,8 @@ export default function OperativasPage() {
   const visibleModules = MODULES.filter((m) => {
     // Módulos restringidos: solo si el backend habilitó al usuario (nunca clientes).
     if (RESTRICTED.has(m.slug)) return m.slug === "televentas_claro" ? canFacturacion : false;
+    // Analista de Facturación: solo ve Facturación (restringido, ya resuelto arriba).
+    if (role === "facturacion") return false;
     if (role !== "client") return true;
     if (allowed === null) return true;
     return allowed.includes(m.slug);

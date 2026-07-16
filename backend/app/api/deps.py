@@ -49,6 +49,11 @@ class CurrentUser:
         return self.role == "client"
 
     @property
+    def is_facturacion(self) -> bool:
+        """Analista de Facturación (Televentas Claro): acceso SOLO a ese módulo."""
+        return self.role == "facturacion"
+
+    @property
     def can_upload(self) -> bool:
         return self.role in ("superadmin", "analyst")
 
@@ -66,9 +71,11 @@ class CurrentUser:
 
     def has_restricted_module(self, slug: str) -> bool:
         """Módulo restringido: superadmin siempre; analista solo si está habilitado;
-        cliente NUNCA."""
+        analista de facturación solo 'televentas_claro'; cliente NUNCA."""
         if self.is_superadmin:
             return True
+        if self.is_facturacion:
+            return slug == "televentas_claro"
         if self.is_analyst:
             return slug in (self.granted_modules or [])
         return False
@@ -153,7 +160,7 @@ async def require_facturacion_manage(user: CurrentUser = Depends(get_current_use
     """Gestión (subir/publicar/eliminar): superadmin o analista habilitado."""
     if not user.has_restricted_module(_FACTURACION_SLUG):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso al módulo de Facturación")
-    if user.role not in ("superadmin", "analyst"):
+    if user.role not in ("superadmin", "analyst", "facturacion"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Requiere rol analista o superadmin")
     return user
 

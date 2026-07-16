@@ -50,6 +50,10 @@ async def create_user(
 
     # granted_modules (módulos restringidos): solo analistas; clientes nunca.
     granted = filter_restricted_slugs(payload.granted_modules) if payload.role == "analyst" else []
+    # Analista de Facturación: acceso fijo y exclusivo al módulo Televentas Claro.
+    if payload.role == "facturacion":
+        granted = ["televentas_claro"]
+        allowed = []  # sin acceso a los módulos no restringidos
 
     new_user = User(
         email=email,

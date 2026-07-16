@@ -31,7 +31,14 @@ interface ModuleInfo {
 const ROLE_LABELS: Record<string, string> = {
   analyst: "Analista (interno Voicenter)",
   client: "Cliente (Sudameris — solo lectura)",
+  facturacion: "Analista de Facturación (Televentas Claro)",
 };
+
+const ROLE_OPTIONS: { value: string; title: string; desc: string }[] = [
+  { value: "analyst", title: "Analista", desc: "Carga archivos, publica y elimina reportes." },
+  { value: "client", title: "Cliente", desc: "Solo ve reportes publicados." },
+  { value: "facturacion", title: "Analista de Facturación", desc: "Acceso completo SOLO al módulo Televentas Claro · Facturación (sube liquidaciones, compara, agente IA). Sin acceso a los demás módulos." },
+];
 
 interface FormState {
   email: string;
@@ -195,26 +202,20 @@ export default function AdminUsersPage() {
 
           <div>
             <label className="label">Tipo de usuario</label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["analyst", "client"] as const).map((r) => (
+            <div className="grid grid-cols-1 gap-2">
+              {ROLE_OPTIONS.map((r) => (
                 <button
-                  key={r}
+                  key={r.value}
                   type="button"
-                  onClick={() => setForm({ ...form, role: r })}
+                  onClick={() => setForm({ ...form, role: r.value })}
                   className={`p-3 text-left rounded-md border text-xs transition-all ${
-                    form.role === r
+                    form.role === r.value
                       ? "border-brand-primary bg-brand-primary-light text-brand-primary-dark"
                       : "border-brand-border text-brand-slate hover:border-brand-mist"
                   }`}
                 >
-                  <div className="font-semibold uppercase tracking-wider2 text-[10px] mb-0.5">
-                    {r === "analyst" ? "Analista" : "Cliente"}
-                  </div>
-                  <div className="text-[11px] opacity-80">
-                    {r === "analyst"
-                      ? "Carga archivos, publica y elimina reportes."
-                      : "Solo ve reportes publicados."}
-                  </div>
+                  <div className="font-semibold uppercase tracking-wider2 text-[10px] mb-0.5">{r.title}</div>
+                  <div className="text-[11px] opacity-80">{r.desc}</div>
                 </button>
               ))}
             </div>
@@ -497,6 +498,8 @@ function UserListItem({
           <span className="font-semibold text-brand-ink text-sm truncate">{user.full_name}</span>
           {user.role === "analyst" ? (
             <span className="badge-cyan">Analista</span>
+          ) : user.role === "facturacion" ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider2 text-white" style={{ background: "#662483" }}>Facturación</span>
           ) : (
             <span className="badge-primary">Cliente</span>
           )}
@@ -543,9 +546,11 @@ function UserListItem({
             Operativas
           </button>
         )}
-        <button onClick={() => onToggleAgent(user)} className={`text-xs px-2.5 py-1 rounded border ${user.can_use_agent ? "border-brand-cyan text-brand-cyan" : "border-brand-border hover:border-brand-cyan hover:text-brand-cyan"}`}>
-          {user.can_use_agent ? "Agente IA: ON" : "Agente IA: OFF"}
-        </button>
+        {user.role !== "facturacion" && (
+          <button onClick={() => onToggleAgent(user)} className={`text-xs px-2.5 py-1 rounded border ${user.can_use_agent ? "border-brand-cyan text-brand-cyan" : "border-brand-border hover:border-brand-cyan hover:text-brand-cyan"}`}>
+            {user.can_use_agent ? "Agente IA: ON" : "Agente IA: OFF"}
+          </button>
+        )}
         {user.role === "analyst" && (
           <button onClick={() => onToggleFacturacion(user)} className={`text-xs px-2.5 py-1 rounded border ${(user.granted_modules || []).includes("televentas_claro") ? "border-[#662483] text-[#662483]" : "border-brand-border hover:border-[#662483] hover:text-[#662483]"}`}>
             {(user.granted_modules || []).includes("televentas_claro") ? "Facturación: ON" : "Facturación: OFF"}
