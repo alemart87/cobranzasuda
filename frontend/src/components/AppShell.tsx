@@ -75,6 +75,7 @@ const ROLE_LABELS: Record<string, string> = {
   superadmin: "Superadmin",
   analyst: "Analista",
   client: "Cliente",
+  facturacion: "Analista de Facturación",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -106,6 +107,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileOpen(false);
   }, [pathname]);
 
+  // Analista de Facturación: acotado a su módulo. Si intenta entrar a otra ruta
+  // (por URL), lo devolvemos a Televentas Claro.
+  useEffect(() => {
+    if (user?.role !== "facturacion" || !pathname) return;
+    const permitido = ["/televentas-claro", "/operativas", "/perfil"].some((p) => pathname.startsWith(p));
+    if (!permitido) router.replace("/televentas-claro");
+  }, [user, pathname, router]);
+
   const onLogout = () => {
     clearSession();
     router.push("/login");
@@ -120,6 +129,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const inAtencion = !inTeleventas && !inVentas && ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
   const inCobranzas = !inAtencion && !inTeleventas && !inVentas && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
   const canManage = user.role === "superadmin" || user.role === "analyst";
+  // El analista de Facturación gestiona SOLO ese módulo (no es analyst global).
+  const canManageFacturacion = canManage || user.role === "facturacion";
   // En los Agentes (Experiencia / Facturación) colapsamos el chrome → workspace amplio.
   const inFacturacionAgent = pathname?.startsWith("/televentas-claro/agente") ?? false;
   const inVentasAgent = pathname?.startsWith("/televentas/agente") ?? false;
@@ -224,7 +235,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link href="/televentas-claro" className={mobilePill(pathname === "/televentas-claro")}>Inicio</Link>
                   <Link href="/televentas-claro/compare" className={mobilePill(isActive("/televentas-claro/compare"))}>Comparar</Link>
                   <Link href="/televentas-claro/agente" className={mobilePill(isActive("/televentas-claro/agente"))}>Agente IA</Link>
-                  {canManage && (
+                  {canManageFacturacion && (
                     <Link href="/televentas-claro/upload" className={mobilePill(isActive("/televentas-claro/upload"))}>Subir liquidación</Link>
                   )}
                 </>
@@ -524,7 +535,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
                 Agente IA
               </Link>
-              {canManage && (
+              {canManageFacturacion && (
                 <>
                   {navDivider}
                   <Link href="/televentas-claro/upload" className={`${pill(isActive("/televentas-claro/upload"))} inline-flex items-center gap-1.5`}>
