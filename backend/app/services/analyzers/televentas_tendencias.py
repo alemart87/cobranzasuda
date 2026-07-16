@@ -117,6 +117,74 @@ def comparar_meses(prev_ov: dict, curr_ov: dict, mes_prev: str, mes_curr: str) -
             "por_vendedor": filas, "por_producto": prods}
 
 
+def _dir(values: list[float]) -> str:
+    """Dirección de la tendencia (primer vs último punto, tolerancia 5%)."""
+    vals = [v for v in values if v is not None]
+    if len(vals) < 2 or not vals[0]:
+        return "estable"
+    ch = (vals[-1] - vals[0]) / abs(vals[0])
+    if ch >= 0.05:
+        return "sube"
+    if ch <= -0.05:
+        return "baja"
+    return "estable"
+
+
+def _consec_baja(values: list[float]) -> int:
+    """Cantidad de descensos consecutivos al final de la serie."""
+    n = 0
+    for i in range(len(values) - 1, 0, -1):
+        if values[i] is not None and values[i - 1] is not None and values[i] < values[i - 1]:
+            n += 1
+        else:
+            break
+    return n
+
+
+def analizar_tendencia_mensual(serie: list[dict]) -> list[dict]:
+    """Insights sobre la evolución de varios meses (serie cronológica)."""
+    if len(serie) < 2:
+        return []
+    out: list[dict] = []
+    conv = [s.get("conversion_pct", 0) for s in serie]
+    cont = [s.get("contactabilidad", 0) for s in serie]
+    llam = [s.get("total_llamadas", 0) for s in serie]
+    prom = [s.get("llamadas_prom_asesor_dia", 0) for s in serie]
+    agentes = [s.get("agentes_activos", 0) for s in serie]
+    m0, mN = serie[0]["mes"], serie[-1]["mes"]
+
+    # Conversión
+    d = _dir(conv); baja = _consec_baja(conv)
+    if baja >= 2 or d == "baja":
+        out.append({"tipo": "conversion", "severidad": "alert" if baja >= 2 else "warning",
+                    "titulo": "Conversión a la baja",
+                    "detalle": f"Pasó de {conv[0]}% ({m0}) a {conv[-1]}% ({mN})"
+                               + (f", con {baja} meses seguidos de caída." if baja >= 2 else ".")})
+    elif d == "sube":
+        out.append({"tipo": "conversion", "severidad": "info", "titulo": "Conversión en mejora",
+                    "detalle": f"Subió de {conv[0]}% ({m0}) a {conv[-1]}% ({mN})."})
+
+    # Contactabilidad vs volumen (calidad de base)
+    dc, dl = _dir(cont), _dir(prom)
+    if dc == "baja" and dl in ("sube", "estable"):
+        out.append({"tipo": "base_datos", "severidad": "warning",
+                    "titulo": "Más marcación con peor contacto",
+                    "detalle": f"La contactabilidad bajó ({cont[0]}%→{cont[-1]}%) mientras las llamadas por asesor "
+                               f"no bajaron ({prom[0]}→{prom[-1]}). Señal de deterioro en la calidad/frescura de las bases."})
+    elif dc == "baja":
+        out.append({"tipo": "base_datos", "severidad": "warning", "titulo": "Contactabilidad en descenso",
+                    "detalle": f"Bajó de {cont[0]}% ({m0}) a {cont[-1]}% ({mN}). Revisar bases y horarios de marcación."})
+
+    # Agentes activos
+    da = _dir(agentes)
+    if da != "estable":
+        out.append({"tipo": "dotacion", "severidad": "info",
+                    "titulo": f"Dotación de agentes en {'aumento' if da == 'sube' else 'baja'}",
+                    "detalle": f"Agentes activos: {agentes[0]} ({m0}) → {agentes[-1]} ({mN})."})
+
+    return out
+
+
 def comparativo_televentas(prev_ov: dict, curr_ov: dict, mes_prev: str, mes_curr: str) -> dict[str, Any]:
     """Comparativo completo mes vs mes anterior para la pestaña de UI:
     deltas de KPIs, tabla por operador (llamadas, contactabilidad, conversión, prima)
