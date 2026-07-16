@@ -30,7 +30,7 @@ from ...schemas.televentas import (
     TeleventasProduccionReportDetail, TeleventasProduccionReportList, TeleventasProduccionReportSummary,
     TeleventasProduccionUploadList, TeleventasProduccionUploadRead,
 )
-from ...services.analyzers import combine_televentas, comparativo_televentas
+from ...services.analyzers import combine_televentas, comparativo_televentas, analizar_tendencia_mensual
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
@@ -383,3 +383,64 @@ async def televentas_comparativo(
     prev = anteriores[0]
     comp = comparativo_televentas(await _overview_del_mes(db, prev), await _overview_del_mes(db, curr), prev, curr)
     return {"disponible": True, "available_months": available, **comp}
+
+
+async def _metricas_del_mes(db: AsyncSession, month: str) -> dict:
+    """Métricas resumidas de un mes (llamadas + producción) para la serie de tendencia."""
+    start, end = _month_bounds(month)
+
+    async def _latest(Model):
+        return (await db.execute(
+            select(Model).where(Model.period_month >= start, Model.period_month < end,
+                                Model.is_published == True)  # noqa: E712
+            .order_by(Model.generated_at.desc()).limit(1)
+        )).scalars().first()
+
+    ll = await _latest(TeleventasLlamadasReport)
+    pr = await _latest(TeleventasProduccionReport)
+    llk = (ll.data or {}).get("kpis", {}) if ll else {}
+    prk = (pr.data or {}).get("kpis", {}) if pr else {}
+    contestadas = llk.get("contestadas", 0)
+    polizas = prk.get("polizas_emitidas", 0)
+    conversion = round(polizas / contestadas * 100, 1) if contestadas else 0.0
+    return {
+        "mes": month,
+        "total_llamadas": llk.get("total_llamadas", 0),
+        "contestadas": contestadas,
+        "llamadas_prom_dia": llk.get("promedio_diario", 0),
+        "llamadas_prom_asesor_dia": llk.get("promedio_llamadas_asesor_dia", 0),
+        "agentes_activos": llk.get("vendedores_activos", 0),
+        "dias_operativos": llk.get("dias_operativos", 0),
+        "contactabilidad": llk.get("pct_contestadas", 0),
+        "tmo_hms": llk.get("tmo_hms", "00:00:00"),
+        "polizas_emitidas": polizas,
+        "prima_emitida": prk.get("prima_emitida", 0),
+        "prima_neta": prk.get("prima_neta", 0),
+        "ticket_promedio": prk.get("ticket_promedio", 0),
+        "dias_productivos": prk.get("dias_productivos", 0),
+        "conversion_pct": conversion,
+        "tiene_llamadas": ll is not None,
+        "tiene_produccion": pr is not None,
+    }
+
+
+@router.get("/tendencias")
+async def televentas_tendencias(
+    meses: int = Query(12, ge=2, le=24, description="Máximo de meses a incluir (más recientes)"),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Serie de TENDENCIA multi-mes (publicados): conversión, llamadas totales y
+    promedio, agentes activos, contactabilidad, prima, etc. + insights de tendencia."""
+    months = set()
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport):
+        for (pm,) in (await db.execute(
+            select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
+        )).all():
+            if pm:
+                months.add(pm.strftime("%Y-%m"))
+    ordenados = sorted(months)  # cronológico ascendente
+    seleccion = ordenados[-meses:]
+    serie = [await _metricas_del_mes(db, m) for m in seleccion]
+    insights = analizar_tendencia_mensual(serie)
+    return {"meses": serie, "insights": insights, "total_meses": len(serie)}

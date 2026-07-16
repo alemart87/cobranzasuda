@@ -9,7 +9,23 @@ from app.services.analyzers.televentas_produccion import analyze_televentas_prod
 from app.services.analyzers.televentas_overview import combine_televentas
 from app.services.analyzers.televentas_tendencias import (
     proyeccion_cierre, comparar_meses, caidas_vendedores, comparativo_televentas,
+    analizar_tendencia_mensual,
 )
+
+
+def test_tendencia_multimes():
+    serie = [
+        {"mes": "2026-04", "conversion_pct": 4.2, "contactabilidad": 60, "total_llamadas": 7000, "llamadas_prom_asesor_dia": 30, "agentes_activos": 12},
+        {"mes": "2026-05", "conversion_pct": 3.8, "contactabilidad": 57, "total_llamadas": 8000, "llamadas_prom_asesor_dia": 33, "agentes_activos": 14},
+        {"mes": "2026-06", "conversion_pct": 3.0, "contactabilidad": 53, "total_llamadas": 8980, "llamadas_prom_asesor_dia": 37, "agentes_activos": 15},
+    ]
+    ins = analizar_tendencia_mensual(serie)
+    tipos = {i["tipo"] for i in ins}
+    assert "conversion" in tipos    # conversión a la baja
+    assert "base_datos" in tipos    # más marcación con peor contacto
+    assert "dotacion" in tipos      # agentes en aumento
+    # con un solo mes no hay tendencia
+    assert analizar_tendencia_mensual(serie[:1]) == []
 
 
 def _llam(usuario, fecha, dur):

@@ -2,14 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Bar, BarChart, CartesianGrid, ComposedChart, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
-import { MonthNavigator } from "@/components/MonthNavigator";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt, formatPct } from "@/lib/format";
 import { monthLabel } from "@/lib/month";
-
-const INVERSO = new Set(["Prima anulada"]); // métricas donde bajar es bueno
 
 const ESTADO: Record<string, { label: string; cls: string }> = {
   nuevo: { label: "Nuevo", cls: "bg-brand-cyan/10 text-brand-cyan" },
@@ -18,115 +16,162 @@ const ESTADO: Record<string, { label: string; cls: string }> = {
   estable: { label: "Estable", cls: "bg-brand-bg text-brand-slate" },
 };
 
-export default function TeleventasComparativoPage() {
-  const [data, setData] = useState<any>(null);
-  const [month, setMonth] = useState<string | null>(null);
+export default function TeleventasTendenciasPage() {
+  const [tend, setTend] = useState<any>(null);
+  const [comp, setComp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
-  const load = (m?: string | null) => {
-    setLoading(true);
-    apiFetch<any>(`/api/v1/televentas/comparativo${m ? `?month=${m}` : ""}`)
-      .then((d) => { setData(d); setMonth(d.mes_actual ?? m ?? null); })
-      .finally(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    Promise.all([
+      apiFetch<any>("/api/v1/televentas/tendencias").catch(() => null),
+      apiFetch<any>("/api/v1/televentas/comparativo").catch(() => null),
+    ]).then(([t, c]) => { setTend(t); setComp(c); }).finally(() => setLoading(false));
+  }, []);
 
-  const deltaTxt = (metric: string, pct: number | null, delta: number) => {
-    if (pct === null) return "—";
-    const good = INVERSO.has(metric) ? delta < 0 : delta > 0;
-    const arrow = delta > 0 ? "▲" : delta < 0 ? "▼" : "→";
-    return <span className={delta === 0 ? "text-brand-slate" : good ? "text-emerald-600" : "text-brand-primary"}>{arrow} {Math.abs(pct)}%</span>;
-  };
+  const meses: any[] = tend?.meses ?? [];
+  const chartData = meses.map((m) => ({ ...m, label: m.mes }));
 
   return (
     <AppShell>
       <div className="mb-2 text-xs text-brand-slate">
         <Link href="/televentas" className="hover:text-brand-primary">Televentas</Link>
-        <span className="mx-2">/</span><span className="text-brand-ink font-semibold">Comparativo</span>
+        <span className="mx-2">/</span><span className="text-brand-ink font-semibold">Comparativo y tendencias</span>
       </div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Comparativo mensual</h1>
-          <p className="text-sm text-brand-slate mt-1">Mes vs mes anterior: KPIs, conversión, llamadas por operador y análisis del cambio.</p>
-        </div>
-        {data?.available_months?.length > 1 && (
-          <MonthNavigator months={data.available_months} value={month} onChange={(m) => { setMonth(m); load(m); }} />
-        )}
+      <div className="mb-6">
+        <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Comparativo y tendencias</h1>
+        <p className="text-sm text-brand-slate mt-1">Evolución de varios meses: conversión, llamadas (total y promedio), agentes activos, contactabilidad y producción.</p>
       </div>
 
       {loading && <div className="text-brand-slate">Cargando…</div>}
 
-      {!loading && data && !data.disponible && (
+      {!loading && meses.length < 2 && (
         <div className="card p-10 text-center text-brand-slate">
-          {data.mensaje || "Se necesitan al menos dos meses publicados para comparar."}
+          Se necesitan al menos <b>dos meses publicados</b> para ver tendencias. Actualmente hay {meses.length}.
         </div>
       )}
 
-      {!loading && data?.disponible && (
+      {!loading && meses.length >= 2 && (
         <>
-          <div className="mb-6 text-sm text-brand-slate">
-            Comparando <b className="text-brand-ink">{monthLabel(data.mes_actual)}</b> vs <b className="text-brand-ink">{monthLabel(data.mes_previo)}</b>
+          <InsightsPanel insights={tend?.insights} titulo="Tendencias detectadas" />
+
+          <div className="grid lg:grid-cols-2 gap-6 mb-6">
+            <ChartCard title="Conversión mensual (%)">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} /><YAxis fontSize={11} />
+                <Tooltip formatter={(v: any) => `${v}%`} />
+                <Line dataKey="conversion_pct" name="Conversión" stroke="#662483" strokeWidth={2.5} dot={{ r: 3 }} />
+              </LineChart>
+            </ChartCard>
+
+            <ChartCard title="Contactabilidad mensual (%)">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} /><YAxis fontSize={11} />
+                <Tooltip formatter={(v: any) => `${v}%`} />
+                <Line dataKey="contactabilidad" name="Contactabilidad" stroke="#00B2BF" strokeWidth={2.5} dot={{ r: 3 }} />
+              </LineChart>
+            </ChartCard>
+
+            <ChartCard title="Llamadas: total y promedio por asesor/día">
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} />
+                <YAxis yAxisId="l" fontSize={11} /><YAxis yAxisId="r" orientation="right" fontSize={11} />
+                <Tooltip />
+                <Bar yAxisId="l" dataKey="total_llamadas" name="Total llamadas" fill="#CBD5E1" radius={[3, 3, 0, 0]} />
+                <Line yAxisId="r" dataKey="llamadas_prom_asesor_dia" name="Prom./asesor/día" stroke="#E6332A" strokeWidth={2.5} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ChartCard>
+
+            <ChartCard title="Agentes activos y prima emitida">
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} />
+                <YAxis yAxisId="l" fontSize={11} tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`} />
+                <YAxis yAxisId="r" orientation="right" fontSize={11} />
+                <Tooltip formatter={(v: any, n: any) => (n === "Prima emitida" ? formatGs(v as number) : v)} />
+                <Bar yAxisId="l" dataKey="prima_emitida" name="Prima emitida" fill="#F39200" radius={[3, 3, 0, 0]} />
+                <Line yAxisId="r" dataKey="agentes_activos" name="Agentes activos" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ChartCard>
           </div>
 
-          <InsightsPanel insights={data.insights} titulo="Análisis del cambio" />
-
-          <section className="mb-6">
-            <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold mb-3">Indicadores</h2>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {data.kpis.map((d: any) => {
-                const isGs = ["Prima emitida", "Prima anulada", "Ticket promedio"].includes(d.metric);
-                const isPct = d.metric.includes("%");
-                const fmt = (v: number) => (isGs ? formatGs(v) : isPct ? formatPct(v) : formatInt(v));
-                return (
-                  <div key={d.metric} className="card p-4">
-                    <div className="text-[11px] uppercase tracking-wider2 text-brand-slate">{d.metric}</div>
-                    <div className="text-xl font-display text-brand-ink mt-1">{fmt(d.actual)}</div>
-                    <div className="text-xs mt-0.5 flex items-center gap-2">
-                      {deltaTxt(d.metric, d.pct, d.delta)}
-                      <span className="text-brand-mist">antes {fmt(d.previo)}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="card p-6">
-            <h2 className="font-display text-xl text-brand-ink uppercase mb-4">Por operador</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm min-w-[780px]">
-                <thead className="bg-brand-bg">
-                  <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
-                    <th className="px-3 py-2 text-left">Operador</th>
-                    <th className="px-3 py-2 text-center">Estado</th>
-                    <th className="px-3 py-2 text-right">Llamadas</th>
-                    <th className="px-3 py-2 text-right">Contacto %</th>
-                    <th className="px-3 py-2 text-right">Conversión %</th>
-                    <th className="px-3 py-2 text-right">Prima emitida</th>
-                    <th className="px-3 py-2 text-right">Δ Prima</th>
+          <section className="card overflow-x-auto mb-8">
+            <table className="w-full text-sm min-w-[820px]">
+              <thead className="bg-brand-bg border-b border-brand-border">
+                <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
+                  <th className="px-3 py-2 text-left">Mes</th>
+                  <th className="px-3 py-2 text-right">Llamadas</th>
+                  <th className="px-3 py-2 text-right">Prom./día</th>
+                  <th className="px-3 py-2 text-right">Prom./asesor</th>
+                  <th className="px-3 py-2 text-right">Agentes</th>
+                  <th className="px-3 py-2 text-right">Contacto %</th>
+                  <th className="px-3 py-2 text-right">Pólizas</th>
+                  <th className="px-3 py-2 text-right">Prima emitida</th>
+                  <th className="px-3 py-2 text-right">Conversión %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {meses.map((m) => (
+                  <tr key={m.mes} className="border-t border-brand-border hover:bg-brand-bg-soft">
+                    <td className="px-3 py-2 font-semibold text-brand-ink">{monthLabel(m.mes)}</td>
+                    <td className="px-3 py-2 text-right">{formatInt(m.total_llamadas)}</td>
+                    <td className="px-3 py-2 text-right">{formatInt(m.llamadas_prom_dia)}</td>
+                    <td className="px-3 py-2 text-right">{formatInt(m.llamadas_prom_asesor_dia)}</td>
+                    <td className="px-3 py-2 text-right">{formatInt(m.agentes_activos)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{formatPct(m.contactabilidad)}</td>
+                    <td className="px-3 py-2 text-right">{formatInt(m.polizas_emitidas)}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{formatGs(m.prima_emitida)}</td>
+                    <td className="px-3 py-2 text-right font-mono text-brand-purple">{formatPct(m.conversion_pct)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {data.por_operador.map((o: any) => {
-                    const e = ESTADO[o.estado] ?? ESTADO.estable;
-                    return (
-                      <tr key={o.vendedor} className="border-t border-brand-border hover:bg-brand-bg-soft">
-                        <td className="px-3 py-2 font-medium text-brand-ink">{o.vendedor}</td>
-                        <td className="px-3 py-2 text-center"><span className={`text-[10px] uppercase tracking-wider2 font-bold px-1.5 py-0.5 rounded ${e.cls}`}>{e.label}</span></td>
-                        <td className="px-3 py-2 text-right">{formatInt(o.llamadas_act)} <span className="text-brand-mist text-xs">/ {formatInt(o.llamadas_prev)}</span></td>
-                        <td className="px-3 py-2 text-right font-mono">{formatPct(o.contacto_act)} <span className="text-brand-mist text-xs">/ {formatPct(o.contacto_prev)}</span></td>
-                        <td className="px-3 py-2 text-right font-mono">{formatPct(o.conversion_act)} <span className="text-brand-mist text-xs">/ {formatPct(o.conversion_prev)}</span></td>
-                        <td className="px-3 py-2 text-right font-semibold">{formatGs(o.prima_act)}</td>
-                        <td className="px-3 py-2 text-right font-mono">{deltaTxt("Prima emitida", o.prima_pct, o.prima_pct ?? 0)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </section>
+
+          {comp?.disponible && (
+            <section className="card p-6">
+              <h2 className="font-display text-xl text-brand-ink uppercase mb-1">Por operador · {monthLabel(comp.mes_actual)} vs {monthLabel(comp.mes_previo)}</h2>
+              <p className="text-xs text-brand-slate mb-4">Último mes contra el anterior.</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[720px]">
+                  <thead className="bg-brand-bg">
+                    <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
+                      <th className="px-3 py-2 text-left">Operador</th>
+                      <th className="px-3 py-2 text-center">Estado</th>
+                      <th className="px-3 py-2 text-right">Llamadas</th>
+                      <th className="px-3 py-2 text-right">Contacto %</th>
+                      <th className="px-3 py-2 text-right">Conversión %</th>
+                      <th className="px-3 py-2 text-right">Prima emitida</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comp.por_operador.map((o: any) => {
+                      const e = ESTADO[o.estado] ?? ESTADO.estable;
+                      return (
+                        <tr key={o.vendedor} className="border-t border-brand-border hover:bg-brand-bg-soft">
+                          <td className="px-3 py-2 font-medium text-brand-ink">{o.vendedor}</td>
+                          <td className="px-3 py-2 text-center"><span className={`text-[10px] uppercase tracking-wider2 font-bold px-1.5 py-0.5 rounded ${e.cls}`}>{e.label}</span></td>
+                          <td className="px-3 py-2 text-right">{formatInt(o.llamadas_act)} <span className="text-brand-mist text-xs">/ {formatInt(o.llamadas_prev)}</span></td>
+                          <td className="px-3 py-2 text-right font-mono">{formatPct(o.contacto_act)} <span className="text-brand-mist text-xs">/ {formatPct(o.contacto_prev)}</span></td>
+                          <td className="px-3 py-2 text-right font-mono">{formatPct(o.conversion_act)} <span className="text-brand-mist text-xs">/ {formatPct(o.conversion_prev)}</span></td>
+                          <td className="px-3 py-2 text-right font-semibold">{formatGs(o.prima_act)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
         </>
       )}
     </AppShell>
+  );
+}
+
+function ChartCard({ title, children }: { title: string; children: React.ReactElement }) {
+  return (
+    <section className="card p-6">
+      <h2 className="font-display text-lg text-brand-ink uppercase mb-4">{title}</h2>
+      <ResponsiveContainer width="100%" height={240}>{children}</ResponsiveContainer>
+    </section>
   );
 }

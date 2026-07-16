@@ -14,7 +14,7 @@ from .core import AgentNotConfigured
 from .televentas_tools import (
     tv_buscar_polizas_impl, tv_caidas_vendedores_impl, tv_comparar_meses_impl, tv_focus_impl,
     tv_listar_periodos_impl, tv_llamadas_impl, tv_overview_impl, tv_produccion_impl,
-    tv_proyeccion_impl, tv_ranking_vendedores_impl,
+    tv_proyeccion_impl, tv_ranking_vendedores_impl, tv_tendencias_impl,
 )
 from .tools import AgentContext
 
@@ -52,6 +52,10 @@ MAYOR prima/ticket. Recomendá dónde empujar.
 (run-rate por día hábil). Aclarar el % de avance y que es lineal; si el mes está completo, decilo.
 9. Comparativo mensual: para "¿cómo venimos vs el mes pasado?" usá `tv_comparar_meses` (deltas de \
 KPIs, por vendedor y por producto). Comentá los drivers del cambio (quién/qué producto explica el delta).
+9b. TENDENCIA multi-mes: para "cómo viene evolucionando", "compará los últimos meses" o detectar \
+deterioros sostenidos, usá `tv_tendencias` (serie de conversión, llamadas totales/promedio, agentes \
+activos, contactabilidad, prima). Leé sus insights (ej. conversión cayendo N meses, más marcación con \
+peor contacto = base deteriorada) y graficá la evolución con `emit_canvas` (tipo 'line').
 10. Caídas de vendedores: usá `tv_caidas_vendedores` para señalar quién bajó fuerte (prima, pólizas o \
 llamadas) vs el mes anterior, con el % de caída y una acción. Requiere 2+ meses; si hay uno solo, decilo.
 
@@ -140,6 +144,14 @@ def _build_televentas_agent():
         return await tv_comparar_meses_impl(mes, mes_previo)
 
     @function_tool(strict_mode=False)
+    async def tv_tendencias(ctx: RunContextWrapper[AgentContext], meses: int = 12) -> dict:
+        """TENDENCIA multi-mes (varios meses juntos): serie de conversión, llamadas totales y
+        promedio (por día y por asesor), agentes activos, contactabilidad, prima y pólizas, con
+        insights de tendencia. Usala para 'cómo viene evolucionando', comparar varios meses o
+        detectar deterioros sostenidos. `meses` = cantidad máxima (default 12)."""
+        return await tv_tendencias_impl(meses)
+
+    @function_tool(strict_mode=False)
     async def tv_caidas_vendedores(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None,
                                    mes_previo: Optional[str] = None, umbral_pct: float = 30.0) -> dict:
         """Detecta vendedores del equipo con CAÍDA significativa (prima, pólizas o llamadas) vs el mes
@@ -159,8 +171,8 @@ def _build_televentas_agent():
         return {"ok": True, "artifact_id": artifact["id"]}
 
     tools = [tv_focus, tv_listar_periodos, tv_overview, tv_ranking_vendedores, tv_produccion,
-             tv_llamadas, tv_buscar_polizas, tv_proyeccion, tv_comparar_meses, tv_caidas_vendedores,
-             emit_canvas]
+             tv_llamadas, tv_buscar_polizas, tv_proyeccion, tv_comparar_meses, tv_tendencias,
+             tv_caidas_vendedores, emit_canvas]
 
     model_settings = None
     try:

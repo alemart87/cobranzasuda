@@ -32,11 +32,11 @@ export default function AgenteTeleventasPage() {
         }));
       }}
       suggestions={[
-        "Resumí el overview del mes y las alertas de vendedores",
+        "Mostrame la tendencia de conversión y contactabilidad de los últimos meses",
+        "¿Cómo vienen evolucionando las llamadas y los agentes activos?",
+        "¿Hay señales de deterioro de las bases entre meses?",
         "¿Cómo va a cerrar el mes? Proyectá prima y pólizas",
-        "Compará este mes contra el anterior y explicá el cambio",
         "¿Qué vendedores cayeron vs el mes pasado?",
-        "Ranking por prima neta y conversión, con un gráfico",
       ]}
     />
   );

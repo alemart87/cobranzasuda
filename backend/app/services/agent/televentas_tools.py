@@ -17,7 +17,7 @@ from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_item import TeleventasProduccionItem
 from ...services.analyzers.televentas_overview import combine_televentas
 from ...services.analyzers.televentas_tendencias import (
-    caidas_vendedores, comparar_meses, proyeccion_cierre,
+    caidas_vendedores, comparar_meses, proyeccion_cierre, analizar_tendencia_mensual,
 )
 
 
@@ -193,6 +193,39 @@ async def tv_caidas_vendedores_impl(mes: Optional[str] = None, mes_previo: Optio
         return {"sin_datos": True, "mensaje": "Necesito al menos 2 meses con datos para detectar caídas."}
     prev, curr = par
     return caidas_vendedores(await _overview_for(prev), await _overview_for(curr), prev, curr, umbral_pct)
+
+
+async def tv_tendencias_impl(meses: int = 12) -> dict[str, Any]:
+    """Serie multi-mes: conversión, llamadas totales/promedio, agentes activos,
+    contactabilidad, prima, pólizas — con insights de tendencia."""
+    periodos = sorted(await _periodos())  # ascendente
+    meses = max(2, min(meses, 24))
+    sel = periodos[-meses:]
+    serie = []
+    for m in sel:
+        ll = await _latest(TeleventasLlamadasReport, m)
+        pr = await _latest(TeleventasProduccionReport, m)
+        llk = (ll.data or {}).get("kpis", {}) if ll else {}
+        prk = (pr.data or {}).get("kpis", {}) if pr else {}
+        contestadas = llk.get("contestadas", 0)
+        polizas = prk.get("polizas_emitidas", 0)
+        serie.append({
+            "mes": m,
+            "total_llamadas": llk.get("total_llamadas", 0),
+            "llamadas_prom_dia": llk.get("promedio_diario", 0),
+            "llamadas_prom_asesor_dia": llk.get("promedio_llamadas_asesor_dia", 0),
+            "agentes_activos": llk.get("vendedores_activos", 0),
+            "contactabilidad": llk.get("pct_contestadas", 0),
+            "tmo_hms": llk.get("tmo_hms", "00:00:00"),
+            "polizas_emitidas": polizas,
+            "prima_emitida": prk.get("prima_emitida", 0),
+            "prima_neta": prk.get("prima_neta", 0),
+            "conversion_pct": round(polizas / contestadas * 100, 1) if contestadas else 0.0,
+        })
+    if len(serie) < 2:
+        return {"sin_datos": True, "mensaje": "Se necesitan al menos 2 meses con datos para ver tendencias.",
+                "meses": serie}
+    return {"meses": serie, "insights": analizar_tendencia_mensual(serie), "total_meses": len(serie)}
 
 
 async def tv_focus_impl(focus_refs: Optional[list[str]]) -> dict[str, Any]:
