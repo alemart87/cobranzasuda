@@ -102,7 +102,8 @@ async def tv_llamadas_impl(mes: Optional[str] = None) -> dict[str, Any]:
         return {"sin_datos": True, "mensaje": f"No hay reporte de llamadas para {month or 'ningún mes'}."}
     d = ll.data or {}
     return {"mes": month, "kpis": d.get("kpis", {}), "por_vendedor": d.get("por_vendedor", []),
-            "por_dia": d.get("por_dia", [])}
+            "por_dia": d.get("por_dia", []), "distribucion_duracion": d.get("distribucion_duracion", []),
+            "por_hora": d.get("por_hora", []), "insights": d.get("insights", [])}
 
 
 async def tv_ranking_vendedores_impl(mes: Optional[str] = None) -> dict[str, Any]:

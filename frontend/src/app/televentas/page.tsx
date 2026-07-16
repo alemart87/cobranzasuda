@@ -199,8 +199,9 @@ export default function TeleventasHubPage() {
       <section className="mb-10">
         <SectionLabel>Ver reportes</SectionLabel>
         <div className="grid md:grid-cols-2 gap-4">
-          <HubCard href="/televentas/llamadas/reports" title="Reportes de Llamadas" desc="Contestadas, TMO y producción telefónica por vendedor y por día." bar="bg-brand-cyan" />
+          <HubCard href="/televentas/llamadas/reports" title="Reportes de Llamadas" desc="Contactabilidad, TMO, distribución de duración, curva horaria e insights por operador." bar="bg-brand-cyan" />
           <HubCard href="/televentas/produccion/reports" title="Reportes de Producción" desc="Emisiones y anulaciones, ticket, mix de productos y ranking de vendedores." bar="bg-brand-orange" />
+          <HubCard href="/televentas/comparativo" title="Comparativo mensual" desc="Mes vs mes anterior: conversión, llamadas por operador y análisis del cambio." bar="bg-brand-purple" />
           {canUseAgent && (
             <HubCard href="/televentas/agente" title="Agente de Ventas" desc="Preguntá en lenguaje natural: conversión, ranking, alertas y gráficos al instante." bar="bg-brand-purple" badge="IA" />
           )}

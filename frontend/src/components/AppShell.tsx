@@ -62,6 +62,7 @@ const NAV_VENTAS_INICIO = { href: "/televentas", label: "Inicio" };
 const NAV_VENTAS_REPORTS = [
   { href: "/televentas/llamadas/reports", label: "Llamadas" },
   { href: "/televentas/produccion/reports", label: "Producción" },
+  { href: "/televentas/comparativo", label: "Comparativo" },
 ];
 const NAV_VENTAS_UPLOADS = [
   { href: "/televentas/llamadas/upload", label: "Llamadas" },
