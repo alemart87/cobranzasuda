@@ -31,6 +31,8 @@ async def logi_get_impl(recurso: str, params: Optional[dict] = None, limite: int
     """GET a un recurso de QuadMinds. Devuelve una muestra (cap `limite`) + total leído."""
     if not _is_allowed(recurso):
         return {"error": f"Recurso no permitido: {recurso}. Usá logi_recursos para ver los válidos."}
+    # Si pidió el nombre corto (orders/routes/pois/products), resolver al path real.
+    recurso = RESOURCE_PATHS.get(recurso.strip("/").lower(), recurso)
     p = dict(params or {})
     p.setdefault("limit", min(max(limite, 1), 1000))
     p.setdefault("offset", 0)

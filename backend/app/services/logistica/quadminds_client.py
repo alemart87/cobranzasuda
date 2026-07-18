@@ -41,7 +41,7 @@ ALLOWED_HEADS = {
 }
 # Sugerencias de path completo por recurso (para el agente).
 RESOURCE_PATHS = {
-    "orders": "orders", "order-status": "order-status", "routes": "routes/search",
+    "orders": "orders/search", "order-status": "order-status", "routes": "routes/search",
     "pois": "pois/search", "poitypes": "pois/types", "products": "products/search",
     "drivers": "drivers", "vehicles": "vehicles", "vehicles-routes": "vehicles-routes",
     "waypoints": "waypoints", "areas": "areas", "organizations": "organizations",
@@ -211,13 +211,18 @@ def _scheme_params(scheme: tuple[str, str, str], w0: str, w1: str, extra: Option
 
 
 async def fetch_orders(desde: str, hasta: str, extra: Optional[dict] = None,
-                       max_rows: int = 20000, path: str = "orders") -> tuple[list[dict], dict]:
-    """Lista órdenes en el rango [desde, hasta] partiendo en ventanas de 7 días
-    (límite de QuadMinds). Auto-detecta el esquema de fechas (from/to por defecto)
-    probando variantes en la primera ventana y reutilizándolo en el resto.
-    Devuelve (filas, info_esquema)."""
+                       max_rows: int = 20000, path: Optional[str] = None) -> tuple[list[dict], dict]:
+    """Lista órdenes de /orders/search en el rango [desde, hasta].
+
+    1) Intenta filtrar por fecha del lado del servidor (from/to en ventanas de ≤7 días,
+       como /routes/search). Auto-detecta el nombre del parámetro.
+    2) Si el endpoint no acepta el filtro de fechas (400), cae a traer sin filtro y
+       filtrar del lado nuestro por el campo de fecha detectado. Siempre devuelve datos.
+    """
     global _ORDERS_SCHEME
+    from .stats import _date_str
     client = QuadMindsClient()
+    path = path or settings.quadminds_orders_path
     windows = _date_windows(desde, hasta, 7)
 
     candidatos: list[tuple[str, str, str]] = []
@@ -233,29 +238,39 @@ async def fetch_orders(desde: str, hasta: str, extra: Optional[dict] = None,
 
     scheme: Optional[tuple[str, str, str]] = None
     all_rows: list[dict] = []
-    for (w0, w1) in windows:
-        if scheme is None:
-            last_err: Optional[QuadMindsError] = None
-            for cand in candidatos:
-                try:
-                    rows = await client.get_all(path, params=_scheme_params(cand, w0, w1, extra), max_rows=max_rows)
-                    scheme = cand
-                    _ORDERS_SCHEME = cand
-                    all_rows.extend(rows)
-                    break
-                except QuadMindsError as exc:
-                    last_err = exc
-                    if exc.status_code != 400:
-                        raise
+    try:
+        for (w0, w1) in windows:
             if scheme is None:
-                raise last_err or QuadMindsError("No se pudieron listar las órdenes.")
-        else:
-            all_rows.extend(await client.get_all(path, params=_scheme_params(scheme, w0, w1, extra), max_rows=max_rows))
-        if len(all_rows) >= max_rows:
-            break
-
-    fk, tk, fmt = scheme  # type: ignore
-    return all_rows[:max_rows], {"from_param": fk, "to_param": tk, "formato": fmt, "ventanas": len(windows)}
+                last_err: Optional[QuadMindsError] = None
+                for cand in candidatos:
+                    try:
+                        rows = await client.get_all(path, params=_scheme_params(cand, w0, w1, extra), max_rows=max_rows)
+                        scheme = cand
+                        _ORDERS_SCHEME = cand
+                        all_rows.extend(rows)
+                        break
+                    except QuadMindsError as exc:
+                        last_err = exc
+                        if exc.status_code != 400:
+                            raise
+                if scheme is None:
+                    raise last_err or QuadMindsError("bad request", 400)
+            else:
+                all_rows.extend(await client.get_all(path, params=_scheme_params(scheme, w0, w1, extra), max_rows=max_rows))
+            if len(all_rows) >= max_rows:
+                break
+        fk, tk, fmt = scheme  # type: ignore
+        return all_rows[:max_rows], {"modo": "filtro_servidor", "from_param": fk, "to_param": tk,
+                                     "formato": fmt, "ventanas": len(windows)}
+    except QuadMindsError as exc:
+        if exc.status_code != 400:
+            raise
+        # Fallback: sin filtro de fechas → traer y filtrar del lado nuestro.
+        rows = await client.get_all(path, params=dict(extra or {}), max_rows=max_rows)
+        filtradas = [o for o in rows
+                     if (_date_str(o) is None) or (desde <= (_date_str(o) or "") <= hasta)]
+        return filtradas, {"modo": "filtro_local", "ventanas": len(windows),
+                           "traidas": len(rows), "en_rango": len(filtradas)}
 
 
 async def fetch_order_status_map() -> dict:
