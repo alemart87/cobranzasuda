@@ -10,7 +10,7 @@ from typing import Any, Optional
 
 from ...services.logistica.quadminds_client import (
     ALLOWED_RESOURCES, QuadMindsError, QuadMindsNotConfigured, _extract_list, _is_allowed,
-    get_client, orders_params,
+    fetch_orders, get_client,
 )
 from ...services.logistica.stats import resumen_ordenes, _date_str
 
@@ -48,11 +48,10 @@ async def logi_entregas_impl(desde: Optional[str] = None, hasta: Optional[str] =
         hasta = date.today().isoformat()
     if not desde:
         desde = (date.today() - timedelta(days=30)).isoformat()
-    params = orders_params(desde, hasta, dict(filtros or {}))
     try:
-        orders = await get_client().get_all("orders", params=params, max_rows=20000)
+        orders, esquema = await fetch_orders(desde, hasta, dict(filtros or {}), max_rows=20000)
     except QuadMindsNotConfigured as exc:
         return {"sin_configurar": True, "mensaje": str(exc)}
     except QuadMindsError as exc:
         return {"error": str(exc)}
-    return {"desde": desde, "hasta": hasta, **resumen_ordenes(orders)}
+    return {"desde": desde, "hasta": hasta, "esquema_fecha": esquema, **resumen_ordenes(orders)}

@@ -16,6 +16,12 @@ export default function LogisticaDashboard() {
   const [data, setData] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [diag, setDiag] = useState<any>(null);
+  const [diagLoading, setDiagLoading] = useState(false);
+  const runDiag = () => {
+    setDiagLoading(true);
+    apiFetch<any>("/api/v1/logistica/diagnostico").then(setDiag).catch((e) => setDiag({ ok: false, error: e.message })).finally(() => setDiagLoading(false));
+  };
   const hoy = new Date().toISOString().slice(0, 10);
   const hace30 = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
   const [desde, setDesde] = useState(hace30);
@@ -71,6 +77,28 @@ export default function LogisticaDashboard() {
           <div><label className="label">Hasta</label><input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="input max-w-[160px]" /></div>
           <button onClick={cargar} className="btn-ghost">Actualizar</button>
           {ping?.ok && <span className="text-xs text-emerald-700 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Conectado a QuadMinds</span>}
+        </div>
+      )}
+
+      {cfg?.configurado && (
+        <div className="mb-6 no-print">
+          <button onClick={runDiag} disabled={diagLoading} className="btn-ghost text-xs">
+            {diagLoading ? "Diagnosticando…" : "Diagnóstico de conexión (/orders)"}
+          </button>
+          {diag && (
+            <div className="card p-4 mt-2 text-xs">
+              {diag.ok ? (
+                <div className="space-y-1">
+                  <p className="text-emerald-700 font-semibold">✓ Conectado. Órdenes en la ventana: {diag.ordenes_en_ventana}</p>
+                  <p>Esquema de fecha detectado: <code>{JSON.stringify(diag.esquema_fecha)}</code></p>
+                  <p>Estado detectado: <b>{diag.estado_detectado ?? "—"}</b> · Fecha detectada: <b>{diag.fecha_detectada ?? "—"}</b></p>
+                  <p className="text-brand-slate">Campos de la orden: {(diag.campos_disponibles || []).join(", ")}</p>
+                </div>
+              ) : (
+                <p className="text-brand-primary">No se pudo leer /orders: {diag.error || diag.mensaje}</p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

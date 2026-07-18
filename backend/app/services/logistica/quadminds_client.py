@@ -24,6 +24,10 @@ class QuadMindsNotConfigured(RuntimeError):
 class QuadMindsError(RuntimeError):
     """Error devuelto por la API de QuadMinds."""
 
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
 
 # Recursos GET permitidos para el passthrough / agente (whitelist de seguridad).
 ALLOWED_RESOURCES = {
@@ -74,9 +78,9 @@ class QuadMindsClient:
             except httpx.HTTPError as exc:
                 raise QuadMindsError(f"No se pudo conectar con QuadMinds: {exc}") from exc
         if r.status_code == 403:
-            raise QuadMindsError("QuadMinds rechazó la petición (403). Revisá la API key o los permisos.")
+            raise QuadMindsError("QuadMinds rechazó la petición (403). Revisá la API key o los permisos.", 403)
         if r.status_code >= 400:
-            raise QuadMindsError(f"QuadMinds devolvió {r.status_code}: {r.text[:300]}")
+            raise QuadMindsError(f"QuadMinds devolvió {r.status_code}: {r.text[:300]}", r.status_code)
         try:
             return r.json()
         except ValueError:
@@ -136,6 +140,81 @@ def orders_params(desde: Optional[str], hasta: Optional[str], extra: Optional[di
     if settings.quadminds_orders_date_type:
         p.setdefault("dateType", settings.quadminds_orders_date_type)
     return p
+
+
+# Variantes de rango de fechas para /orders (se prueban hasta que una funcione).
+# (from_key, to_key, formato)
+_ORDER_DATE_CANDIDATES = [
+    ("from", "to", "date"),
+    ("dateFrom", "dateTo", "date"),
+    ("startDate", "endDate", "date"),
+    ("fromDate", "toDate", "date"),
+    ("from", "to", "datetime"),
+    ("dateFrom", "dateTo", "datetime"),
+    ("startDate", "endDate", "datetime"),
+    ("from", "to", "epoch_ms"),
+    ("dateFrom", "dateTo", "epoch_ms"),
+]
+
+# Esquema que funcionó (cache en memoria del proceso).
+_ORDERS_SCHEME: Optional[tuple[str, str, str]] = None
+
+
+def _fmt_with(d: str, fmt: str) -> str:
+    if fmt == "datetime":
+        return f"{d}T00:00:00"
+    if fmt == "epoch_ms":
+        from datetime import datetime, timezone
+        try:
+            dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            return str(int(dt.timestamp() * 1000))
+        except ValueError:
+            return d
+    return d
+
+
+async def fetch_orders(desde: str, hasta: str, extra: Optional[dict] = None,
+                       max_rows: int = 20000) -> tuple[list[dict], dict]:
+    """Lista órdenes probando variantes del rango de fechas hasta que una funcione.
+
+    Devuelve (filas, info_esquema). Cachea el esquema ganador. Si el usuario fijó
+    los params por env, esos van primero. Solo reintenta ante 400 (bad request).
+    """
+    global _ORDERS_SCHEME
+    client = QuadMindsClient()
+
+    candidatos: list[tuple[str, str, str]] = []
+    # 1) esquema cacheado
+    if _ORDERS_SCHEME:
+        candidatos.append(_ORDERS_SCHEME)
+    # 2) el configurado por env (si difiere del default)
+    cfgd = (settings.quadminds_orders_from_param, settings.quadminds_orders_to_param,
+            settings.quadminds_orders_date_format)
+    if cfgd not in candidatos:
+        candidatos.append(cfgd)
+    # 3) el resto de variantes
+    for c in _ORDER_DATE_CANDIDATES:
+        if c not in candidatos:
+            candidatos.append(c)
+
+    last_err: Optional[QuadMindsError] = None
+    for (fk, tk, fmt) in candidatos:
+        params = dict(extra or {})
+        params[fk] = _fmt_with(desde, fmt)
+        params[tk] = _fmt_with(hasta, fmt)
+        if settings.quadminds_orders_date_type:
+            params.setdefault("dateType", settings.quadminds_orders_date_type)
+        try:
+            rows = await client.get_all("orders", params=params, max_rows=max_rows)
+            _ORDERS_SCHEME = (fk, tk, fmt)
+            return rows, {"from_param": fk, "to_param": tk, "formato": fmt}
+        except QuadMindsError as exc:
+            last_err = exc
+            if exc.status_code != 400:   # 403/500/… → no seguir probando
+                raise
+    if last_err:
+        raise last_err
+    raise QuadMindsError("No se pudieron listar las órdenes.")
 
 
 def get_client() -> QuadMindsClient:
