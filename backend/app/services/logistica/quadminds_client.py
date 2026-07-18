@@ -29,22 +29,29 @@ class QuadMindsError(RuntimeError):
         self.status_code = status_code
 
 
-# Recursos GET permitidos para el passthrough / agente (whitelist de seguridad).
-ALLOWED_RESOURCES = {
-    "areas", "activitytypes", "notifications", "orderitems", "orders", "orders/status",
-    "orderstatus", "constrainttypes", "ordermeasures", "collections", "organizations",
-    "poitypes", "pois", "pois/types", "products", "routes", "routes/consolidated",
-    "consolidatedroutes", "waypoints", "things", "drivers", "vehicles", "users", "merchants",
+# Segmentos raíz permitidos para el passthrough / agente (whitelist de seguridad).
+# Paths reales de QuadMinds v2 (algunos son .../search): orders, order-status,
+# routes/search, pois/search, products/search, vehicles-routes, etc.
+ALLOWED_HEADS = {
+    "orders", "order-status", "orderitems", "ordermeasures", "constrainttypes",
+    "routes", "consolidated-routes", "consolidatedroutes", "waypoints",
+    "pois", "poitypes", "products", "areas", "activitytypes", "notifications",
+    "collections", "organizations", "things", "drivers", "vehicles", "vehicles-routes",
+    "users", "merchants",
 }
+# Sugerencias de path completo por recurso (para el agente).
+RESOURCE_PATHS = {
+    "orders": "orders", "order-status": "order-status", "routes": "routes/search",
+    "pois": "pois/search", "poitypes": "pois/types", "products": "products/search",
+    "drivers": "drivers", "vehicles": "vehicles", "vehicles-routes": "vehicles-routes",
+    "waypoints": "waypoints", "areas": "areas", "organizations": "organizations",
+}
+ALLOWED_RESOURCES = ALLOWED_HEADS  # alias retro-compat
 
 
 def _is_allowed(path: str) -> bool:
-    p = path.strip("/").lower().split("?")[0]
-    if p in ALLOWED_RESOURCES:
-        return True
-    # permitir "orders/{id}" y subrecursos conocidos
-    head = p.split("/")[0]
-    return head in {r.split("/")[0] for r in ALLOWED_RESOURCES}
+    head = path.strip("/").lower().split("?")[0].split("/")[0]
+    return head in ALLOWED_HEADS
 
 
 def _extract_list(data: Any) -> list[dict]:
@@ -173,48 +180,99 @@ def _fmt_with(d: str, fmt: str) -> str:
     return d
 
 
-async def fetch_orders(desde: str, hasta: str, extra: Optional[dict] = None,
-                       max_rows: int = 20000) -> tuple[list[dict], dict]:
-    """Lista órdenes probando variantes del rango de fechas hasta que una funcione.
+def _date_windows(desde: str, hasta: str, max_days: int = 7) -> list[tuple[str, str]]:
+    """Parte [desde, hasta] en ventanas de a lo sumo `max_days` días (QuadMinds limita
+    /orders y /routes a intervalos de 7 días)."""
+    from datetime import date, timedelta
+    try:
+        d0 = date.fromisoformat(desde[:10])
+        d1 = date.fromisoformat(hasta[:10])
+    except ValueError:
+        return [(desde, hasta)]
+    if d1 < d0:
+        d0, d1 = d1, d0
+    out: list[tuple[str, str]] = []
+    cur = d0
+    while cur <= d1:
+        end = min(cur + timedelta(days=max_days - 1), d1)
+        out.append((cur.isoformat(), end.isoformat()))
+        cur = end + timedelta(days=1)
+    return out
 
-    Devuelve (filas, info_esquema). Cachea el esquema ganador. Si el usuario fijó
-    los params por env, esos van primero. Solo reintenta ante 400 (bad request).
-    """
+
+def _scheme_params(scheme: tuple[str, str, str], w0: str, w1: str, extra: Optional[dict]) -> dict:
+    fk, tk, fmt = scheme
+    p = dict(extra or {})
+    p[fk] = _fmt_with(w0, fmt)
+    p[tk] = _fmt_with(w1, fmt)
+    if settings.quadminds_orders_date_type:
+        p.setdefault("dateType", settings.quadminds_orders_date_type)
+    return p
+
+
+async def fetch_orders(desde: str, hasta: str, extra: Optional[dict] = None,
+                       max_rows: int = 20000, path: str = "orders") -> tuple[list[dict], dict]:
+    """Lista órdenes en el rango [desde, hasta] partiendo en ventanas de 7 días
+    (límite de QuadMinds). Auto-detecta el esquema de fechas (from/to por defecto)
+    probando variantes en la primera ventana y reutilizándolo en el resto.
+    Devuelve (filas, info_esquema)."""
     global _ORDERS_SCHEME
     client = QuadMindsClient()
+    windows = _date_windows(desde, hasta, 7)
 
     candidatos: list[tuple[str, str, str]] = []
-    # 1) esquema cacheado
     if _ORDERS_SCHEME:
         candidatos.append(_ORDERS_SCHEME)
-    # 2) el configurado por env (si difiere del default)
     cfgd = (settings.quadminds_orders_from_param, settings.quadminds_orders_to_param,
             settings.quadminds_orders_date_format)
     if cfgd not in candidatos:
         candidatos.append(cfgd)
-    # 3) el resto de variantes
     for c in _ORDER_DATE_CANDIDATES:
         if c not in candidatos:
             candidatos.append(c)
 
-    last_err: Optional[QuadMindsError] = None
-    for (fk, tk, fmt) in candidatos:
-        params = dict(extra or {})
-        params[fk] = _fmt_with(desde, fmt)
-        params[tk] = _fmt_with(hasta, fmt)
-        if settings.quadminds_orders_date_type:
-            params.setdefault("dateType", settings.quadminds_orders_date_type)
-        try:
-            rows = await client.get_all("orders", params=params, max_rows=max_rows)
-            _ORDERS_SCHEME = (fk, tk, fmt)
-            return rows, {"from_param": fk, "to_param": tk, "formato": fmt}
-        except QuadMindsError as exc:
-            last_err = exc
-            if exc.status_code != 400:   # 403/500/… → no seguir probando
-                raise
-    if last_err:
-        raise last_err
-    raise QuadMindsError("No se pudieron listar las órdenes.")
+    scheme: Optional[tuple[str, str, str]] = None
+    all_rows: list[dict] = []
+    for (w0, w1) in windows:
+        if scheme is None:
+            last_err: Optional[QuadMindsError] = None
+            for cand in candidatos:
+                try:
+                    rows = await client.get_all(path, params=_scheme_params(cand, w0, w1, extra), max_rows=max_rows)
+                    scheme = cand
+                    _ORDERS_SCHEME = cand
+                    all_rows.extend(rows)
+                    break
+                except QuadMindsError as exc:
+                    last_err = exc
+                    if exc.status_code != 400:
+                        raise
+            if scheme is None:
+                raise last_err or QuadMindsError("No se pudieron listar las órdenes.")
+        else:
+            all_rows.extend(await client.get_all(path, params=_scheme_params(scheme, w0, w1, extra), max_rows=max_rows))
+        if len(all_rows) >= max_rows:
+            break
+
+    fk, tk, fmt = scheme  # type: ignore
+    return all_rows[:max_rows], {"from_param": fk, "to_param": tk, "formato": fmt, "ventanas": len(windows)}
+
+
+async def fetch_order_status_map() -> dict:
+    """Catálogo de estados de /order-status → {code|status|_id (str): description}."""
+    try:
+        rows = await QuadMindsClient().get_all("order-status", max_rows=1000)
+    except (QuadMindsError, QuadMindsNotConfigured):
+        return {}
+    m: dict[str, str] = {}
+    for r in rows:
+        desc = (r.get("description") or r.get("name") or "").strip()
+        if not desc:
+            continue
+        for k in ("status", "code", "_id"):
+            if r.get(k) is not None:
+                m[str(r[k])] = desc
+    return m
 
 
 def get_client() -> QuadMindsClient:
