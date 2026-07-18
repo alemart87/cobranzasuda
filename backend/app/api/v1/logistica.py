@@ -12,9 +12,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from ...core.config import settings
 from ...core.logging import logger
 from ...services.logistica.quadminds_client import (
-    QuadMindsError, QuadMindsNotConfigured, _extract_list, _is_allowed, get_client, orders_params,
+    QuadMindsError, QuadMindsNotConfigured, RESOURCE_PATHS, _extract_list, _is_allowed,
+    fetch_order_status_map, fetch_orders, get_client,
 )
-from ...services.logistica.stats import resumen_ordenes, _date_str
+from ...services.logistica.stats import resumen_ordenes, _date_str, _status_str
 from ..deps import CurrentUser, require_logistica_access
 
 
@@ -87,10 +88,40 @@ async def logistica_entregas(
         desde = (date.today() - timedelta(days=30)).isoformat()
     extra = {k: v for k, v in request.query_params.items()
              if k not in ("desde", "hasta", "max_ordenes")}
-    params = orders_params(desde, hasta, extra)
     try:
-        orders = await get_client().get_all("orders", params=params, max_rows=max_ordenes)
+        status_map = await fetch_order_status_map()
+        orders, esquema = await fetch_orders(desde, hasta, extra, max_rows=max_ordenes)
     except QuadMindsError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
 
-    return {"desde": desde, "hasta": hasta, **resumen_ordenes(orders)}
+    return {"desde": desde, "hasta": hasta, "esquema_fecha": esquema,
+            **resumen_ordenes(orders, status_map)}
+
+
+@router.get("/diagnostico")
+async def logistica_diagnostico(
+    user: CurrentUser = Depends(require_logistica_access),
+) -> dict:
+    """Diagnóstico de la integración: prueba /orders con las variantes de rango de fechas,
+    reporta cuál funcionó y devuelve UNA orden de ejemplo (para calibrar los campos de
+    estado/fecha) + los campos detectados."""
+    if not settings.logistica_enabled:
+        return {"configurado": False, "mensaje": "Falta QUADMINDS_API_KEY."}
+    from datetime import date, timedelta
+    hasta = date.today().isoformat()
+    desde = (date.today() - timedelta(days=6)).isoformat()  # ventana ≤7 días
+    try:
+        status_map = await fetch_order_status_map()
+        orders, esquema = await fetch_orders(desde, hasta, {}, max_rows=50)
+    except QuadMindsError as exc:
+        return {"configurado": True, "ok": False, "error": str(exc)}
+    muestra = orders[0] if orders else None
+    return {
+        "configurado": True, "ok": True, "esquema_fecha": esquema,
+        "ordenes_en_ventana": len(orders),
+        "campos_disponibles": sorted(muestra.keys()) if isinstance(muestra, dict) else [],
+        "estado_detectado": _status_str(muestra, status_map) if muestra else None,
+        "fecha_detectada": _date_str(muestra) if muestra else None,
+        "catalogo_estados": status_map,
+        "orden_ejemplo": muestra,
+    }

@@ -39,11 +39,16 @@ def _first(row: dict, keys: list[str]) -> Any:
     return None
 
 
-def _status_str(row: dict) -> str:
+def _status_str(row: dict, status_map: Optional[dict] = None) -> str:
     v = _first(row, _STATUS_KEYS)
     if isinstance(v, dict):
-        v = v.get("name") or v.get("label") or v.get("status") or v.get("code") or v.get("id")
-    return str(v).strip() if v not in (None, "") else "(sin estado)"
+        v = v.get("description") or v.get("name") or v.get("label") or v.get("status") or v.get("code") or v.get("id")
+    if v in (None, ""):
+        return "(sin estado)"
+    # Si el estado viene como código numérico, traducirlo con el catálogo /order-status.
+    if status_map and str(v) in status_map:
+        return status_map[str(v)]
+    return str(v).strip()
 
 
 def _date_str(row: dict) -> Optional[str]:
@@ -74,15 +79,16 @@ def _pct(part: int, whole: int) -> float:
     return round(part / whole * 100, 1) if whole else 0.0
 
 
-def resumen_ordenes(orders: list[dict]) -> dict:
-    """Resumen de entregas: totales, por estado, por categoría, por día."""
+def resumen_ordenes(orders: list[dict], status_map: Optional[dict] = None) -> dict:
+    """Resumen de entregas: totales, por estado, por categoría, por día.
+    `status_map` (de /order-status) traduce códigos numéricos a descripción."""
     total = len(orders)
     por_estado_raw: Counter = Counter()
     por_categoria: Counter = Counter()
     por_dia: dict[str, dict] = defaultdict(lambda: defaultdict(int))
 
     for o in orders:
-        st = _status_str(o)
+        st = _status_str(o, status_map)
         cat = clasificar_estado(st)
         por_estado_raw[st] += 1
         por_categoria[cat] += 1

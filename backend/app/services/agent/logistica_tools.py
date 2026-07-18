@@ -9,16 +9,22 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from ...services.logistica.quadminds_client import (
-    ALLOWED_RESOURCES, QuadMindsError, QuadMindsNotConfigured, _extract_list, _is_allowed,
-    get_client, orders_params,
+    ALLOWED_HEADS, RESOURCE_PATHS, QuadMindsError, QuadMindsNotConfigured, _extract_list, _is_allowed,
+    fetch_order_status_map, fetch_orders, get_client,
 )
 from ...services.logistica.stats import resumen_ordenes, _date_str
 
 
 async def logi_recursos_impl() -> dict[str, Any]:
-    """Recursos GET disponibles en la API de QuadMinds."""
-    return {"recursos": sorted(ALLOWED_RESOURCES),
-            "nota": "Usá logi_get(recurso, params) para consultarlos. Paginan con limit/offset."}
+    """Recursos GET disponibles en la API de QuadMinds (con el path exacto)."""
+    return {
+        "recursos": sorted(ALLOWED_HEADS),
+        "paths_utiles": RESOURCE_PATHS,
+        "nota": ("Usá logi_get(recurso, params). Los listados paginan con limit/offset y responden "
+                 "{meta,data}. OJO: rutas es 'routes/search', pois es 'pois/search', productos "
+                 "'products/search', estados 'order-status'. /orders, /routes/search y /vehicles-routes "
+                 "piden 'from' y 'to' (YYYY-MM-DD) con intervalo máximo de 7 días."),
+    }
 
 
 async def logi_get_impl(recurso: str, params: Optional[dict] = None, limite: int = 50) -> dict[str, Any]:
@@ -48,11 +54,11 @@ async def logi_entregas_impl(desde: Optional[str] = None, hasta: Optional[str] =
         hasta = date.today().isoformat()
     if not desde:
         desde = (date.today() - timedelta(days=30)).isoformat()
-    params = orders_params(desde, hasta, dict(filtros or {}))
     try:
-        orders = await get_client().get_all("orders", params=params, max_rows=20000)
+        status_map = await fetch_order_status_map()
+        orders, esquema = await fetch_orders(desde, hasta, dict(filtros or {}), max_rows=20000)
     except QuadMindsNotConfigured as exc:
         return {"sin_configurar": True, "mensaje": str(exc)}
     except QuadMindsError as exc:
         return {"error": str(exc)}
-    return {"desde": desde, "hasta": hasta, **resumen_ordenes(orders)}
+    return {"desde": desde, "hasta": hasta, "esquema_fecha": esquema, **resumen_ordenes(orders, status_map)}
