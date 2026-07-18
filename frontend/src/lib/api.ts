@@ -12,6 +12,7 @@ export interface CurrentUserInfo {
   granted_modules?: string[] | null; // módulos restringidos habilitados (analistas)
   can_use_agent?: boolean;
   can_view_facturacion?: boolean; // módulo Televentas Claro
+  can_view_logistica?: boolean; // módulo Logística (QuadMinds)
 }
 
 export function setSession(token: string, refreshToken: string, user: CurrentUserInfo) {

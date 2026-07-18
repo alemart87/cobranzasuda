@@ -32,6 +32,15 @@ MODULES: list[dict] = [
         "restricted": True,
     },
     {
+        "slug": "logistica",
+        "name": "Logística",
+        "description": "Entregas, rutas y flota (QuadMinds): datos diarios, estadísticas de entrega y agente IA.",
+        "available": True,
+        "color": "#0EA5E9",
+        # Módulo RESTRINGIDO: solo superadmin + habilitados. Nunca clientes.
+        "restricted": True,
+    },
+    {
         "slug": "ventas",
         "name": "Televentas",
         "description": "Llamadas y producción de ventas: días productivos, ranking de vendedores, tipos de póliza y alertas.",

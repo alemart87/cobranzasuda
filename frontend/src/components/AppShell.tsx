@@ -72,6 +72,10 @@ const NAV_VENTAS_UPLOADS = [
 // chequeando inTeleventas (claro) ANTES que inVentas.
 const VENTAS_PREFIXES = ["/televentas"];
 
+// --- Logística (QuadMinds, módulo restringido) ---
+const NAV_LOGISTICA_INICIO = { href: "/logistica", label: "Inicio" };
+const LOGISTICA_PREFIXES = ["/logistica"];
+
 const ROLE_LABELS: Record<string, string> = {
   superadmin: "Superadmin",
   analyst: "Analista",
@@ -85,6 +89,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<CurrentUserInfo | null>(null);
   const [canUseAgent, setCanUseAgent] = useState(false);
   const [canFacturacion, setCanFacturacion] = useState(false);
+  const [canLogistica, setCanLogistica] = useState(false);
   const [uploadsOpen, setUploadsOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [agentChromeOpen, setAgentChromeOpen] = useState(false);
@@ -97,8 +102,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     setUser(getUser());
     // Refrescar capacidad de agente desde el backend (no viene en el login).
-    apiFetch<{ can_use_agent?: boolean; can_view_facturacion?: boolean }>("/api/v1/auth/me")
-      .then((me) => { setCanUseAgent(!!me.can_use_agent); setCanFacturacion(!!me.can_view_facturacion); })
+    apiFetch<{ can_use_agent?: boolean; can_view_facturacion?: boolean; can_view_logistica?: boolean }>("/api/v1/auth/me")
+      .then((me) => { setCanUseAgent(!!me.can_use_agent); setCanFacturacion(!!me.can_view_facturacion); setCanLogistica(!!me.can_view_logistica); })
       .catch(() => {});
   }, [router]);
 
@@ -108,12 +113,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setMobileOpen(false);
   }, [pathname]);
 
-  // Analista de Facturación: acotado a su módulo. Si intenta entrar a otra ruta
-  // (por URL), lo devolvemos a Televentas Claro.
+  // Analistas de módulo único (Facturación / Logística): acotados a su módulo.
   useEffect(() => {
-    if (user?.role !== "facturacion" || !pathname) return;
-    const permitido = ["/televentas-claro", "/operativas", "/perfil"].some((p) => pathname.startsWith(p));
-    if (!permitido) router.replace("/televentas-claro");
+    if (!pathname) return;
+    if (user?.role === "facturacion") {
+      const ok = ["/televentas-claro", "/operativas", "/perfil"].some((p) => pathname.startsWith(p));
+      if (!ok) router.replace("/televentas-claro");
+    } else if (user?.role === "logistica") {
+      const ok = ["/logistica", "/operativas", "/perfil"].some((p) => pathname.startsWith(p));
+      if (!ok) router.replace("/logistica");
+    }
   }, [user, pathname, router]);
 
   const onLogout = () => {
@@ -127,15 +136,17 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const inTeleventas = TELEVENTAS_PREFIXES.some((p) => pathname?.startsWith(p));
   // Ventas: "/televentas" pero NO "/televentas-claro" (facturación tiene prioridad).
   const inVentas = !inTeleventas && VENTAS_PREFIXES.some((p) => pathname?.startsWith(p));
-  const inAtencion = !inTeleventas && !inVentas && ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
-  const inCobranzas = !inAtencion && !inTeleventas && !inVentas && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inLogistica = LOGISTICA_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inAtencion = !inTeleventas && !inVentas && !inLogistica && ATENCION_PREFIXES.some((p) => pathname?.startsWith(p));
+  const inCobranzas = !inAtencion && !inTeleventas && !inVentas && !inLogistica && COBRANZAS_PREFIXES.some((p) => pathname?.startsWith(p));
   const canManage = user.role === "superadmin" || user.role === "analyst";
   // El analista de Facturación gestiona SOLO ese módulo (no es analyst global).
   const canManageFacturacion = canManage || user.role === "facturacion";
   // En los Agentes (Experiencia / Facturación) colapsamos el chrome → workspace amplio.
   const inFacturacionAgent = pathname?.startsWith("/televentas-claro/agente") ?? false;
   const inVentasAgent = pathname?.startsWith("/televentas/agente") ?? false;
-  const isAgent = (pathname?.startsWith("/atencion/agente") || inFacturacionAgent || inVentasAgent) ?? false;
+  const inLogisticaAgent = pathname?.startsWith("/logistica/agente") ?? false;
+  const isAgent = (pathname?.startsWith("/atencion/agente") || inFacturacionAgent || inVentasAgent || inLogisticaAgent) ?? false;
   const showChrome = !isAgent || agentChromeOpen;
 
   const isActive = (href: string) =>
@@ -239,6 +250,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   {canManageFacturacion && (
                     <Link href="/televentas-claro/upload" className={mobilePill(isActive("/televentas-claro/upload"))}>Subir liquidación</Link>
                   )}
+                </>
+              ) : inLogistica ? (
+                <>
+                  <div className={mobileGroupLabel}>Logística</div>
+                  <Link href={NAV_LOGISTICA_INICIO.href} className={mobilePill(pathname === NAV_LOGISTICA_INICIO.href)}>{NAV_LOGISTICA_INICIO.label}</Link>
+                  <Link href="/logistica/agente" className={mobilePill(inLogisticaAgent)}>Agente IA</Link>
                 </>
               ) : inVentas ? (
                 <>
@@ -625,6 +642,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         )}
+
+        {/* Nav del módulo Logística (desktop) */}
+        {inLogistica && (
+          <div className="bg-brand-ink text-white hidden md:block">
+            <div className="px-4 sm:px-6 py-2 flex items-center gap-1 flex-wrap">
+              <Link href="/operativas" className="text-[10px] uppercase tracking-wider2 font-semibold text-white/55 hover:text-white flex-shrink-0">
+                ← Operativas
+              </Link>
+              {navDivider}
+              <span className="text-[10px] uppercase tracking-wider2 font-bold text-[#38bdf8] flex-shrink-0">
+                Logística
+              </span>
+              {navDivider}
+              <Link href={NAV_LOGISTICA_INICIO.href} className={pill(pathname === NAV_LOGISTICA_INICIO.href)}>
+                {NAV_LOGISTICA_INICIO.label}
+              </Link>
+              <Link href="/logistica/agente" className={`${pill(inLogisticaAgent)} inline-flex items-center gap-1.5 ring-1 ring-[#38bdf8]/40`}>
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+                Agente IA
+              </Link>
+            </div>
+          </div>
+        )}
       </header>
       )}
 
@@ -641,11 +681,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         ) : (
           <div className="sticky top-0 z-30 bg-brand-ink text-white flex items-center justify-between px-3 sm:px-4 py-1.5">
             <div className="flex items-center gap-3 min-w-0">
-              <Link href={inFacturacionAgent ? "/televentas-claro" : inVentasAgent ? "/televentas" : "/atencion"} className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white flex-shrink-0">
-                {inFacturacionAgent ? "← Televentas Claro" : inVentasAgent ? "← Televentas" : "← Atención"}
+              <Link href={inFacturacionAgent ? "/televentas-claro" : inVentasAgent ? "/televentas" : inLogisticaAgent ? "/logistica" : "/atencion"} className="text-[11px] uppercase tracking-wider2 text-white/60 hover:text-white flex-shrink-0">
+                {inFacturacionAgent ? "← Televentas Claro" : inVentasAgent ? "← Televentas" : inLogisticaAgent ? "← Logística" : "← Atención"}
               </Link>
-              <span className={`text-[11px] uppercase tracking-wider2 font-bold truncate ${inFacturacionAgent ? "text-[#a06cc4]" : inVentasAgent ? "text-brand-orange" : "text-brand-cyan"}`}>
-                {inFacturacionAgent ? "Agente de Facturación" : inVentasAgent ? "Agente de Ventas" : "Agente de Experiencia"}
+              <span className={`text-[11px] uppercase tracking-wider2 font-bold truncate ${inFacturacionAgent ? "text-[#a06cc4]" : inVentasAgent ? "text-brand-orange" : inLogisticaAgent ? "text-[#38bdf8]" : "text-brand-cyan"}`}>
+                {inFacturacionAgent ? "Agente de Facturación" : inVentasAgent ? "Agente de Ventas" : inLogisticaAgent ? "Agente de Logística" : "Agente de Experiencia"}
               </span>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">

@@ -32,12 +32,14 @@ const ROLE_LABELS: Record<string, string> = {
   analyst: "Analista (interno Voicenter)",
   client: "Cliente (Sudameris — solo lectura)",
   facturacion: "Analista de Facturación (Televentas Claro)",
+  logistica: "Analista de Logística",
 };
 
 const ROLE_OPTIONS: { value: string; title: string; desc: string }[] = [
   { value: "analyst", title: "Analista", desc: "Carga archivos, publica y elimina reportes." },
   { value: "client", title: "Cliente", desc: "Solo ve reportes publicados." },
   { value: "facturacion", title: "Analista de Facturación", desc: "Acceso completo SOLO al módulo Televentas Claro · Facturación (sube liquidaciones, compara, agente IA). Sin acceso a los demás módulos." },
+  { value: "logistica", title: "Analista de Logística", desc: "Acceso completo SOLO al módulo Logística (QuadMinds): entregas, rutas, flota y agente IA. Sin acceso a los demás módulos." },
 ];
 
 interface FormState {
@@ -155,6 +157,17 @@ export default function AdminUsersPage() {
     const cur = u.granted_modules || [];
     const has = cur.includes("televentas_claro");
     const next = has ? cur.filter((s) => s !== "televentas_claro") : [...cur, "televentas_claro"];
+    await apiFetch(`/api/v1/users/${u.id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ granted_modules: next }),
+    });
+    load();
+  };
+
+  const toggleLogistica = async (u: UserRow) => {
+    const cur = u.granted_modules || [];
+    const has = cur.includes("logistica");
+    const next = has ? cur.filter((s) => s !== "logistica") : [...cur, "logistica"];
     await apiFetch(`/api/v1/users/${u.id}`, {
       method: "PATCH",
       body: JSON.stringify({ granted_modules: next }),
@@ -350,6 +363,7 @@ export default function AdminUsersPage() {
                 onToggle={toggleActive}
                 onToggleAgent={toggleAgent}
                 onToggleFacturacion={toggleFacturacion}
+                onToggleLogistica={toggleLogistica}
                 onResetPwd={() => setResetUserId(u.id)}
                 onUploadPhoto={onUploadPhoto}
                 onEditModules={() => openEditModules(u)}
@@ -456,6 +470,7 @@ function UserListItem({
   onToggle,
   onToggleAgent,
   onToggleFacturacion,
+  onToggleLogistica,
   onResetPwd,
   onUploadPhoto,
   onEditModules,
@@ -465,6 +480,7 @@ function UserListItem({
   onToggle: (u: UserRow) => void;
   onToggleAgent: (u: UserRow) => void;
   onToggleFacturacion: (u: UserRow) => void;
+  onToggleLogistica: (u: UserRow) => void;
   onResetPwd: () => void;
   onUploadPhoto: (u: UserRow, f: File) => void;
   onEditModules: () => void;
@@ -500,6 +516,8 @@ function UserListItem({
             <span className="badge-cyan">Analista</span>
           ) : user.role === "facturacion" ? (
             <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider2 text-white" style={{ background: "#662483" }}>Facturación</span>
+          ) : user.role === "logistica" ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider2 text-white" style={{ background: "#0EA5E9" }}>Logística</span>
           ) : (
             <span className="badge-primary">Cliente</span>
           )}
@@ -546,7 +564,7 @@ function UserListItem({
             Operativas
           </button>
         )}
-        {user.role !== "facturacion" && (
+        {user.role !== "facturacion" && user.role !== "logistica" && (
           <button onClick={() => onToggleAgent(user)} className={`text-xs px-2.5 py-1 rounded border ${user.can_use_agent ? "border-brand-cyan text-brand-cyan" : "border-brand-border hover:border-brand-cyan hover:text-brand-cyan"}`}>
             {user.can_use_agent ? "Agente IA: ON" : "Agente IA: OFF"}
           </button>
@@ -554,6 +572,11 @@ function UserListItem({
         {user.role === "analyst" && (
           <button onClick={() => onToggleFacturacion(user)} className={`text-xs px-2.5 py-1 rounded border ${(user.granted_modules || []).includes("televentas_claro") ? "border-[#662483] text-[#662483]" : "border-brand-border hover:border-[#662483] hover:text-[#662483]"}`}>
             {(user.granted_modules || []).includes("televentas_claro") ? "Facturación: ON" : "Facturación: OFF"}
+          </button>
+        )}
+        {user.role === "analyst" && (
+          <button onClick={() => onToggleLogistica(user)} className={`text-xs px-2.5 py-1 rounded border ${(user.granted_modules || []).includes("logistica") ? "border-[#0EA5E9] text-[#0284c7]" : "border-brand-border hover:border-[#0EA5E9] hover:text-[#0284c7]"}`}>
+            {(user.granted_modules || []).includes("logistica") ? "Logística: ON" : "Logística: OFF"}
           </button>
         )}
         <button onClick={onResetPwd} className="text-xs px-2.5 py-1 rounded border border-brand-border hover:border-brand-cyan hover:text-brand-cyan">
