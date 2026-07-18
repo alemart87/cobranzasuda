@@ -10,7 +10,7 @@ from typing import Any, Optional
 from ...core.config import settings
 from . import core
 from .core import AgentNotConfigured
-from .logistica_tools import logi_entregas_impl, logi_get_impl, logi_recursos_impl
+from .logistica_tools import logi_entregas_impl, logi_gerencial_impl, logi_get_impl, logi_recursos_impl
 from .tools import AgentContext
 
 RunContextWrapper = None  # type: ignore
@@ -26,8 +26,10 @@ Datos y herramientas (todo LECTURA sobre la API real):
 - `logi_get(recurso, params)`: consulta cualquier recurso GET con filtros (paginan con limit/offset). \
 Usalo para responder consultas puntuales llamando a la API (choferes, vehículos, rutas de un día, etc.).
 - `logi_entregas(desde, hasta)`: estadísticas de entrega ya agregadas (total, por estado, por categoría \
-entregado/fallido/en_curso/pendiente, efectividad y serie diaria). Es tu punto de partida para "cómo \
-venimos con las entregas".
+entregado/fallido/en_curso/pendiente, efectividad y serie diaria).
+- `logi_gerencial(desde, hasta)`: VISIÓN DE GESTIÓN — cruza entregas + rutas + flota y devuelve ALERTAS \
+por umbral (efectividad baja, fallidos altos, rutas atrasadas/overdue, desvío de km, choferes con atraso). \
+Es tu mejor punto de partida para "cómo viene la operación" o preguntas gerenciales.
 
 Metodología:
 1. Para el estado de la operación, empezá por `logi_entregas` del período pedido (o los últimos días). \
@@ -63,6 +65,17 @@ def _build_logistica_agent():
         raise AgentNotConfigured("Falta OPENAI_API_KEY en la configuración del servidor.")
     set_default_openai_key(settings.openai_api_key)
 
+    from datetime import date, timedelta
+    hoy = date.today()
+    ayer = (hoy - timedelta(days=1)).isoformat()
+    hace7 = (hoy - timedelta(days=6)).isoformat()
+    contexto_fecha = (
+        f"FECHA ACTUAL: hoy es {hoy.isoformat()} ({hoy.strftime('%A')}). "
+        f"Ayer fue {ayer}. La última semana va de {hace7} a {hoy.isoformat()}. "
+        "Cuando el usuario diga 'hoy', 'del día', 'ayer', 'esta semana', usá estas fechas "
+        "concretas al llamar las tools (recordá que /orders y /routes limitan a 7 días por consulta).\n\n"
+    )
+
     @function_tool
     async def logi_recursos(ctx: RunContextWrapper[AgentContext]) -> dict:
         """Lista los recursos GET disponibles de la API de QuadMinds."""
@@ -84,6 +97,14 @@ def _build_logistica_agent():
         return await logi_entregas_impl(desde, hasta, filtros)
 
     @function_tool(strict_mode=False)
+    async def logi_gerencial(ctx: RunContextWrapper[AgentContext], desde: Optional[str] = None,
+                             hasta: Optional[str] = None) -> dict:
+        """Panel GERENCIAL: cruza entregas + rutas + flota y devuelve ALERTAS por umbral
+        (efectividad baja, fallidos altos, rutas atrasadas, desvío de km, choferes con atraso).
+        Es tu mejor punto de partida para una visión de gestión. `desde`/`hasta` YYYY-MM-DD."""
+        return await logi_gerencial_impl(desde, hasta)
+
+    @function_tool(strict_mode=False)
     async def emit_canvas(ctx: RunContextWrapper[AgentContext], tipo: str, titulo: str, datos: dict,
                           descripcion: Optional[str] = None) -> dict:
         """Dibuja un artefacto en el canvas. `tipo`: 'bar' | 'stacked-bar' | 'line' | 'area' | 'donut' |
@@ -93,7 +114,7 @@ def _build_logistica_agent():
         ctx.context.canvas.append(artifact)
         return {"ok": True, "artifact_id": artifact["id"]}
 
-    tools = [logi_recursos, logi_get, logi_entregas, emit_canvas]
+    tools = [logi_recursos, logi_get, logi_entregas, logi_gerencial, emit_canvas]
 
     model_settings = None
     try:
@@ -109,7 +130,7 @@ def _build_logistica_agent():
     except Exception:
         model_settings = None
 
-    kwargs: dict[str, Any] = dict(name="Agente de Logística", instructions=_INSTRUCCIONES,
+    kwargs: dict[str, Any] = dict(name="Agente de Logística", instructions=contexto_fecha + _INSTRUCCIONES,
                                   model=settings.agent_model, tools=tools)
     if model_settings is not None:
         kwargs["model_settings"] = model_settings
