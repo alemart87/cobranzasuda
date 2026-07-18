@@ -92,6 +92,7 @@ class Settings(BaseSettings):
     quadminds_timeout_s: float = 30.0
     # /orders exige un rango de fechas obligatorio. Nombres/formato configurables
     # por si difieren en tu cuenta (se ajustan por env sin tocar código).
+    quadminds_orders_path: str = "orders/search"  # endpoint de listado de órdenes
     quadminds_orders_from_param: str = "from"
     quadminds_orders_to_param: str = "to"
     quadminds_orders_date_type: str = ""          # opcional: si tu API pide 'dateType'
