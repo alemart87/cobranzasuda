@@ -85,6 +85,16 @@ class Settings(BaseSettings):
     def agent_enabled(self) -> bool:
         return bool(self.openai_api_key)
 
+    # --- Logística: integración con QuadMinds API v2 ---
+    quadminds_api_key: str = ""
+    quadminds_base_url: str = "https://saas.quadminds.com/api/v2"
+    quadminds_auth_header: str = "x-saas-apikey"   # header de auth de QuadMinds v2
+    quadminds_timeout_s: float = 30.0
+
+    @property
+    def logistica_enabled(self) -> bool:
+        return bool(self.quadminds_api_key)
+
     @property
     def cors_origins_list(self) -> List[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

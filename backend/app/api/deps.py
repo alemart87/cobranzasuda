@@ -54,6 +54,11 @@ class CurrentUser:
         return self.role == "facturacion"
 
     @property
+    def is_logistica(self) -> bool:
+        """Analista de Logística: acceso SOLO al módulo de Logística."""
+        return self.role == "logistica"
+
+    @property
     def can_upload(self) -> bool:
         return self.role in ("superadmin", "analyst")
 
@@ -76,6 +81,8 @@ class CurrentUser:
             return True
         if self.is_facturacion:
             return slug == "televentas_claro"
+        if self.is_logistica:
+            return slug == "logistica"
         if self.is_analyst:
             return slug in (self.granted_modules or [])
         return False
@@ -161,6 +168,26 @@ async def require_facturacion_manage(user: CurrentUser = Depends(get_current_use
     if not user.has_restricted_module(_FACTURACION_SLUG):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso al módulo de Facturación")
     if user.role not in ("superadmin", "analyst", "facturacion"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Requiere rol analista o superadmin")
+    return user
+
+
+# --- Logística (QuadMinds): módulo restringido ---
+_LOGISTICA_SLUG = "logistica"
+
+
+async def require_logistica_access(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Lectura del módulo Logística: superadmin o habilitado. Clientes NUNCA."""
+    if not user.has_restricted_module(_LOGISTICA_SLUG):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso al módulo de Logística")
+    return user
+
+
+async def require_logistica_manage(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Gestión en Logística: superadmin, analista habilitado o analista de logística."""
+    if not user.has_restricted_module(_LOGISTICA_SLUG):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "No tenés acceso al módulo de Logística")
+    if user.role not in ("superadmin", "analyst", "logistica"):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Requiere rol analista o superadmin")
     return user
 

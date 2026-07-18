@@ -54,6 +54,10 @@ async def create_user(
     if payload.role == "facturacion":
         granted = ["televentas_claro"]
         allowed = []  # sin acceso a los módulos no restringidos
+    # Analista de Logística: acceso fijo y exclusivo al módulo Logística.
+    if payload.role == "logistica":
+        granted = ["logistica"]
+        allowed = []
 
     new_user = User(
         email=email,
