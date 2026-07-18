@@ -12,10 +12,10 @@ export default function AgenteLogisticaPage() {
       placeholder="Preguntá sobre entregas, rutas, choferes o vehículos…"
       deniedMessage="No tenés acceso al Agente de Logística. Pedile al administrador que te habilite el módulo Logística."
       suggestions={[
-        "¿Cómo viene la efectividad de entrega de los últimos días?",
-        "Entregas por día: entregadas vs fallidas, con un gráfico",
-        "¿Qué choferes y vehículos hay activos?",
-        "Mostrame las rutas de hoy y sus paradas",
+        "Dame el panel gerencial de hoy con las alertas",
+        "¿Cómo viene la efectividad de entrega esta semana?",
+        "¿Qué choferes tienen rutas atrasadas hoy?",
+        "Entregas de hoy: entregadas vs fallidas, con un gráfico",
       ]}
     />
   );

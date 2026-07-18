@@ -87,7 +87,9 @@ class Settings(BaseSettings):
 
     # --- Logística: integración con QuadMinds API v2 ---
     quadminds_api_key: str = ""
-    quadminds_base_url: str = "https://saas.quadminds.com/api/v2"
+    quadminds_base_url: str = "https://saas.quadminds.com/api/v2"   # orders, pois, order-status, vehicles
+    quadminds_flash_url: str = "https://flash-api.quadminds.com/api/v2"  # routes, waypoints, drivers
+    quadminds_stork_url: str = "https://tdc.quadminds.com/apis/stork-api"  # drivers/events, locations
     quadminds_auth_header: str = "x-saas-apikey"   # header de auth de QuadMinds v2
     quadminds_timeout_s: float = 30.0
     # /orders exige un rango de fechas obligatorio. Nombres/formato configurables
@@ -97,6 +99,19 @@ class Settings(BaseSettings):
     quadminds_orders_to_param: str = "to"
     quadminds_orders_date_type: str = ""          # opcional: si tu API pide 'dateType'
     quadminds_orders_date_format: str = "date"    # "date" (YYYY-MM-DD) | "datetime" | "epoch_ms"
+
+    # Umbrales de alertas gerenciales (ajustables por env).
+    logistica_efectividad_min: float = 90.0     # % entregado/cerradas mínimo
+    logistica_fallidos_max_pct: float = 10.0    # % fallidos máximo
+    logistica_km_desvio_max_pct: float = 20.0   # desvío km ejecutado vs estimado
+
+    @property
+    def logistica_alert_cfg(self) -> dict:
+        return {
+            "efectividad_min": self.logistica_efectividad_min,
+            "fallidos_max_pct": self.logistica_fallidos_max_pct,
+            "km_desvio_max_pct": self.logistica_km_desvio_max_pct,
+        }
 
     @property
     def logistica_enabled(self) -> bool:

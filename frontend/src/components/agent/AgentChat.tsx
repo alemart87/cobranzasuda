@@ -258,7 +258,7 @@ export function AgentChat(props: AgentChatProps) {
         {canvasOpen && (
           <>
             <div onMouseDown={onDragCanvas} className="hidden md:block w-1.5 cursor-col-resize bg-brand-border/40 hover:bg-brand-cyan/40" />
-            <aside className="flex-shrink-0 flex flex-col bg-brand-bg-soft overflow-hidden w-full md:w-auto" style={{ width: typeof window !== "undefined" && window.innerWidth < 768 ? undefined : canvasW }}>
+            <aside className="fixed inset-0 z-40 md:static md:z-auto flex-shrink-0 flex flex-col bg-brand-bg-soft overflow-hidden w-full md:w-auto" style={{ width: typeof window !== "undefined" && window.innerWidth < 768 ? undefined : canvasW }}>
               <div className="flex items-center justify-between px-4 py-2.5 border-b border-brand-border bg-white">
                 <span className="text-[11px] uppercase tracking-wider2 font-bold text-brand-slate">Canvas</span>
                 <div className="flex items-center gap-2">

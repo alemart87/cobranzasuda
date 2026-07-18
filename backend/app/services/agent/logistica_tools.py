@@ -8,11 +8,12 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from ...core.config import settings
 from ...services.logistica.quadminds_client import (
     ALLOWED_HEADS, RESOURCE_PATHS, QuadMindsError, QuadMindsNotConfigured, _extract_list, _is_allowed,
-    fetch_order_status_map, fetch_orders, get_client,
+    fetch_order_status_map, fetch_orders, fetch_routes, get_client,
 )
-from ...services.logistica.stats import resumen_ordenes, _date_str
+from ...services.logistica.stats import resumen_ordenes, resumen_rutas, generar_alertas, _date_str
 
 
 async def logi_recursos_impl() -> dict[str, Any]:
@@ -64,3 +65,25 @@ async def logi_entregas_impl(desde: Optional[str] = None, hasta: Optional[str] =
     except QuadMindsError as exc:
         return {"error": str(exc)}
     return {"desde": desde, "hasta": hasta, "esquema_fecha": esquema, **resumen_ordenes(orders, status_map)}
+
+
+async def logi_gerencial_impl(desde: Optional[str] = None, hasta: Optional[str] = None) -> dict[str, Any]:
+    """Panel gerencial: entregas + rutas + ALERTAS por umbral (efectividad, fallidos,
+    rutas atrasadas, desvío de km, choferes). Cruza órdenes y rutas. `desde`/`hasta` YYYY-MM-DD."""
+    from datetime import date, timedelta
+    if not hasta:
+        hasta = date.today().isoformat()
+    if not desde:
+        desde = (date.today() - timedelta(days=30)).isoformat()
+    try:
+        status_map = await fetch_order_status_map()
+        orders, _ = await fetch_orders(desde, hasta, {}, max_rows=20000)
+        routes = await fetch_routes(desde, hasta)
+    except QuadMindsNotConfigured as exc:
+        return {"sin_configurar": True, "mensaje": str(exc)}
+    except QuadMindsError as exc:
+        return {"error": str(exc)}
+    ord_res = resumen_ordenes(orders, status_map)
+    rutas_res = resumen_rutas(routes)
+    return {"desde": desde, "hasta": hasta, "entregas": ord_res, "rutas": rutas_res,
+            "alertas": generar_alertas(ord_res, rutas_res, settings.logistica_alert_cfg)}

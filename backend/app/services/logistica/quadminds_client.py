@@ -37,7 +37,7 @@ ALLOWED_HEADS = {
     "routes", "consolidated-routes", "consolidatedroutes", "waypoints",
     "pois", "poitypes", "products", "areas", "activitytypes", "notifications",
     "collections", "organizations", "things", "drivers", "vehicles", "vehicles-routes",
-    "users", "merchants",
+    "users", "merchants", "locations",
 }
 # Sugerencias de path completo por recurso (para el agente).
 RESOURCE_PATHS = {
@@ -45,6 +45,7 @@ RESOURCE_PATHS = {
     "pois": "pois/search", "poitypes": "pois/types", "products": "products/search",
     "drivers": "drivers", "vehicles": "vehicles", "vehicles-routes": "vehicles-routes",
     "waypoints": "waypoints", "areas": "areas", "organizations": "organizations",
+    "locations": "locations", "driver-events": "drivers/events",
 }
 ALLOWED_RESOURCES = ALLOWED_HEADS  # alias retro-compat
 
@@ -77,8 +78,19 @@ class QuadMindsClient:
         }
         self.timeout = settings.quadminds_timeout_s
 
+    def _base_for(self, path: str) -> str:
+        """Enruta cada recurso a su host: routes/waypoints/drivers → flash-api;
+        events/locations → stork (tdc); el resto → saas."""
+        p = path.strip("/").lower()
+        head = p.split("/")[0]
+        if head == "locations" or "events" in p:
+            return settings.quadminds_stork_url.rstrip("/")
+        if head in ("routes", "waypoints", "drivers"):
+            return settings.quadminds_flash_url.rstrip("/")
+        return self.base
+
     async def get(self, path: str, params: Optional[dict] = None) -> Any:
-        url = f"{self.base}/{path.strip('/')}"
+        url = f"{self._base_for(path)}/{path.strip('/')}"
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 r = await client.get(url, headers=self.headers, params=params or {})
@@ -271,6 +283,25 @@ async def fetch_orders(desde: str, hasta: str, extra: Optional[dict] = None,
                      if (_date_str(o) is None) or (desde <= (_date_str(o) or "") <= hasta)]
         return filtradas, {"modo": "filtro_local", "ventanas": len(windows),
                            "traidas": len(rows), "en_rango": len(filtradas)}
+
+
+async def fetch_routes(desde: str, hasta: str, max_rows: int = 20000) -> list[dict]:
+    """Rutas de /routes/search en ventanas de ≤7 días (from/to). Cae a sin-filtro si no se acepta."""
+    client = QuadMindsClient()
+    out: list[dict] = []
+    for (w0, w1) in _date_windows(desde, hasta, 7):
+        try:
+            out.extend(await client.get_all("routes/search", params={"from": w0, "to": w1}, max_rows=max_rows))
+        except QuadMindsError:
+            if not out:
+                try:
+                    out.extend(await client.get_all("routes/search", max_rows=max_rows))
+                except QuadMindsError:
+                    pass
+            break
+        if len(out) >= max_rows:
+            break
+    return out[:max_rows]
 
 
 async def fetch_order_status_map() -> dict:

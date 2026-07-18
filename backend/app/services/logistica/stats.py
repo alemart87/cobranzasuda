@@ -79,6 +79,128 @@ def _pct(part: int, whole: int) -> float:
     return round(part / whole * 100, 1) if whole else 0.0
 
 
+# ---- Rutas ----
+_RUTA_OK = ("finished", "closed")
+_RUTA_MAL = ("overdue",)
+_RUTA_CURSO = ("ongoing", "extended")
+_RUTA_PEND = ("pending",)
+
+
+def _num(v: Any) -> float:
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def resumen_rutas(routes: list[dict]) -> dict:
+    """Resumen de rutas: por estado, km estimado/ejecutado, por chofer."""
+    total = len(routes)
+    por_estado: Counter = Counter()
+    km_est = km_eje = 0.0
+    por_driver: dict[str, dict] = defaultdict(lambda: {"rutas": 0, "overdue": 0, "finished": 0,
+                                                       "km_est": 0.0, "km_eje": 0.0})
+    for r in routes:
+        st = str(r.get("status") or "").lower().strip() or "(sin estado)"
+        por_estado[st] += 1
+        pred = r.get("routePrediction") or {}
+        e = _num(pred.get("estimatedKms")); x = _num(pred.get("executedKms"))
+        km_est += e; km_eje += x
+        drv = r.get("driverId")
+        if drv is not None:
+            d = por_driver[str(drv)]
+            d["rutas"] += 1
+            d["km_est"] += e; d["km_eje"] += x
+            if st in _RUTA_MAL:
+                d["overdue"] += 1
+            if st in _RUTA_OK:
+                d["finished"] += 1
+    return {
+        "total_rutas": total,
+        "por_estado": [{"estado": e, "cantidad": c, "pct": _pct(c, total)} for e, c in por_estado.most_common()],
+        "overdue": sum(por_estado.get(s, 0) for s in _RUTA_MAL),
+        "pending": sum(por_estado.get(s, 0) for s in _RUTA_PEND),
+        "finished": sum(por_estado.get(s, 0) for s in _RUTA_OK),
+        "km_estimado": round(km_est), "km_ejecutado": round(km_eje),
+        "km_desvio_pct": round((km_eje - km_est) / km_est * 100, 1) if km_est else 0.0,
+        "por_driver": [{"driver": k, **v, "km_eje": round(v["km_eje"]), "km_est": round(v["km_est"])}
+                       for k, v in sorted(por_driver.items(), key=lambda kv: -kv[1]["rutas"])],
+    }
+
+
+def generar_alertas(ord_res: dict, rutas_res: dict, cfg: dict) -> list[dict]:
+    """Alertas gerenciales por umbrales (config)."""
+    al: list[dict] = []
+    r = ord_res.get("resumen", {})
+    efect = r.get("efectividad_sobre_cerradas", 0)
+    if r.get("entregado", 0) + r.get("fallido", 0) > 0 and efect < cfg["efectividad_min"]:
+        al.append({"tipo": "efectividad", "severidad": "alert",
+                   "titulo": f"Efectividad de entrega baja ({efect}%)",
+                   "detalle": f"Por debajo del objetivo de {cfg['efectividad_min']}%. "
+                              f"{r.get('fallido',0)} fallidas de {r.get('entregado',0)+r.get('fallido',0)} cerradas."})
+    if ord_res.get("total_ordenes", 0) and r.get("pct_fallido", 0) > cfg["fallidos_max_pct"]:
+        al.append({"tipo": "fallidos", "severidad": "warning",
+                   "titulo": f"Fallidos por encima del umbral ({r.get('pct_fallido')}%)",
+                   "detalle": f"Umbral {cfg['fallidos_max_pct']}%. Revisar zonas/choferes con más no-entregas."})
+    if rutas_res.get("overdue", 0) > 0:
+        al.append({"tipo": "rutas", "severidad": "warning",
+                   "titulo": f"{rutas_res['overdue']} ruta(s) atrasada(s) (overdue)",
+                   "detalle": "Rutas que superaron su ventana. Revisar planificación/carga."})
+    if abs(rutas_res.get("km_desvio_pct", 0)) > cfg["km_desvio_max_pct"] and rutas_res.get("km_estimado", 0):
+        al.append({"tipo": "km", "severidad": "info",
+                   "titulo": f"Desvío de km {rutas_res['km_desvio_pct']}% (ejecutado vs estimado)",
+                   "detalle": f"Umbral ±{cfg['km_desvio_max_pct']}%. Posible optimización de rutas o desvíos."})
+    # choferes con rutas atrasadas
+    malos = [d for d in rutas_res.get("por_driver", []) if d.get("overdue", 0) > 0]
+    if malos:
+        det = ", ".join(f"{d['driver']} ({d['overdue']})" for d in malos[:8])
+        al.append({"tipo": "drivers", "severidad": "warning",
+                   "titulo": f"{len(malos)} chofer(es) con rutas atrasadas",
+                   "detalle": f"Choferes (rutas overdue): {det}."})
+    return al
+
+
+def _coord(o: dict) -> Optional[tuple[float, float]]:
+    """Extrae (lat, lng) de una orden/waypoint tolerando distintas estructuras."""
+    for latk, lngk in (("latitude", "longitude"), ("lat", "lng"), ("lat", "lon")):
+        if o.get(latk) not in (None, "") and o.get(lngk) not in (None, ""):
+            try:
+                return float(o[latk]), float(o[lngk])
+            except (TypeError, ValueError):
+                pass
+    loc = o.get("location") or o.get("geo") or o.get("coordinates")
+    if isinstance(loc, dict):
+        c = loc.get("coordinates")
+        if isinstance(c, (list, tuple)) and len(c) == 2:  # GeoJSON [lng, lat]
+            try:
+                return float(c[1]), float(c[0])
+            except (TypeError, ValueError):
+                pass
+    if isinstance(loc, (list, tuple)) and len(loc) == 2:
+        try:
+            return float(loc[1]), float(loc[0])
+        except (TypeError, ValueError):
+            pass
+    return None
+
+
+def puntos_entrega(orders: list[dict], status_map: Optional[dict] = None,
+                   pois_coords: Optional[dict] = None) -> list[dict]:
+    """Puntos (lat/lng + categoría) para el mapa de calor. Usa coords de la orden;
+    si no tiene, intenta enriquecer por código de PoI (`pois_coords`)."""
+    pts = []
+    for o in orders:
+        c = _coord(o)
+        if c is None and pois_coords:
+            code = o.get("poiCode") or o.get("code") or o.get("poi") or o.get("clientCode")
+            if code is not None and str(code) in pois_coords:
+                c = pois_coords[str(code)]
+        if c is None:
+            continue
+        pts.append({"lat": c[0], "lng": c[1], "categoria": clasificar_estado(_status_str(o, status_map))})
+    return pts
+
+
 def resumen_ordenes(orders: list[dict], status_map: Optional[dict] = None) -> dict:
     """Resumen de entregas: totales, por estado, por categoría, por día.
     `status_map` (de /order-status) traduce códigos numéricos a descripción."""

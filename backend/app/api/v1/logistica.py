@@ -13,9 +13,29 @@ from ...core.config import settings
 from ...core.logging import logger
 from ...services.logistica.quadminds_client import (
     QuadMindsError, QuadMindsNotConfigured, RESOURCE_PATHS, _extract_list, _is_allowed,
-    fetch_order_status_map, fetch_orders, get_client,
+    fetch_order_status_map, fetch_orders, fetch_routes, get_client,
 )
-from ...services.logistica.stats import resumen_ordenes, _date_str, _status_str
+from ...services.logistica.stats import (
+    resumen_ordenes, resumen_rutas, generar_alertas, puntos_entrega, _date_str, _status_str,
+)
+
+
+async def _pois_coords() -> dict:
+    """Mapa {code: (lat,lng)} desde /pois/search (para enriquecer el heatmap)."""
+    try:
+        rows = await get_client().get_all("pois/search", max_rows=20000)
+    except (QuadMindsError, QuadMindsNotConfigured):
+        return {}
+    out: dict = {}
+    for p in rows:
+        code = p.get("code")
+        lat, lng = p.get("latitude"), p.get("longitude")
+        if code is not None and lat not in (None, "") and lng not in (None, ""):
+            try:
+                out[str(code)] = (float(lat), float(lng))
+            except (TypeError, ValueError):
+                pass
+    return out
 from ..deps import CurrentUser, require_logistica_access
 
 
@@ -96,6 +116,64 @@ async def logistica_entregas(
 
     return {"desde": desde, "hasta": hasta, "esquema_fecha": esquema,
             **resumen_ordenes(orders, status_map)}
+
+
+@router.get("/gerencial")
+async def logistica_gerencial(
+    request: Request,
+    desde: Optional[str] = None, hasta: Optional[str] = None,
+    max_ordenes: int = Query(20000, ge=1, le=20000),
+    user: CurrentUser = Depends(require_logistica_access),
+) -> dict:
+    """Panel gerencial: entregas + rutas + flota, con ALERTAS por umbral (efectividad,
+    fallidos, rutas atrasadas, desvío de km, choferes). Cruza órdenes y rutas."""
+    if not settings.logistica_enabled:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Logística no configurada (falta API key).")
+    from datetime import date, timedelta
+    if not hasta:
+        hasta = date.today().isoformat()
+    if not desde:
+        desde = (date.today() - timedelta(days=30)).isoformat()
+    extra = {k: v for k, v in request.query_params.items() if k not in ("desde", "hasta", "max_ordenes")}
+    try:
+        status_map = await fetch_order_status_map()
+        orders, esquema = await fetch_orders(desde, hasta, extra, max_rows=max_ordenes)
+        routes = await fetch_routes(desde, hasta)
+    except QuadMindsError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+    ord_res = resumen_ordenes(orders, status_map)
+    rutas_res = resumen_rutas(routes)
+    alertas = generar_alertas(ord_res, rutas_res, settings.logistica_alert_cfg)
+    return {"desde": desde, "hasta": hasta, "esquema_fecha": esquema,
+            "entregas": ord_res, "rutas": rutas_res, "alertas": alertas,
+            "umbrales": settings.logistica_alert_cfg}
+
+
+@router.get("/mapa")
+async def logistica_mapa(
+    request: Request,
+    desde: Optional[str] = None, hasta: Optional[str] = None,
+    max_puntos: int = Query(5000, ge=1, le=20000),
+    user: CurrentUser = Depends(require_logistica_access),
+) -> dict:
+    """Puntos de entrega (lat/lng + categoría) para el mapa de calor."""
+    if not settings.logistica_enabled:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Logística no configurada (falta API key).")
+    from datetime import date, timedelta
+    if not hasta:
+        hasta = date.today().isoformat()
+    if not desde:
+        desde = (date.today() - timedelta(days=7)).isoformat()
+    extra = {k: v for k, v in request.query_params.items() if k not in ("desde", "hasta", "max_puntos")}
+    try:
+        status_map = await fetch_order_status_map()
+        orders, _ = await fetch_orders(desde, hasta, extra, max_rows=max_puntos)
+    except QuadMindsError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+    puntos = puntos_entrega(orders, status_map)
+    if not puntos:  # las órdenes no traían coords → enriquecer por PoI
+        puntos = puntos_entrega(orders, status_map, await _pois_coords())
+    return {"desde": desde, "hasta": hasta, "cantidad": len(puntos), "puntos": puntos[:max_puntos]}
 
 
 @router.get("/diagnostico")
