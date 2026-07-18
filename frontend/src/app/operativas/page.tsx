@@ -51,6 +51,17 @@ const MODULES: ModuleCard[] = [
     badges: ["Detalle por concepto", "Comparativos", "Drivers operativos"],
   },
   {
+    slug: "logistica",
+    href: "/logistica",
+    title: "Logística",
+    description:
+      "Entregas, rutas y flota sobre QuadMinds: datos diarios, estadísticas de entrega (efectividad, fallidos, on-time) y agente IA que consulta la API.",
+    color: "#0EA5E9",
+    bgGradient: "linear-gradient(135deg, #0369A1 0%, #0EA5E9 100%)",
+    available: true,
+    badges: ["Entregas", "Rutas y flota", "Agente IA"],
+  },
+  {
     slug: "ventas",
     href: "/televentas",
     title: "Televentas",
@@ -64,13 +75,14 @@ const MODULES: ModuleCard[] = [
 ];
 
 // Slugs de módulos restringidos: solo se muestran si el backend lo habilita.
-const RESTRICTED = new Set(["televentas_claro"]);
+const RESTRICTED = new Set(["televentas_claro", "logistica"]);
 
 export default function OperativasPage() {
   const [userName, setUserName] = useState<string>("");
   const [allowed, setAllowed] = useState<string[] | null>(null);
   const [role, setRole] = useState<string>("");
   const [canFacturacion, setCanFacturacion] = useState<boolean>(false);
+  const [canLogistica, setCanLogistica] = useState<boolean>(false);
 
   useEffect(() => {
     // 1) Pintar rápido con los datos del localStorage para evitar flash.
@@ -79,9 +91,10 @@ export default function OperativasPage() {
     setAllowed(u?.allowed_modules ?? null);
     setRole(u?.role ?? "");
     setCanFacturacion(!!u?.can_view_facturacion);
+    setCanLogistica(!!u?.can_view_logistica);
     // 2) Refrescar contra /auth/me para que cambios del superadmin
     //    se reflejen sin necesidad de re-login.
-    apiFetch<{ full_name: string; role: string; allowed_modules: string[] | null; can_view_facturacion: boolean }>(
+    apiFetch<{ full_name: string; role: string; allowed_modules: string[] | null; can_view_facturacion: boolean; can_view_logistica: boolean }>(
       "/api/v1/auth/me",
     )
       .then((me) => {
@@ -89,6 +102,7 @@ export default function OperativasPage() {
         setAllowed(me.allowed_modules ?? null);
         setRole(me.role ?? "");
         setCanFacturacion(!!me.can_view_facturacion);
+        setCanLogistica(!!me.can_view_logistica);
         // Sincronizar el localStorage para que otras pantallas vean lo mismo.
         if (typeof window !== "undefined") {
           const raw = localStorage.getItem("vc_user");
@@ -99,6 +113,7 @@ export default function OperativasPage() {
               stored.role = me.role;
               stored.allowed_modules = me.allowed_modules ?? null;
               stored.can_view_facturacion = me.can_view_facturacion;
+              stored.can_view_logistica = me.can_view_logistica;
               localStorage.setItem("vc_user", JSON.stringify(stored));
             } catch {
               /* ignore */
@@ -115,9 +130,13 @@ export default function OperativasPage() {
   // null = acceso a todos; lista = solo los listados.
   const visibleModules = MODULES.filter((m) => {
     // Módulos restringidos: solo si el backend habilitó al usuario (nunca clientes).
-    if (RESTRICTED.has(m.slug)) return m.slug === "televentas_claro" ? canFacturacion : false;
-    // Analista de Facturación: solo ve Facturación (restringido, ya resuelto arriba).
-    if (role === "facturacion") return false;
+    if (RESTRICTED.has(m.slug)) {
+      if (m.slug === "televentas_claro") return canFacturacion;
+      if (m.slug === "logistica") return canLogistica;
+      return false;
+    }
+    // Analistas de módulo único: solo ven su restringido (resuelto arriba).
+    if (role === "facturacion" || role === "logistica") return false;
     if (role !== "client") return true;
     if (allowed === null) return true;
     return allowed.includes(m.slug);
