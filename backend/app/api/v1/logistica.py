@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from ...core.config import settings
 from ...core.logging import logger
 from ...services.logistica.quadminds_client import (
-    QuadMindsError, QuadMindsNotConfigured, _extract_list, _is_allowed, get_client,
+    QuadMindsError, QuadMindsNotConfigured, _extract_list, _is_allowed, get_client, orders_params,
 )
 from ...services.logistica.stats import resumen_ordenes, _date_str
 from ..deps import CurrentUser, require_logistica_access
@@ -79,23 +79,18 @@ async def logistica_entregas(
     y serie diaria. Reenvía filtros extra a QuadMinds y filtra por fecha del lado del server."""
     if not settings.logistica_enabled:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Logística no configurada (falta API key).")
+    # /orders exige un rango de fechas: si no vino, usamos los últimos 30 días.
+    from datetime import date, timedelta
+    if not hasta:
+        hasta = date.today().isoformat()
+    if not desde:
+        desde = (date.today() - timedelta(days=30)).isoformat()
     extra = {k: v for k, v in request.query_params.items()
              if k not in ("desde", "hasta", "max_ordenes")}
+    params = orders_params(desde, hasta, extra)
     try:
-        orders = await get_client().get_all("orders", params=extra, max_rows=max_ordenes)
+        orders = await get_client().get_all("orders", params=params, max_rows=max_ordenes)
     except QuadMindsError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
-
-    if desde or hasta:
-        def _in_range(o: dict) -> bool:
-            d = _date_str(o)
-            if not d:
-                return False
-            if desde and d < desde:
-                return False
-            if hasta and d > hasta:
-                return False
-            return True
-        orders = [o for o in orders if _in_range(o)]
 
     return {"desde": desde, "hasta": hasta, **resumen_ordenes(orders)}
