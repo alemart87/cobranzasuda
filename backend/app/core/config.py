@@ -90,6 +90,12 @@ class Settings(BaseSettings):
     quadminds_base_url: str = "https://saas.quadminds.com/api/v2"
     quadminds_auth_header: str = "x-saas-apikey"   # header de auth de QuadMinds v2
     quadminds_timeout_s: float = 30.0
+    # /orders exige un rango de fechas obligatorio. Nombres/formato configurables
+    # por si difieren en tu cuenta (se ajustan por env sin tocar código).
+    quadminds_orders_from_param: str = "from"
+    quadminds_orders_to_param: str = "to"
+    quadminds_orders_date_type: str = ""          # opcional: si tu API pide 'dateType'
+    quadminds_orders_date_format: str = "date"    # "date" (YYYY-MM-DD) | "datetime" | "epoch_ms"
 
     @property
     def logistica_enabled(self) -> bool:

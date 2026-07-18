@@ -107,5 +107,36 @@ class QuadMindsClient:
             return {"ok": False, "error": str(exc)}
 
 
+def _fmt_fecha(d: str) -> str:
+    """Convierte 'YYYY-MM-DD' al formato que espera la API de orders."""
+    fmt = settings.quadminds_orders_date_format
+    if fmt == "datetime":
+        return f"{d}T00:00:00"
+    if fmt == "epoch_ms":
+        from datetime import datetime, timezone
+        try:
+            dt = datetime.strptime(d, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+            return str(int(dt.timestamp() * 1000))
+        except ValueError:
+            return d
+    return d  # 'date'
+
+
+def orders_params(desde: Optional[str], hasta: Optional[str], extra: Optional[dict] = None) -> dict:
+    """Arma los query params de /orders incluyendo el rango de fechas OBLIGATORIO.
+
+    Los nombres de los parámetros y el formato de fecha son configurables por env
+    (QUADMINDS_ORDERS_FROM_PARAM / _TO_PARAM / _DATE_TYPE / _DATE_FORMAT).
+    """
+    p = dict(extra or {})
+    if desde:
+        p[settings.quadminds_orders_from_param] = _fmt_fecha(desde)
+    if hasta:
+        p[settings.quadminds_orders_to_param] = _fmt_fecha(hasta)
+    if settings.quadminds_orders_date_type:
+        p.setdefault("dateType", settings.quadminds_orders_date_type)
+    return p
+
+
 def get_client() -> QuadMindsClient:
     return QuadMindsClient()
