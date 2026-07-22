@@ -272,3 +272,18 @@ def test_voz_cliente_temas_y_frases():
 
     import json
     json.dumps(v)
+
+
+def test_pendientes_no_incluye_en_proceso():
+    """Regresión: el KPI 'pendientes' debe contar SOLO estado 'Pendiente'
+    (antes hacía total - cerrados e incluía 'En proceso' → 18 vs 4)."""
+    rows = (
+        [{"estado": "Cerrado", "cliente": "x", "tipo_caso": "t", "motivo": "m"}] * 516
+        + [{"estado": "En proceso", "cliente": "x", "tipo_caso": "t", "motivo": "m"}] * 14
+        + [{"estado": "Pendiente", "cliente": "x", "tipo_caso": "t", "motivo": "m"}] * 4
+    )
+    k = analyze_atencion_gestiones(rows)["kpis"]
+    assert k["total_gestiones"] == 534
+    assert k["cerrados"] == 516
+    assert k["pendientes"] == 4
+    assert k["en_proceso"] == 14

@@ -12,6 +12,8 @@ from .voz_cliente import analizar_voz_cliente
 
 # Estados que se consideran "resueltos/cerrados" para el % de resolución.
 _CERRADO = {"cerrado", "resuelto", "finalizado"}
+# Estados que cuentan como "Pendiente" en el KPI (NO incluye "En proceso").
+_PENDIENTE = {"pendiente"}
 
 # Orden preferido de estados en tablas/series (el resto va después, alfabético).
 _ESTADO_ORDEN = ["Cerrado", "En proceso", "Pendiente"]
@@ -59,7 +61,11 @@ def analyze_atencion_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
     responsables = _dist([r.get("responsable", "") for r in rows], top=15)
 
     cerrados = sum(1 for r in rows if strip_accents(r.get("estado", "")) in _CERRADO)
-    pendientes = total - cerrados
+    # "Pendientes" = SOLO estado 'Pendiente' real (no incluye 'En proceso').
+    # Antes se calculaba como total - cerrados y agrupaba ambos → divergía de la
+    # tabla por responsable (ej.: KPI 18 vs 4 reales).
+    pendientes = sum(1 for r in rows if strip_accents(r.get("estado", "")) in _PENDIENTE)
+    en_proceso = total - cerrados - pendientes
 
     # --- Lista canónica de estados presentes (etiqueta de cada fila) ---
     def estado_label(r: dict[str, Any]) -> str:
@@ -113,6 +119,7 @@ def analyze_atencion_gestiones(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "total_gestiones": total,
         "cerrados": cerrados,
         "pendientes": pendientes,
+        "en_proceso": en_proceso,
         "pct_cerrados": round(cerrados / total * 100, 1) if total else 0.0,
         "tipos_distintos": len([t for t in tipos if t["label"]]),
         "canales_distintos": len([c for c in canales if c["label"]]),
