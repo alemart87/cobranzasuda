@@ -181,15 +181,31 @@ h3,
   /* Ocultar cromo de la app y todo lo marcado como no imprimible */
   header, footer, .no-print { display: none !important; }
   .print-only { display: block !important; }
-  .print-cover { display: flex !important; }  /* la portada mantiene su layout en columna */
+  /* La portada mantiene su layout en columna y llena la hoja A4 horizontal */
+  .print-cover { display: flex !important; min-height: 186mm; }
 
-  html, body { background: #fff !important; }
+  /* Fondo BLANCO total: el gris de la app (bg del shell) imprime como "zonas
+     grises" alrededor de las tarjetas. Solo se blanquea el lienzo; los headers
+     de tabla y chips conservan su tono propio. */
+  html, body, main, .min-h-screen { background: #fff !important; }
   main { padding: 0 !important; margin: 0 !important; max-width: none !important; width: 100% !important; }
 
-  /* Tarjetas planas; evitar cortes feos entre páginas */
+  /* Tarjetas planas; evitar cortes feos entre páginas.
+     OJO: los <section> y las tablas largas SÍ pueden fluir entre páginas
+     (si no, cada bloque salta entero y quedan medias páginas vacías);
+     lo atómico son las tarjetas, las filas y cada gráfico. */
   .card { box-shadow: none !important; border: 1px solid #e5e7eb !important; }
-  .card, section, table, tr, .recharts-wrapper { break-inside: avoid; page-break-inside: avoid; }
+  .card, tr, .recharts-wrapper { break-inside: avoid; page-break-inside: avoid; }
   h1, h2, h3 { break-after: avoid; page-break-after: avoid; }
+
+  /* Layout de escritorio SIEMPRE al imprimir: algunas impresiones evalúan un
+     viewport angosto y las grillas colapsan a 2 columnas (KPIs gigantes con
+     mucho vacío). Forzamos las columnas md:/lg: como en la web. */
+  [class*="md:grid-cols-2"], [class*="lg:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  [class*="md:grid-cols-3"], [class*="lg:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  [class*="md:grid-cols-4"], [class*="lg:grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  [class*="md:grid-cols-5"] { grid-template-columns: repeat(5, minmax(0, 1fr)) !important; }
+  [class*="md:grid-cols-6"] { grid-template-columns: repeat(6, minmax(0, 1fr)) !important; }
 
   /* Tablas que no se desborden */
   table { width: 100% !important; font-size: 11px !important; }
