@@ -418,6 +418,31 @@ async def _backfill_series_desde_items(db: AsyncSession, report: AtencionGestion
     report.data = data  # persiste en el commit del record_action (self-healing)
 
 
+async def _heal_voz_desde_items(db: AsyncSession, report: AtencionGestionReport) -> None:
+    """Auto-reparación de 'Voz del Cliente': la v2 clasifica por MOTIVO + descripción
+    (antes solo descripción → 'Otros' inflado con taquigrafía tipo 'se adjunta ppto').
+    Recalcula desde los items y persiste una sola vez por reporte."""
+    from ...services.analyzers.voz_cliente import analizar_voz_cliente, clasificar_tema
+
+    data = dict(report.data or {})
+    voz = data.get("voz_cliente") or {}
+    if not voz or voz.get("version") == 2:
+        return
+    items = (await db.execute(
+        select(AtencionGestionItem).where(AtencionGestionItem.report_id == report.id)
+    )).scalars().all()
+    if not items:
+        return
+    rows = [{"descripcion": i.descripcion or "", "motivo": i.motivo or "",
+             "estado": i.estado or ""} for i in items]
+    data["voz_cliente"] = analizar_voz_cliente(rows)
+    report.data = data
+    # Reclasificar también el tema persistido por fila (drill del agente).
+    for i in items:
+        i.tema = clasificar_tema(i.descripcion or "", i.motivo or "")
+    await db.commit()
+
+
 @router.get("/gestiones/reports/{report_id}", response_model=AtencionGestionReportDetail)
 async def get_gestion_report(
     report_id: str,
@@ -433,6 +458,7 @@ async def get_gestion_report(
     try:
         await _backfill_series_desde_items(db, report)
         await _heal_kpis_desde_items(db, [report])
+        await _heal_voz_desde_items(db, report)
     except Exception:
         pass
     await record_action(

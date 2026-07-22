@@ -42,7 +42,9 @@ _FILTER = _STOP | _RUIDO
 # patrones (ya normalizados: minúsculas, sin acentos) que se buscan como substring.
 _TEMAS: list[tuple[str, list[str]]] = [
     ("Siniestros y denuncias", ["siniestro", "stro", "denuncia", "accidente", "choque",
-                                 "parabrisas", "robo", "orden de trabajo"]),
+                                 "parabrisas", "robo", "orden de trabajo", "presupuesto",
+                                 "ppto", "taller", "reparacion", "repuesto", "perito",
+                                 "indemnizacion"]),
     ("Asistencia y servicios", ["grua", "asistencia", "remolque", "auxilio", "mecanico"]),
     ("Cancelaciones", ["cancelacion", "cancelar", "anulacion", "anular", "dar de baja",
                         "baja de", "rescindir"]),
@@ -52,11 +54,13 @@ _TEMAS: list[tuple[str, list[str]]] = [
     ("Facturación", ["factura", "facturacion", "timbrado", "nota de credito", "recibo"]),
     ("Renovaciones y vigencia", ["renovacion", "renovar", "renueva", "vencimiento", "vto",
                                   "vigencia", "vencida", "vence"]),
-    ("Pólizas y certificados", ["poliza", "endoso", "certificado", "copia de", "caratula"]),
+    ("Pólizas y certificados", ["poliza", "endoso", "certificado", "copia de", "caratula",
+                                 "cobertura", "beneficiario", "emision"]),
     ("Acceso y portal", ["portal", "pin", "clave", "contrasena", "usuario", "plataforma",
                           "app", "ingresar", "acceso", "web"]),
-    ("Actualización de datos", ["actualizacion", "actualizar", "modificar", "cambio de",
-                                 "correo electronico", "telefono", "direccion"]),
+    ("Actualización de datos", ["actualizacion", "actualizar", "modificar", "modificacion",
+                                 "cambio de", "correccion", "correo electronico", "telefono",
+                                 "direccion", "eliminacion de contacto"]),
     ("Comercial y ventas", ["comercial", "cotizacion", "cotizar", "contratar", "nueva poliza",
                             "alta de", "importacion", "caucion"]),
     ("Reclamos", ["reclamo", "reclama", "queja", "disconforme", "molesto", "falta retorno"]),
@@ -116,11 +120,16 @@ def _tema_principal(text_norm: str) -> str:
     return "Otros"
 
 
-def clasificar_tema(descripcion: str) -> str:
-    """Tema principal de una descripción suelta (para persistir por fila)."""
-    if not descripcion or not descripcion.strip():
+def clasificar_tema(descripcion: str, motivo: str = "") -> str:
+    """Tema principal de una gestión (para persistir por fila).
+
+    Clasifica sobre MOTIVO + descripción: el motivo es dato estructurado de la
+    planilla (ej. 'Solicitud Presupuesto Siniestro') y resuelve los casos donde
+    la descripción es taquigrafía del agente ('se adjunta ppto')."""
+    base = f"{(motivo or '').strip()} {(descripcion or '').strip()}".strip()
+    if not base:
         return "Sin descripción"
-    return _tema_principal(_norm(fix_text(descripcion)))
+    return _tema_principal(_norm(fix_text(base)))
 
 
 def analizar_voz_cliente(rows: list[dict[str, Any]]) -> dict[str, Any]:
@@ -150,7 +159,8 @@ def analizar_voz_cliente(rows: list[dict[str, Any]]) -> dict[str, Any]:
         bigramas.update(" ".join(g) for g in _ngrams_significativos(toks_all, 2))
         trigramas.update(" ".join(g) for g in _ngrams_significativos(toks_all, 3))
 
-        tema = _tema_principal(norm)
+        # Tema por MOTIVO (dato duro de la planilla) + descripción libre.
+        tema = clasificar_tema(original, r.get("motivo", ""))
         tema_cnt[tema] += 1
         estado = (r.get("estado") or "").strip() or "(sin estado)"
         tema_estado[tema][estado] += 1
@@ -179,6 +189,7 @@ def analizar_voz_cliente(rows: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "disponible": True,
+        "version": 2,  # v2 = clasificación por motivo + descripción
         "total_descripciones": total,
         "largo_promedio": round(largo_total / total),
         "temas": temas,

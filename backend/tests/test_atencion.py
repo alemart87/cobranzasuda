@@ -287,3 +287,13 @@ def test_pendientes_no_incluye_en_proceso():
     assert k["cerrados"] == 516
     assert k["pendientes"] == 4
     assert k["en_proceso"] == 14
+
+
+def test_clasificar_tema_usa_motivo():
+    """Regresión: el tema se clasifica por MOTIVO + descripción. Las descripciones
+    taquigráficas ('se adjunta ppto') caían masivamente en 'Otros'."""
+    from app.services.analyzers.voz_cliente import clasificar_tema
+    assert clasificar_tema("se adjunta ppto", "Solicitud Presupuesto Siniestro") == "Siniestros y denuncias"
+    assert clasificar_tema("carga de ppto") == "Siniestros y denuncias"  # ppto ahora clasifica solo
+    assert clasificar_tema("0401.32350.0", "Solicitud aplicacion de pago Qr_transferencias") == "Pagos y cobranzas"
+    assert clasificar_tema("", "") == "Sin descripción"
