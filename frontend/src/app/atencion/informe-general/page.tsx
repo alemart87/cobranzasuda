@@ -9,6 +9,7 @@ import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { DistBar } from "@/components/charts/atencion/DistBar";
 import { MultiLinea, type LineaSerie } from "@/components/charts/atencion/MultiLinea";
 import { SerieDia } from "@/components/charts/atencion/SerieDia";
+import { TagCloud } from "@/components/charts/atencion/TagCloud";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatInt, formatPct } from "@/lib/format";
 import { monthLabel } from "@/lib/month";
@@ -34,6 +35,7 @@ export default function AtencionInformeGeneralPage() {
   const [incResumen, setIncResumen] = useState(true);
   const [incLlamadas, setIncLlamadas] = useState(true);
   const [incGestiones, setIncGestiones] = useState(true);
+  const [incVoz, setIncVoz] = useState(true);
   const [lists, setLists] = useState<{ ll: any[]; ge: any[] }>({ ll: [], ge: [] });
 
   useEffect(() => {
@@ -110,6 +112,7 @@ export default function AtencionInformeGeneralPage() {
               <Toggle label="Resumen gerencial" checked={incResumen} avail={!!(llamadas || gestiones)} onChange={setIncResumen} />
               <Toggle label="Reporte de Llamadas" checked={incLlamadas} avail={!!llamadas} onChange={setIncLlamadas} />
               <Toggle label="Reporte de Gestiones" checked={incGestiones} avail={!!gestiones} onChange={setIncGestiones} />
+              <Toggle label="Voz del Cliente" checked={incVoz} avail={!!gestiones?.data?.voz_cliente?.disponible} onChange={setIncVoz} />
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -129,6 +132,7 @@ export default function AtencionInformeGeneralPage() {
       {incResumen && (llamadas || gestiones) && <ResumenPrint ll={llamadas} ge={gestiones} month={month} />}
       {incLlamadas && llamadas && <LlamadasPrint r={llamadas} />}
       {incGestiones && gestiones && <GestionesPrint r={gestiones} />}
+      {incVoz && gestiones?.data?.voz_cliente?.disponible && <VozPrint v={gestiones.data.voz_cliente} />}
     </AppShell>
   );
 }
@@ -226,6 +230,58 @@ function LlamadasPrint({ r }: { r: any }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </Block>
+  );
+}
+
+function VozPrint({ v }: { v: any }) {
+  const temas = (v.temas || []).map((t: any) => ({ label: t.tema, cantidad: t.cantidad, pct: t.pct }));
+  return (
+    <Block title="Voz del Cliente">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <KpiCard label="Descripciones analizadas" value={formatInt(v.total_descripciones)} accent="purple" />
+        <KpiCard label="Largo promedio" value={`${formatInt(v.largo_promedio)} caract.`} accent="neutral" />
+        <KpiCard label="Contactos con fricción" value={formatInt(v.friccion_cantidad)} hint={formatPct(v.friccion_pct)} accent="orange" />
+        <KpiCard label="Temas detectados" value={formatInt((v.temas || []).length)} accent="cyan" />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4 mb-4">
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold text-brand-ink mb-3">Temas más mencionados</h3>
+          <DistBar data={temas.slice(0, 10)} palette={["#00B2BF", "#662483", "#E6332A", "#F39200", "#0891b2", "#7c3aed"]} />
+        </div>
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold text-brand-ink mb-3">Nube de palabras</h3>
+          <TagCloud tags={v.nube || []} max={40} />
+        </div>
+      </div>
+
+      {(v.frases_bigramas?.length > 0 || v.frases_trigramas?.length > 0) && (
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-brand-ink mb-3">Frases frecuentes</h3>
+            <div className="space-y-1">
+              {(v.frases_bigramas || []).slice(0, 10).map((f: any) => (
+                <div key={f.frase} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 text-brand-graphite">“{f.frase}”</span>
+                  <span className="font-semibold text-brand-ink">{formatInt(f.cantidad)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="card p-5">
+            <h3 className="text-sm font-semibold text-brand-ink mb-3">Expresiones destacadas</h3>
+            <div className="space-y-1">
+              {(v.frases_trigramas || []).slice(0, 10).map((f: any) => (
+                <div key={f.frase} className="flex items-center gap-2 text-sm">
+                  <span className="flex-1 text-brand-graphite">“{f.frase}”</span>
+                  <span className="font-semibold text-brand-ink">{formatInt(f.cantidad)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </Block>
