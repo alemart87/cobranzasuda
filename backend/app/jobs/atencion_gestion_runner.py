@@ -41,7 +41,7 @@ def _build(file_path: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             "responsable": (r.get("responsable") or "")[:160] or None,
             "canal": (r.get("canal") or "")[:60] or None,
             "seccion": (r.get("seccion") or "")[:80] or None,
-            "tema": clasificar_tema(r.get("descripcion", "")),
+            "tema": clasificar_tema(r.get("descripcion", ""), r.get("motivo", "")),
             "descripcion": (r.get("descripcion") or "") or None,
         })
     return analysis, items
