@@ -287,6 +287,51 @@ async def get_gestion_upload(
     return upload
 
 
+async def _heal_kpis_desde_items(db: AsyncSession, reports: list[AtencionGestionReport]) -> None:
+    """Auto-reparación de KPIs: 'pendientes' debe contar SOLO el estado 'Pendiente'
+    (los reportes viejos guardaban total - cerrados, que incluía 'En proceso').
+    Recalcula desde atencion_gestion_items y persiste si difiere."""
+    from collections import defaultdict
+    from sqlalchemy import func
+    from ...services.parsers._text import strip_accents
+
+    ids = [r.id for r in reports]
+    if not ids:
+        return
+    rows = (await db.execute(
+        select(AtencionGestionItem.report_id, AtencionGestionItem.estado, func.count(AtencionGestionItem.id))
+        .where(AtencionGestionItem.report_id.in_(ids))
+        .group_by(AtencionGestionItem.report_id, AtencionGestionItem.estado)
+    )).all()
+    counts: dict[str, dict[str, int]] = defaultdict(dict)
+    for rid, estado, n in rows:
+        counts[rid][strip_accents(estado or "")] = int(n)
+
+    CERR = {"cerrado", "resuelto", "finalizado"}
+    changed = False
+    for rep in reports:
+        c = counts.get(rep.id)
+        if not c:
+            continue  # sin items (no se puede recalcular)
+        total = sum(c.values())
+        cerrados = sum(n for e, n in c.items() if e in CERR)
+        pendientes = c.get("pendiente", 0)
+        if int(rep.pendientes or 0) != pendientes or int(rep.cerrados or 0) != cerrados:
+            rep.cerrados = cerrados
+            rep.pendientes = pendientes
+            rep.pct_cerrados = round(cerrados / total * 100, 1) if total else 0.0
+            data = dict(rep.data or {})
+            kpis = dict(data.get("kpis") or {})
+            kpis.update({"cerrados": cerrados, "pendientes": pendientes,
+                         "en_proceso": total - cerrados - pendientes,
+                         "pct_cerrados": rep.pct_cerrados})
+            data["kpis"] = kpis
+            rep.data = data
+            changed = True
+    if changed:
+        await db.commit()
+
+
 @router.get("/gestiones/reports", response_model=AtencionGestionReportList)
 async def list_gestion_reports(
     user: CurrentUser = Depends(get_current_user),
@@ -302,6 +347,10 @@ async def list_gestion_reports(
         )
     result = await db.execute(stmt)
     items = result.scalars().all()
+    try:
+        await _heal_kpis_desde_items(db, list(items))
+    except Exception:
+        pass  # self-heal best-effort; nunca rompe la lista
     return AtencionGestionReportList(
         items=[AtencionGestionReportSummary.model_validate(r) for r in items], total=len(items))
 
@@ -383,6 +432,7 @@ async def get_gestion_report(
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Reporte no publicado")
     try:
         await _backfill_series_desde_items(db, report)
+        await _heal_kpis_desde_items(db, [report])
     except Exception:
         pass
     await record_action(

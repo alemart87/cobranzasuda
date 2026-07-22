@@ -69,6 +69,14 @@ const VIEW_ACTIONS: ActionTile[] = [
 
 const UPLOAD_ACTIONS: ActionTile[] = [
   {
+    href: "/atencion/informe-general",
+    title: "Informe General del Mes",
+    description: "Consolidá llamadas + gestiones en un PDF corporativo con portada para presentar al cliente.",
+    icon: ICONS.clipboard,
+    variant: "primary",
+    forRoles: ["superadmin", "analyst"],
+  },
+  {
     href: "/atencion/llamadas/upload",
     title: "Subir Llamadas",
     description: "Procesar los 4 archivos del período (Entrantes/Salientes, Estados, Llamadas por intervalo, Colas de atención).",

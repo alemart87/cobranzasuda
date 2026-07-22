@@ -30,6 +30,7 @@ interface GestionDetail {
       total_gestiones: number;
       cerrados: number;
       pendientes: number;
+      en_proceso?: number;
       pct_cerrados: number;
       tipos_distintos: number;
       canales_distintos: number;
@@ -116,7 +117,8 @@ export default function AtencionGestionDetailPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
         <KpiCard label="Gestiones" value={formatInt(k.total_gestiones)} accent="purple" />
         <KpiCard label="Cerrados" value={formatInt(k.cerrados)} hint={formatPct(k.pct_cerrados)} accent="cyan" />
-        <KpiCard label="Pendientes" value={formatInt(k.pendientes)} accent="orange" />
+        <KpiCard label="Pendientes" value={formatInt(k.pendientes)}
+          hint={k.en_proceso != null ? `+ ${formatInt(k.en_proceso)} en proceso` : undefined} accent="orange" />
         <KpiCard label="Motivos distintos" value={`${k.motivos_distintos}`} accent="secondary" />
       </div>
 
