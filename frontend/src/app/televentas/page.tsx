@@ -203,6 +203,7 @@ export default function TeleventasHubPage() {
           <HubCard href="/televentas/produccion/reports" title="Reportes de Producción" desc="Emisiones y anulaciones, ticket, mix de productos y ranking de vendedores." bar="bg-brand-orange" />
           <HubCard href="/televentas/crm/reports" title="Gestiones CRM" desc="Funnel de gestión, productividad por operador y la Voz del Cliente en Ventas (motivos de no-venta)." bar="bg-brand-purple" badge="Nuevo" />
           <HubCard href="/televentas/comparativo" title="Comparativo mensual" desc="Tendencias multi-mes y comparación de meses seleccionados por operador." bar="bg-brand-purple" />
+          <HubCard href="/televentas/simulador" title="Simulador de Ventas" desc="¿Cuántos asesores y registros de base necesito para vender X? Proyección con tasas reales." bar="bg-brand-primary" badge="Nuevo" />
           {canUseAgent && (
             <HubCard href="/televentas/agente" title="Agente de Ventas" desc="Preguntá en lenguaje natural: conversión, ranking, alertas y gráficos al instante." bar="bg-brand-purple" badge="IA" />
           )}

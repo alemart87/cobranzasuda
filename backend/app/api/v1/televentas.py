@@ -34,7 +34,9 @@ from ...schemas.televentas import (
     TeleventasProduccionReportDetail, TeleventasProduccionReportList, TeleventasProduccionReportSummary,
     TeleventasProduccionUploadList, TeleventasProduccionUploadRead,
 )
-from ...services.analyzers import combine_televentas, comparativo_televentas, analizar_tendencia_mensual
+from ...services.analyzers import (
+    combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
+)
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
@@ -597,6 +599,63 @@ async def televentas_comparar(
     return {"meses": sel, "generales": generales, "por_operador": filas,
             "insights": comp["insights"], "extremos": {"desde": primero, "hasta": ultimo},
             "available_months": sorted(disponibles, reverse=True)}
+
+
+async def _parametros_simulador(db: AsyncSession) -> dict:
+    """Parámetros REALES para el simulador: promedio de los últimos 3 meses publicados
+    COMPLETOS (con producción y llamadas > 0, para excluir el mes en curso)."""
+    months = set()
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport):
+        for (pm,) in (await db.execute(
+            select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
+        )).all():
+            if pm:
+                months.add(pm.strftime("%Y-%m"))
+    completos = []
+    for m in sorted(months, reverse=True):
+        g = await _metricas_del_mes(db, m)
+        if g.get("polizas_emitidas", 0) > 0 and g.get("total_llamadas", 0) > 0:
+            completos.append(g)
+        if len(completos) >= 3:
+            break
+    if not completos:
+        return {"disponible": False, "meses_usados": [],
+                "mensaje": "No hay meses publicados completos (con llamadas y producción)."}
+
+    def _avg(key: str) -> float:
+        vals = [float(g.get(key) or 0) for g in completos]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    emitida, neta = _avg("prima_emitida"), _avg("prima_neta")
+    return {
+        "disponible": True,
+        "meses_usados": [g["mes"] for g in completos],
+        "ticket_promedio": round(_avg("ticket_promedio")),
+        "conversion_pct": round(_avg("conversion_pct"), 2),
+        "contactabilidad_pct": round(_avg("contactabilidad"), 1),
+        "llamadas_asesor_dia": round(_avg("llamadas_prom_asesor_dia"), 1),
+        "dias_habiles": round(_avg("dias_operativos")) or 21,
+        "tasa_anulacion_pct": round((emitida - neta) / emitida * 100, 1) if emitida else 0.0,
+        "intentos_por_registro": 2.0,  # marcaciones promedio por registro de base (ajustable)
+    }
+
+
+@router.get("/simulador")
+async def televentas_simulador(
+    meta_prima: Optional[float] = Query(None, description="Meta de prima NETA mensual (Gs)"),
+    asesores: Optional[float] = Query(None, description="Dotación disponible"),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Simulador gerencial de ventas. Sin argumentos devuelve los parámetros reales;
+    con `meta_prima` o `asesores` devuelve además la simulación y escenarios."""
+    params = await _parametros_simulador(db)
+    out: dict = {"parametros": params}
+    if params.get("disponible") and (meta_prima is not None or asesores is not None):
+        out["resultado"] = simular(params, meta_prima=meta_prima, asesores=asesores)
+        if meta_prima is not None:
+            out["escenarios"] = escenarios(params, meta_prima)
+    return out
 
 
 @router.get("/tendencias")

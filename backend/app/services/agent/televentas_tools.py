@@ -261,6 +261,31 @@ async def tv_gestiones_crm_impl(mes: Optional[str] = None) -> dict[str, Any]:
     }
 
 
+async def tv_simulador_impl(meta_prima: Optional[float] = None, asesores: Optional[float] = None,
+                            overrides: Optional[dict] = None) -> dict[str, Any]:
+    """Simulador gerencial: con las tasas REALES (últimos meses completos publicados)
+    proyecta cuántos asesores y registros de base hacen falta para una meta de prima,
+    o cuánta prima produce una dotación. `overrides` permite ajustar parámetros
+    (ticket_promedio, conversion_pct, contactabilidad_pct, llamadas_asesor_dia,
+    dias_habiles, intentos_por_registro, tasa_anulacion_pct)."""
+    from ...services.analyzers import simular, escenarios
+    from ...api.v1.televentas import _parametros_simulador
+    async with session_scope() as db:
+        params = await _parametros_simulador(db)
+    if not params.get("disponible"):
+        return {"sin_datos": True, "mensaje": params.get("mensaje", "Sin meses completos publicados.")}
+    if overrides:
+        params = {**params, **{k: v for k, v in overrides.items() if v is not None}}
+    out: dict[str, Any] = {"parametros": params}
+    if meta_prima is None and asesores is None:
+        out["nota"] = "Pasá meta_prima (Gs netos) o asesores para simular."
+        return out
+    out["resultado"] = simular(params, meta_prima=meta_prima, asesores=asesores)
+    if meta_prima is not None:
+        out["escenarios"] = escenarios(params, meta_prima)
+    return out
+
+
 async def tv_focus_impl(focus_refs: Optional[list[str]]) -> dict[str, Any]:
     """Reportes que el usuario seleccionó como foco (por id o mes YYYY-MM)."""
     refs = focus_refs or []

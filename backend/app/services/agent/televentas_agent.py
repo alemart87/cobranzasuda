@@ -14,7 +14,8 @@ from .core import AgentNotConfigured
 from .televentas_tools import (
     tv_buscar_polizas_impl, tv_caidas_vendedores_impl, tv_comparar_meses_impl, tv_focus_impl,
     tv_gestiones_crm_impl, tv_listar_periodos_impl, tv_llamadas_impl, tv_overview_impl,
-    tv_produccion_impl, tv_proyeccion_impl, tv_ranking_vendedores_impl, tv_tendencias_impl,
+    tv_produccion_impl, tv_proyeccion_impl, tv_ranking_vendedores_impl, tv_simulador_impl,
+    tv_tendencias_impl,
 )
 from .tools import AgentContext
 
@@ -62,6 +63,9 @@ llamadas) vs el mes anterior, con el % de caída y una acción. Requiere 2+ mese
 agendado / acepta), tasa de contacto y aceptación, productividad por operador y por campaña/base. \
 Para "por qué no compran" o "qué dice el cliente", usá su `voz_ventas`: motivos clasificados y \
 motivos de NO-VENTA con ejemplos textuales. Citá ejemplos reales al explicar motivos.
+12. SIMULADOR (`tv_simulador`): para "cuánta gente necesito para vender X" o "cuánto puedo vender \
+con N asesores". Usa las tasas reales; presentá la cadena completa (prima → pólizas → contactos → \
+llamadas → asesores → registros de base), los escenarios y aclarar los supuestos del modelo.
 
 FOCO del usuario: llamá `tv_focus` PRIMERO. Si seleccionó reportes, centrá el análisis en ellos.
 
@@ -149,6 +153,16 @@ def _build_televentas_agent():
         return await tv_comparar_meses_impl(mes, mes_previo)
 
     @function_tool(strict_mode=False)
+    async def tv_simulador(ctx: RunContextWrapper[AgentContext], meta_prima: Optional[float] = None,
+                           asesores: Optional[float] = None, overrides: Optional[dict] = None) -> dict:
+        """SIMULADOR GERENCIAL: con las tasas reales del call center (ticket, conversión,
+        contactabilidad, llamadas/asesor/día, anulación) proyecta cuántos ASESORES y cuántos
+        REGISTROS DE BASE hacen falta para vender una `meta_prima` (Gs netos/mes), o cuánta
+        prima produce una dotación de `asesores`. Con meta incluye escenarios ±15% de conversión.
+        `overrides` ajusta cualquier parámetro del modelo."""
+        return await tv_simulador_impl(meta_prima, asesores, overrides)
+
+    @function_tool(strict_mode=False)
     async def tv_gestiones_crm(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None) -> dict:
         """GESTIONES CRM del mes: funnel de gestión comercial (no contesta / no acepta / agendado /
         acepta), tasa de contacto y de aceptación, productividad por operador (gestiones/día), por
@@ -185,7 +199,7 @@ def _build_televentas_agent():
 
     tools = [tv_focus, tv_listar_periodos, tv_overview, tv_ranking_vendedores, tv_produccion,
              tv_llamadas, tv_gestiones_crm, tv_buscar_polizas, tv_proyeccion, tv_comparar_meses,
-             tv_tendencias, tv_caidas_vendedores, emit_canvas]
+             tv_tendencias, tv_caidas_vendedores, tv_simulador, emit_canvas]
 
     model_settings = None
     try:

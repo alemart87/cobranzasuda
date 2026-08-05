@@ -221,3 +221,27 @@ def test_voz_ventas_motivos_noventa():
     v = analizar_voz_ventas(rows)
     assert v["disponible"] and v["total_observaciones"] == 4
     assert v["no_venta"]["total"] == 2  # solo los 'No acepta' con observación
+
+
+def test_simulador_meta_y_dotacion():
+    """El simulador debe ser consistente en ambos sentidos (meta ↔ dotación)."""
+    from app.services.analyzers.televentas_simulador import simular, escenarios
+    P = {"ticket_promedio": 1_000_000, "conversion_pct": 5.0, "contactabilidad_pct": 50.0,
+         "llamadas_asesor_dia": 40, "dias_habiles": 20, "intentos_por_registro": 2.0,
+         "tasa_anulacion_pct": 0.0}
+    r = simular(P, meta_prima=100_000_000)
+    assert r["polizas_necesarias"] == 100          # 100M / 1M
+    assert r["contactos_necesarios"] == 2000       # 100 / 5%
+    assert r["llamadas_necesarias"] == 4000        # 2000 / 50%
+    assert r["asesores_necesarios_redondeo"] == 5  # 4000 / (40*20)
+    assert r["registros_base_necesarios"] == 2000  # 4000 / 2
+    # inverso: 5 asesores producen la meta
+    r2 = simular(P, asesores=5)
+    assert r2["prima_neta_proyectada"] == 100_000_000
+    # anulación: para neta igual hay que emitir más
+    P2 = {**P, "tasa_anulacion_pct": 20.0}
+    r3 = simular(P2, meta_prima=100_000_000)
+    assert r3["prima_a_emitir"] == 125_000_000
+    # escenarios: conservador requiere más asesores que optimista
+    esc = escenarios(P, 100_000_000)
+    assert esc[0]["asesores_necesarios"] >= esc[2]["asesores_necesarios"]
