@@ -10,6 +10,7 @@ from .facturacion_runner import run_facturacion
 from .facturacion_queue import facturacion_worker, signal_facturacion_queue
 from .televentas_llamadas_runner import run_televentas_llamadas
 from .televentas_produccion_runner import run_televentas_produccion
+from .televentas_crm_runner import run_televentas_crm
 from .televentas_queue import televentas_worker, signal_televentas_queue
 
 __all__ = [
@@ -19,6 +20,6 @@ __all__ = [
     "run_atencion_llamadas", "run_atencion_gestion",
     "atencion_worker", "signal_atencion_queue",
     "run_facturacion", "facturacion_worker", "signal_facturacion_queue",
-    "run_televentas_llamadas", "run_televentas_produccion",
+    "run_televentas_llamadas", "run_televentas_produccion", "run_televentas_crm",
     "televentas_worker", "signal_televentas_queue",
 ]

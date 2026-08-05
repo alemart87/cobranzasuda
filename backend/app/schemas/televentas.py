@@ -100,6 +100,55 @@ class TeleventasProduccionReportList(BaseModel):
     total: int
 
 
+# ----------------------------- Gestiones CRM -----------------------------
+class TeleventasCrmUploadRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    uploaded_by: str
+    period_month: Optional[date]
+    status: str
+    filename: Optional[str] = None
+    uploaded_at: datetime
+    started_at: Optional[datetime]
+    completed_at: Optional[datetime]
+    last_error: Optional[str]
+
+
+class TeleventasCrmUploadList(BaseModel):
+    items: List[TeleventasCrmUploadRead]
+    total: int
+
+
+class TeleventasCrmReportSummary(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    upload_id: str
+    period_month: Optional[date]
+    generated_at: datetime
+    total_gestiones: int
+    contactos: int
+    aceptas: int
+    agendados: int
+    no_acepta: int
+    tasa_contacto_pct: float
+    operadores_activos: int
+    dias_operativos: int
+    is_published: bool = False
+    published_at: Optional[datetime] = None
+    title: Optional[str] = None
+
+
+class TeleventasCrmReportDetail(TeleventasCrmReportSummary):
+    data: dict[str, Any]
+
+
+class TeleventasCrmReportList(BaseModel):
+    items: List[TeleventasCrmReportSummary]
+    total: int
+
+
 class PublishRequest(BaseModel):
     is_published: bool
     title: Optional[str] = None

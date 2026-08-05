@@ -13,8 +13,10 @@ from sqlalchemy import select, update
 
 from ..core.database import session_scope
 from ..core.logging import logger
+from ..models.televentas_crm_upload import TeleventasCrmUpload
 from ..models.televentas_llamadas_upload import TeleventasLlamadasUpload
 from ..models.televentas_produccion_upload import TeleventasProduccionUpload
+from .televentas_crm_runner import run_televentas_crm
 from .televentas_llamadas_runner import run_televentas_llamadas
 from .televentas_produccion_runner import run_televentas_produccion
 
@@ -32,6 +34,7 @@ _wakeup = asyncio.Event()
 _KINDS = {
     "llamadas": (TeleventasLlamadasUpload, run_televentas_llamadas),
     "produccion": (TeleventasProduccionUpload, run_televentas_produccion),
+    "crm": (TeleventasCrmUpload, run_televentas_crm),
 }
 
 
