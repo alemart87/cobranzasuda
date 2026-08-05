@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
@@ -20,6 +20,11 @@ export default function TeleventasTendenciasPage() {
   const [tend, setTend] = useState<any>(null);
   const [comp, setComp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<"tendencias" | "comparar">("tendencias");
+  const [selMeses, setSelMeses] = useState<string[]>([]);
+  const [cmp, setCmp] = useState<any>(null);
+  const [cmpLoading, setCmpLoading] = useState(false);
+  const [cmpError, setCmpError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -28,7 +33,29 @@ export default function TeleventasTendenciasPage() {
     ]).then(([t, c]) => { setTend(t); setComp(c); }).finally(() => setLoading(false));
   }, []);
 
+  const toggleMes = (m: string) => {
+    setCmp(null); setCmpError(null);
+    setSelMeses((prev) => prev.includes(m) ? prev.filter((x) => x !== m)
+      : prev.length >= 3 ? [...prev.slice(1), m] : [...prev, m]);
+  };
+
+  const comparar = async () => {
+    if (selMeses.length < 2) return;
+    setCmpLoading(true); setCmpError(null);
+    try {
+      setCmp(await apiFetch<any>(`/api/v1/televentas/comparar?meses=${selMeses.join(",")}`));
+    } catch (e: any) {
+      setCmpError(e.message);
+    } finally {
+      setCmpLoading(false);
+    }
+  };
+
   const meses: any[] = tend?.meses ?? [];
+  const mesesDisponibles: string[] = Array.from(new Set([
+    ...meses.map((m: any) => m.mes),
+    ...((comp?.available_months as string[]) ?? []),
+  ])).sort();
   const chartData = meses.map((m) => ({ ...m, label: m.mes }));
   const pctLbl = (v: any) => `${v}%`;
   const intLbl = (v: any) => formatInt(v as number);
@@ -45,15 +72,37 @@ export default function TeleventasTendenciasPage() {
         <p className="text-sm text-brand-slate mt-1">Evolución de varios meses: conversión, llamadas (total y promedio), agentes activos, contactabilidad y producción.</p>
       </div>
 
-      {loading && <div className="text-brand-slate">Cargando…</div>}
+      <div className="flex items-center gap-1 mb-6 border-b border-brand-border no-print">
+        {([["tendencias", "Tendencias"], ["comparar", "Comparar meses"]] as const).map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)}
+            className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              tab === id ? "border-brand-primary text-brand-primary" : "border-transparent text-brand-slate hover:text-brand-ink"}`}>
+            {label}
+          </button>
+        ))}
+      </div>
 
-      {!loading && meses.length < 2 && (
+      {tab === "comparar" && (
+        <CompararMeses
+          disponibles={mesesDisponibles}
+          seleccion={selMeses}
+          onToggle={toggleMes}
+          onComparar={comparar}
+          cmp={cmp}
+          loading={cmpLoading}
+          error={cmpError}
+        />
+      )}
+
+      {tab === "tendencias" && loading && <div className="text-brand-slate">Cargando…</div>}
+
+      {tab === "tendencias" && !loading && meses.length < 2 && (
         <div className="card p-10 text-center text-brand-slate">
           Se necesitan al menos <b>dos meses publicados</b> para ver tendencias. Actualmente hay {meses.length}.
         </div>
       )}
 
-      {!loading && meses.length >= 2 && (
+      {tab === "tendencias" && !loading && meses.length >= 2 && (
         <>
           <InsightsPanel insights={tend?.insights} titulo="Tendencias detectadas" />
 
@@ -179,6 +228,149 @@ export default function TeleventasTendenciasPage() {
         </>
       )}
     </AppShell>
+  );
+}
+
+function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, loading, error }: {
+  disponibles: string[]; seleccion: string[]; onToggle: (m: string) => void;
+  onComparar: () => void; cmp: any; loading: boolean; error: string | null;
+}) {
+  const delta = (cur: number, prev: number, inverso = false) => {
+    if (!prev) return <span className="text-brand-mist">—</span>;
+    const pct = ((cur - prev) / Math.abs(prev)) * 100;
+    if (Math.abs(pct) < 0.05) return <span className="text-brand-slate">→ 0%</span>;
+    const good = inverso ? pct < 0 : pct > 0;
+    return <span className={good ? "text-emerald-600" : "text-brand-primary"}>{pct > 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%</span>;
+  };
+
+  const metricas: Array<{ key: string; label: string; fmt: (v: number) => string; inverso?: boolean }> = [
+    { key: "total_llamadas", label: "Llamadas", fmt: formatInt },
+    { key: "llamadas_prom_asesor_dia", label: "Prom. llamadas / asesor / día", fmt: formatInt },
+    { key: "agentes_activos", label: "Agentes activos", fmt: formatInt },
+    { key: "contactabilidad", label: "Contactabilidad %", fmt: (v) => formatPct(v) },
+    { key: "polizas_emitidas", label: "Pólizas emitidas", fmt: formatInt },
+    { key: "prima_emitida", label: "Prima emitida", fmt: formatGs },
+    { key: "ticket_promedio", label: "Ticket promedio", fmt: formatGs },
+    { key: "conversion_pct", label: "Conversión %", fmt: (v) => formatPct(v) },
+    { key: "dias_productivos", label: "Días productivos", fmt: formatInt },
+  ];
+
+  return (
+    <>
+      <section className="card p-5 mb-6 no-print">
+        <label className="label">Elegí 2 o 3 meses para comparar</label>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {disponibles.map((m) => {
+            const on = seleccion.includes(m);
+            return (
+              <button key={m} onClick={() => onToggle(m)}
+                className={`px-3 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
+                  on ? "bg-brand-primary text-white border-brand-primary" : "border-brand-border text-brand-graphite hover:border-brand-primary"}`}>
+                {monthLabel(m)}
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-3">
+          <button onClick={onComparar} disabled={seleccion.length < 2 || loading} className="btn-primary disabled:opacity-50">
+            {loading ? "Comparando…" : `Comparar${seleccion.length ? ` (${seleccion.length})` : ""}`}
+          </button>
+          {seleccion.length < 2 && <span className="text-xs text-brand-slate">Seleccioná al menos 2 meses.</span>}
+          {error && <span className="text-xs text-brand-primary">{error}</span>}
+        </div>
+      </section>
+
+      {cmp && (
+        <>
+          <InsightsPanel insights={cmp.insights} titulo={`Análisis del cambio · ${monthLabel(cmp.extremos.desde)} → ${monthLabel(cmp.extremos.hasta)}`} />
+
+          <section className="card overflow-x-auto mb-6">
+            <div className="px-4 pt-4">
+              <h2 className="font-display text-xl text-brand-ink uppercase">Rendimiento general</h2>
+              <p className="text-xs text-brand-slate mb-2">Δ = variación entre el primer y el último mes seleccionado.</p>
+            </div>
+            <table className="w-full text-sm min-w-[640px]">
+              <thead className="bg-brand-bg border-b border-brand-border">
+                <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
+                  <th className="px-4 py-2 text-left">Métrica</th>
+                  {cmp.meses.map((m: string) => <th key={m} className="px-4 py-2 text-right">{monthLabel(m)}</th>)}
+                  <th className="px-4 py-2 text-right">Δ</th>
+                </tr>
+              </thead>
+              <tbody>
+                {metricas.map((mt) => {
+                  const vals = cmp.meses.map((m: string) => (cmp.generales.find((g: any) => g.mes === m) || {})[mt.key] ?? 0);
+                  return (
+                    <tr key={mt.key} className="border-t border-brand-border hover:bg-brand-bg-soft">
+                      <td className="px-4 py-2 font-medium text-brand-ink">{mt.label}</td>
+                      {vals.map((v: number, i: number) => (
+                        <td key={i} className={`px-4 py-2 text-right ${i === vals.length - 1 ? "font-semibold" : ""}`}>{mt.fmt(v)}</td>
+                      ))}
+                      <td className="px-4 py-2 text-right font-mono text-xs">{delta(vals[vals.length - 1], vals[0], mt.inverso)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </section>
+
+          <section className="card overflow-x-auto">
+            <div className="px-4 pt-4">
+              <h2 className="font-display text-xl text-brand-ink uppercase">Rendimiento por operador</h2>
+              <p className="text-xs text-brand-slate mb-2">Estado y Δ prima: primer vs último mes seleccionado.</p>
+            </div>
+            <table className="w-full text-sm" style={{ minWidth: `${360 + cmp.meses.length * 300}px` }}>
+              <thead className="bg-brand-bg border-b border-brand-border">
+                <tr className="text-[10px] uppercase tracking-wider2 text-brand-slate">
+                  <th className="px-3 py-1.5 text-left" rowSpan={2}>Operador</th>
+                  <th className="px-2 py-1.5 text-center" rowSpan={2}>Estado</th>
+                  {cmp.meses.map((m: string) => (
+                    <th key={m} className="px-2 py-1.5 text-center border-l border-brand-border" colSpan={4}>{monthLabel(m)}</th>
+                  ))}
+                  <th className="px-3 py-1.5 text-right" rowSpan={2}>Δ Prima</th>
+                </tr>
+                <tr className="text-[10px] uppercase tracking-wider2 text-brand-slate">
+                  {cmp.meses.map((m: string) => (
+                    <React.Fragment key={m}>
+                      <th className="px-2 py-1.5 text-right border-l border-brand-border">Llam.</th>
+                      <th className="px-2 py-1.5 text-right">Cont.%</th>
+                      <th className="px-2 py-1.5 text-right">Conv.%</th>
+                      <th className="px-2 py-1.5 text-right">Prima</th>
+                    </React.Fragment>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cmp.por_operador.map((o: any) => {
+                  const e = ESTADO[o.estado] ?? { label: o.estado === "salio" ? "Salió" : o.estado, cls: "bg-brand-bg text-brand-slate" };
+                  return (
+                    <tr key={o.vendedor} className={`border-t border-brand-border hover:bg-brand-bg-soft ${o.es_equipo ? "" : "opacity-60"}`}>
+                      <td className="px-3 py-2 font-medium text-brand-ink whitespace-nowrap">{o.vendedor}</td>
+                      <td className="px-2 py-2 text-center"><span className={`text-[10px] uppercase tracking-wider2 font-bold px-1.5 py-0.5 rounded ${e.cls}`}>{e.label}</span></td>
+                      {cmp.meses.map((m: string) => {
+                        const d = o.por_mes[m];
+                        return (
+                          <React.Fragment key={m}>
+                            <td className="px-2 py-2 text-right border-l border-brand-border">{d ? formatInt(d.llamadas) : <span className="text-brand-mist">—</span>}</td>
+                            <td className="px-2 py-2 text-right font-mono text-xs">{d ? formatPct(d.contacto_pct) : "—"}</td>
+                            <td className="px-2 py-2 text-right font-mono text-xs">{d ? formatPct(d.conversion_pct) : "—"}</td>
+                            <td className="px-2 py-2 text-right">{d ? formatGs(d.prima_emitida) : "—"}</td>
+                          </React.Fragment>
+                        );
+                      })}
+                      <td className="px-3 py-2 text-right font-mono text-xs">
+                        {o.prima_delta_pct == null ? <span className="text-brand-mist">—</span>
+                          : <span className={o.prima_delta_pct >= 0 ? "text-emerald-600" : "text-brand-primary"}>{o.prima_delta_pct > 0 ? "▲" : o.prima_delta_pct < 0 ? "▼" : "→"} {Math.abs(o.prima_delta_pct)}%</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </section>
+        </>
+      )}
+    </>
   );
 }
 
