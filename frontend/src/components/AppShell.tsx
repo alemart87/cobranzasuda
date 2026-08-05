@@ -62,11 +62,13 @@ const NAV_VENTAS_INICIO = { href: "/televentas", label: "Inicio" };
 const NAV_VENTAS_REPORTS = [
   { href: "/televentas/llamadas/reports", label: "Llamadas" },
   { href: "/televentas/produccion/reports", label: "Producción" },
+  { href: "/televentas/crm/reports", label: "Gestiones CRM" },
   { href: "/televentas/comparativo", label: "Comparativo" },
 ];
 const NAV_VENTAS_UPLOADS = [
   { href: "/televentas/llamadas/upload", label: "Llamadas" },
   { href: "/televentas/produccion/upload", label: "Producción" },
+  { href: "/televentas/crm/upload", label: "Gestiones CRM" },
 ];
 // OJO: "/televentas" hace prefix-match con "/televentas-claro"; se resuelve
 // chequeando inTeleventas (claro) ANTES que inVentas.

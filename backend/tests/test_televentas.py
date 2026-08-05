@@ -181,3 +181,43 @@ def test_comparar_meses_y_caidas():
     cd = caidas_vendedores(prev, curr, "2026-05", "2026-06", umbral_pct=30.0)
     nombres = {c["vendedor"] for c in cd["caidas"]}
     assert "Ana" in nombres and "Luis" not in nombres  # Luis subió, Ana cayó 70%
+
+
+def test_gestiones_crm_funnel():
+    """Funnel CRM: contacto = subestado ≠ 'No contesta'; tasa aceptación sobre contactos."""
+    from datetime import datetime as _dt
+    from app.services.analyzers.televentas_crm import analyze_televentas_crm
+
+    def g(sub, user="Ana", dia=1, obs=""):
+        return {"usuario": user, "subestado": sub, "estado": "Gestionado", "campana": "Base X",
+                "lead": "CLIENTE", "observacion": obs, "fecha": _dt(2026, 8, dia, 9, 0)}
+
+    rows = ([g("No contesta")] * 6 + [g("No acepta", obs="no le interesa")] * 2
+            + [g("Agendado")] + [g("Acepta", dia=2)])
+    a = analyze_televentas_crm(rows)
+    k = a["kpis"]
+    assert k["total_gestiones"] == 10
+    assert k["contactos"] == 4 and k["tasa_contacto_pct"] == 40.0
+    assert k["aceptas"] == 1 and k["tasa_aceptacion_pct"] == 25.0
+    assert a["por_dia"][-1]["acumulado"] == 10
+    op = a["por_operador"][0]
+    assert op["operador"] == "Ana" and op["gestiones"] == 10 and op["dias_activos"] == 2
+
+
+def test_voz_ventas_motivos_noventa():
+    """Voz en ventas: clasificación de motivos y separación de no-venta."""
+    from app.services.analyzers.voz_ventas import analizar_voz_ventas, clasificar_motivo
+    assert clasificar_motivo("NO INTERESADO") == "No interesado / rechaza"
+    assert clasificar_motivo("No lo quiere") == "No interesado / rechaza"
+    assert clasificar_motivo("no cuenta  con numero de celular") == "Sin datos de contacto"
+    assert clasificar_motivo("cuenta con seguro en otra compañia") == "Ya tiene cobertura"
+    assert clasificar_motivo("no cuenta con tc ni cuenta bancaria") == "Sin medio de pago"
+    rows = [
+        {"subestado": "No acepta", "observacion": "no está interesado"},
+        {"subestado": "No acepta", "observacion": "ya tiene seguro"},
+        {"subestado": "No contesta", "observacion": "buzon de voz"},
+        {"subestado": "Acepta", "observacion": "acepta la propuesta"},
+    ]
+    v = analizar_voz_ventas(rows)
+    assert v["disponible"] and v["total_observaciones"] == 4
+    assert v["no_venta"]["total"] == 2  # solo los 'No acepta' con observación

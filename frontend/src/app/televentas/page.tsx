@@ -201,7 +201,8 @@ export default function TeleventasHubPage() {
         <div className="grid md:grid-cols-2 gap-4">
           <HubCard href="/televentas/llamadas/reports" title="Reportes de Llamadas" desc="Contactabilidad, TMO, distribución de duración, curva horaria e insights por operador." bar="bg-brand-cyan" />
           <HubCard href="/televentas/produccion/reports" title="Reportes de Producción" desc="Emisiones y anulaciones, ticket, mix de productos y ranking de vendedores." bar="bg-brand-orange" />
-          <HubCard href="/televentas/comparativo" title="Comparativo mensual" desc="Mes vs mes anterior: conversión, llamadas por operador y análisis del cambio." bar="bg-brand-purple" />
+          <HubCard href="/televentas/crm/reports" title="Gestiones CRM" desc="Funnel de gestión, productividad por operador y la Voz del Cliente en Ventas (motivos de no-venta)." bar="bg-brand-purple" badge="Nuevo" />
+          <HubCard href="/televentas/comparativo" title="Comparativo mensual" desc="Tendencias multi-mes y comparación de meses seleccionados por operador." bar="bg-brand-purple" />
           {canUseAgent && (
             <HubCard href="/televentas/agente" title="Agente de Ventas" desc="Preguntá en lenguaje natural: conversión, ranking, alertas y gráficos al instante." bar="bg-brand-purple" badge="IA" />
           )}
@@ -215,6 +216,7 @@ export default function TeleventasHubPage() {
             <HubCard href="/televentas/informe-general" title="Informe General" desc="Consolidá gerencial + llamadas + producción en un PDF corporativo." bar="bg-brand-primary" badge="Nuevo" />
             <HubCard href="/televentas/llamadas/upload" title="Subir Llamadas" desc="Procesar el export de voz saliente del período." bar="bg-brand-cyan" />
             <HubCard href="/televentas/produccion/upload" title="Subir Producción" desc="Procesar el Libro de Producción (ventas de pólizas)." bar="bg-brand-orange" />
+            <HubCard href="/televentas/crm/upload" title="Subir Gestiones CRM" desc="Procesar el export de gestiones del CRM de ventas." bar="bg-brand-purple" />
             <HubCard href="/televentas/publicaciones" title="Publicaciones" desc="Publicar/despublicar reportes. Los clientes solo ven lo publicado." bar="bg-brand-primary" />
           </div>
         </section>

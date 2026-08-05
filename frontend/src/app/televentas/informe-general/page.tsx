@@ -23,9 +23,11 @@ export default function TeleventasInformePage() {
   const [ov, setOv] = useState<any>(null);
   const [llamadas, setLlamadas] = useState<any>(null);
   const [produccion, setProduccion] = useState<any>(null);
+  const [crm, setCrm] = useState<any>(null);
   const [incGerencial, setIncGerencial] = useState(true);
   const [incLlamadas, setIncLlamadas] = useState(true);
   const [incProduccion, setIncProduccion] = useState(true);
+  const [incCrm, setIncCrm] = useState(true);
 
   useEffect(() => { setUser(getUser()); load(); }, []);
 
@@ -35,11 +37,14 @@ export default function TeleventasInformePage() {
       setOv(d); setMonth(d.month);
       setTitulo((t) => t || `Informe de Televentas — ${d.month ? monthLabel(d.month) : ""}`);
       setMonths(d.available_months || []);
-      const [ll, pr] = await Promise.all([
+      const [ll, pr, crmList] = await Promise.all([
         d.llamadas_report_id ? apiFetch<any>(`/api/v1/televentas/llamadas/reports/${d.llamadas_report_id}`).catch(() => null) : null,
         d.produccion_report_id ? apiFetch<any>(`/api/v1/televentas/produccion/reports/${d.produccion_report_id}`).catch(() => null) : null,
+        apiFetch<{ items: any[] }>("/api/v1/televentas/crm/reports").catch(() => ({ items: [] })),
       ]);
       setLlamadas(ll); setProduccion(pr);
+      const crmPub = (crmList.items || []).find((r: any) => r.is_published && r.period_month?.slice(0, 7) === d.month);
+      setCrm(crmPub ? await apiFetch<any>(`/api/v1/televentas/crm/reports/${crmPub.id}`).catch(() => null) : null);
     }).finally(() => setLoading(false));
   };
 
@@ -79,6 +84,7 @@ export default function TeleventasInformePage() {
               <Toggle label="Resumen gerencial" checked={incGerencial} avail={!!o} onChange={setIncGerencial} />
               <Toggle label="Reporte de Llamadas" checked={incLlamadas} avail={!!llamadas} onChange={setIncLlamadas} />
               <Toggle label="Reporte de Producción" checked={incProduccion} avail={!!produccion} onChange={setIncProduccion} />
+              <Toggle label="Gestiones CRM" checked={incCrm} avail={!!crm} onChange={setIncCrm} />
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -96,7 +102,49 @@ export default function TeleventasInformePage() {
       {incGerencial && o && <GerencialPrint o={o} month={month} />}
       {incLlamadas && llamadas && <LlamadasPrint r={llamadas} />}
       {incProduccion && produccion && <ProduccionPrint r={produccion} />}
+      {incCrm && crm && <CrmPrint r={crm} />}
     </AppShell>
+  );
+}
+
+function CrmPrint({ r }: { r: any }) {
+  const k = r.data.kpis;
+  const v = r.data.voz_ventas || {};
+  return (
+    <Block title="Gestiones CRM">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <KpiCard label="Gestiones" value={formatInt(k.total_gestiones)} hint={`${formatInt(k.prom_gestiones_dia)} /día`} accent="primary" />
+        <KpiCard label="Contactos" value={formatInt(k.contactos)} hint={`${formatPct(k.tasa_contacto_pct)} tasa de contacto`} accent="cyan" />
+        <KpiCard label="Agendados" value={formatInt(k.agendados)} accent="purple" />
+        <KpiCard label="Aceptas" value={formatInt(k.aceptas)} hint={`${formatPct(k.tasa_aceptacion_pct)} sobre contactos`} accent="orange" />
+      </div>
+      <div className="grid md:grid-cols-2 gap-4">
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold text-brand-ink mb-3">Funnel por subestado</h3>
+          <div className="space-y-1.5">
+            {(r.data.por_subestado || []).map((s: any) => (
+              <div key={s.subestado} className="flex items-center gap-2 text-sm">
+                <span className="flex-1 text-brand-graphite">{s.subestado}</span>
+                <span className="font-semibold text-brand-ink">{formatInt(s.cantidad)}</span>
+                <span className="text-xs text-brand-slate w-12 text-right">{formatPct(s.pct)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card p-5">
+          <h3 className="text-sm font-semibold text-brand-ink mb-3">Motivos de no-venta (qué dice el cliente)</h3>
+          <div className="space-y-1.5">
+            {(v.no_venta?.motivos || []).slice(0, 8).map((m: any) => (
+              <div key={m.label} className="flex items-center gap-2 text-sm">
+                <span className="flex-1 text-brand-graphite">{m.label}</span>
+                <span className="font-semibold text-brand-ink">{formatInt(m.cantidad)}</span>
+                <span className="text-xs text-brand-slate w-12 text-right">{formatPct(m.pct)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Block>
   );
 }
 

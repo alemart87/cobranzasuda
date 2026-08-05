@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 
-type Kind = "televentas_llamadas" | "televentas_produccion";
+type Kind = "televentas_llamadas" | "televentas_produccion" | "televentas_crm";
 
 interface Publication {
   kind: Kind; id: string; title: string | null; period_month: string | null; generated_at: string; is_published: boolean;
@@ -22,12 +22,17 @@ const KIND_META: Record<Kind, { label: string; api: string; view: (id: string) =
     label: "Reporte de Producción", api: "/api/v1/televentas/produccion/reports",
     view: (id) => `/televentas/produccion/reports/${id}`, badge: "bg-brand-orange/10 text-brand-orange",
   },
+  televentas_crm: {
+    label: "Gestiones CRM", api: "/api/v1/televentas/crm/reports",
+    view: (id) => `/televentas/crm/reports/${id}`, badge: "bg-brand-purple/10 text-brand-purple",
+  },
 };
 
 const KIND_FILTERS = [
   { value: "all", label: "Todos los tipos" },
   { value: "televentas_llamadas", label: "Llamadas" },
   { value: "televentas_produccion", label: "Producción" },
+  { value: "televentas_crm", label: "Gestiones CRM" },
 ];
 const STATUS_FILTERS = [
   { value: "all", label: "Todos los estados" },
@@ -51,13 +56,15 @@ export default function TeleventasPublicacionesPage() {
 
   const load = async () => {
     try {
-      const [ll, pr] = await Promise.all([
+      const [ll, pr, crm] = await Promise.all([
         apiFetch<{ items: any[] }>("/api/v1/televentas/llamadas/reports"),
         apiFetch<{ items: any[] }>("/api/v1/televentas/produccion/reports"),
+        apiFetch<{ items: any[] }>("/api/v1/televentas/crm/reports"),
       ]);
       const merged: Publication[] = [
         ...ll.items.map((r) => ({ kind: "televentas_llamadas" as Kind, id: r.id, title: r.title, period_month: r.period_month, generated_at: r.generated_at, is_published: r.is_published })),
         ...pr.items.map((r) => ({ kind: "televentas_produccion" as Kind, id: r.id, title: r.title, period_month: r.period_month, generated_at: r.generated_at, is_published: r.is_published })),
+        ...crm.items.map((r) => ({ kind: "televentas_crm" as Kind, id: r.id, title: r.title, period_month: r.period_month, generated_at: r.generated_at, is_published: r.is_published })),
       ];
       merged.sort((a, b) => +new Date(b.generated_at) - +new Date(a.generated_at));
       setItems(merged);

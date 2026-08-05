@@ -297,6 +297,7 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
     return <span className={good ? "text-emerald-600" : "text-brand-primary"}>{pct > 0 ? "▲" : "▼"} {Math.abs(pct).toFixed(1)}%</span>;
   };
 
+  const hayCrm = !!cmp?.generales?.some((g: any) => (g.gestiones_crm ?? 0) > 0);
   const metricas: Array<{ key: string; label: string; fmt: (v: number) => string; inverso?: boolean }> = [
     { key: "total_llamadas", label: "Llamadas", fmt: formatInt },
     { key: "llamadas_prom_asesor_dia", label: "Prom. llamadas / asesor / día", fmt: formatInt },
@@ -307,6 +308,14 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
     { key: "ticket_promedio", label: "Ticket promedio", fmt: formatGs },
     { key: "conversion_pct", label: "Conversión %", fmt: (v) => formatPct(v) },
     { key: "dias_productivos", label: "Días productivos", fmt: formatInt },
+    ...(hayCrm ? [
+      { key: "gestiones_crm", label: "Gestiones CRM", fmt: formatInt },
+      { key: "tasa_contacto_crm", label: "Tasa de contacto CRM %", fmt: (v: number) => formatPct(v) },
+      { key: "agendados_crm", label: "Agendados (CRM)", fmt: formatInt },
+      { key: "aceptas_crm", label: "Aceptas (CRM)", fmt: formatInt },
+      { key: "tasa_aceptacion_crm", label: "Tasa de aceptación CRM %", fmt: (v: number) => formatPct(v) },
+      { key: "prom_gestiones_operador_dia", label: "Prom. gestiones / operador / día", fmt: formatInt },
+    ] : []),
   ];
 
   return (
