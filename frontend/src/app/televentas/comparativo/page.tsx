@@ -235,6 +235,49 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
   disponibles: string[]; seleccion: string[]; onToggle: (m: string) => void;
   onComparar: () => void; cmp: any; loading: boolean; error: string | null;
 }) {
+  const [filtro, setFiltro] = useState("");
+  const [estadoF, setEstadoF] = useState("all");
+  const [soloEquipo, setSoloEquipo] = useState(false);
+  const [sort, setSort] = useState<{ k: string; dir: 1 | -1 } | null>(null);
+
+  const clickSort = (k: string) =>
+    setSort((s) => (s?.k === k ? { k, dir: (s.dir * -1) as 1 | -1 } : { k, dir: k === "vendedor" ? 1 : -1 }));
+
+  const sortVal = (o: any, k: string): any => {
+    if (k === "vendedor") return o.vendedor?.toLowerCase() ?? "";
+    if (k === "delta") return o.prima_delta_pct;
+    const [, mes, campo] = k.split("|");  // "pm|2026-07|prima_emitida"
+    return o.por_mes?.[mes]?.[campo];
+  };
+
+  const filas = (() => {
+    let rows: any[] = cmp?.por_operador ?? [];
+    if (filtro.trim()) {
+      const q = filtro.trim().toLowerCase();
+      rows = rows.filter((o) => o.vendedor?.toLowerCase().includes(q));
+    }
+    if (estadoF !== "all") rows = rows.filter((o) => o.estado === estadoF);
+    if (soloEquipo) rows = rows.filter((o) => o.es_equipo);
+    if (sort) {
+      const { k, dir } = sort;
+      rows = [...rows].sort((a, b) => {
+        const va = sortVal(a, k), vb = sortVal(b, k);
+        const na = va == null ? (dir === -1 ? -Infinity : Infinity) : va;  // vacíos siempre al final
+        const nb = vb == null ? (dir === -1 ? -Infinity : Infinity) : vb;
+        if (typeof na === "string" || typeof nb === "string") return String(na).localeCompare(String(nb)) * dir;
+        return (na - nb) * dir;
+      });
+    }
+    return rows;
+  })();
+
+  const SortTh = ({ k, children, className = "px-2 py-1.5 text-right" }: { k: string; children: React.ReactNode; className?: string }) => (
+    <th onClick={() => clickSort(k)} className={`${className} cursor-pointer select-none hover:text-brand-ink whitespace-nowrap`}
+      title="Ordenar por esta columna">
+      {children}{sort?.k === k ? (sort.dir === -1 ? " ↓" : " ↑") : ""}
+    </th>
+  );
+
   const delta = (cur: number, prev: number, inverso = false) => {
     if (!prev) return <span className="text-brand-mist">—</span>;
     const pct = ((cur - prev) / Math.abs(prev)) * 100;
@@ -317,31 +360,51 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
           <section className="card overflow-x-auto">
             <div className="px-4 pt-4">
               <h2 className="font-display text-xl text-brand-ink uppercase">Rendimiento por operador</h2>
-              <p className="text-xs text-brand-slate mb-2">Estado y Δ prima: primer vs último mes seleccionado.</p>
+              <p className="text-xs text-brand-slate mb-3">Estado y Δ prima: primer vs último mes seleccionado. Clickeá un encabezado para ordenar.</p>
+              <div className="flex flex-wrap items-center gap-3 mb-3 no-print">
+                <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar operador…"
+                  className="input max-w-[220px] !py-1.5 text-sm" />
+                <select value={estadoF} onChange={(e) => setEstadoF(e.target.value)}
+                  className="text-sm border border-brand-border rounded px-3 py-1.5 bg-white">
+                  <option value="all">Todos los estados</option>
+                  <option value="subio">Subió</option>
+                  <option value="cayo">Cayó</option>
+                  <option value="estable">Estable</option>
+                  <option value="nuevo">Nuevo</option>
+                  <option value="salio">Salió</option>
+                </select>
+                <label className="flex items-center gap-1.5 text-sm text-brand-graphite cursor-pointer">
+                  <input type="checkbox" checked={soloEquipo} onChange={(e) => setSoloEquipo(e.target.checked)} className="accent-brand-primary" />
+                  Solo equipo con llamadas
+                </label>
+                <span className="text-xs text-brand-slate ml-auto">{filas.length} de {cmp.por_operador.length} operadores</span>
+              </div>
             </div>
             <table className="w-full text-sm" style={{ minWidth: `${360 + cmp.meses.length * 300}px` }}>
               <thead className="bg-brand-bg border-b border-brand-border">
                 <tr className="text-[10px] uppercase tracking-wider2 text-brand-slate">
-                  <th className="px-3 py-1.5 text-left" rowSpan={2}>Operador</th>
+                  <SortTh k="vendedor" className="px-3 py-1.5 text-left">Operador</SortTh>
                   <th className="px-2 py-1.5 text-center" rowSpan={2}>Estado</th>
                   {cmp.meses.map((m: string) => (
                     <th key={m} className="px-2 py-1.5 text-center border-l border-brand-border" colSpan={4}>{monthLabel(m)}</th>
                   ))}
-                  <th className="px-3 py-1.5 text-right" rowSpan={2}>Δ Prima</th>
+                  <SortTh k="delta" className="px-3 py-1.5 text-right">Δ Prima</SortTh>
                 </tr>
                 <tr className="text-[10px] uppercase tracking-wider2 text-brand-slate">
+                  <th className="px-3 py-1.5" />
                   {cmp.meses.map((m: string) => (
                     <React.Fragment key={m}>
-                      <th className="px-2 py-1.5 text-right border-l border-brand-border">Llam.</th>
-                      <th className="px-2 py-1.5 text-right">Cont.%</th>
-                      <th className="px-2 py-1.5 text-right">Conv.%</th>
-                      <th className="px-2 py-1.5 text-right">Prima</th>
+                      <SortTh k={`pm|${m}|llamadas`} className="px-2 py-1.5 text-right border-l border-brand-border">Llam.</SortTh>
+                      <SortTh k={`pm|${m}|contacto_pct`}>Cont.%</SortTh>
+                      <SortTh k={`pm|${m}|conversion_pct`}>Conv.%</SortTh>
+                      <SortTh k={`pm|${m}|prima_emitida`}>Prima</SortTh>
                     </React.Fragment>
                   ))}
+                  <th className="px-3 py-1.5" />
                 </tr>
               </thead>
               <tbody>
-                {cmp.por_operador.map((o: any) => {
+                {filas.map((o: any) => {
                   const e = ESTADO[o.estado] ?? { label: o.estado === "salio" ? "Salió" : o.estado, cls: "bg-brand-bg text-brand-slate" };
                   return (
                     <tr key={o.vendedor} className={`border-t border-brand-border hover:bg-brand-bg-soft ${o.es_equipo ? "" : "opacity-60"}`}>
