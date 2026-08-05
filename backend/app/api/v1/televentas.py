@@ -34,7 +34,9 @@ from ...schemas.televentas import (
     TeleventasProduccionReportDetail, TeleventasProduccionReportList, TeleventasProduccionReportSummary,
     TeleventasProduccionUploadList, TeleventasProduccionUploadRead,
 )
-from ...services.analyzers import combine_televentas, comparativo_televentas, analizar_tendencia_mensual
+from ...services.analyzers import (
+    combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
+)
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
@@ -597,6 +599,94 @@ async def televentas_comparar(
     return {"meses": sel, "generales": generales, "por_operador": filas,
             "insights": comp["insights"], "extremos": {"desde": primero, "hasta": ultimo},
             "available_months": sorted(disponibles, reverse=True)}
+
+
+async def _parametros_simulador(db: AsyncSession, meses_sel: Optional[list[str]] = None) -> dict:
+    """Parámetros REALES para el simulador.
+
+    Solo meses publicados COMPLETOS (llamadas Y producción > 0; excluye el mes en
+    curso). El usuario elige qué meses alimentan el modelo (`meses_sel`); default =
+    últimos 3. Las tasas se calculan sobre los TOTALES de los meses elegidos (pooled),
+    no como promedio de porcentajes — un mes atípico (ej. mayo con conversión 8,5%
+    vs julio 4,3%) pesa según su volumen real y se puede excluir."""
+    months = set()
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport):
+        for (pm,) in (await db.execute(
+            select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
+        )).all():
+            if pm:
+                months.add(pm.strftime("%Y-%m"))
+    completos: list[dict] = []
+    for m in sorted(months, reverse=True):
+        g = await _metricas_del_mes(db, m)
+        if g.get("polizas_emitidas", 0) > 0 and g.get("total_llamadas", 0) > 0:
+            completos.append(g)
+        if len(completos) >= 12:
+            break
+    if not completos:
+        return {"disponible": False, "meses_usados": [], "meses_disponibles": [],
+                "mensaje": "No hay meses publicados completos (con llamadas y producción)."}
+
+    # Detalle por mes para que el gerente vea la dispersión y elija.
+    disponibles = [{
+        "mes": g["mes"],
+        "conversion_pct": g.get("conversion_pct", 0),
+        "contactabilidad_pct": g.get("contactabilidad", 0),
+        "ticket_promedio": g.get("ticket_promedio", 0),
+        "llamadas_asesor_dia": g.get("llamadas_prom_asesor_dia", 0),
+        "polizas": g.get("polizas_emitidas", 0),
+        "llamadas": g.get("total_llamadas", 0),
+        "agentes": g.get("agentes_activos", 0),
+    } for g in completos]
+
+    sel = [g for g in completos if g["mes"] in (meses_sel or [])]
+    if not sel:
+        sel = completos[:3]
+
+    # ---- Tasas POOLED sobre los totales de los meses seleccionados ----
+    t_llam = sum(float(g.get("total_llamadas") or 0) for g in sel)
+    t_cont = sum(float(g.get("contestadas") or 0) for g in sel)
+    t_pol = sum(float(g.get("polizas_emitidas") or 0) for g in sel)
+    t_emit = sum(float(g.get("prima_emitida") or 0) for g in sel)
+    t_neta = sum(float(g.get("prima_neta") or 0) for g in sel)
+
+    def _avg(key: str) -> float:
+        vals = [float(g.get(key) or 0) for g in sel]
+        return sum(vals) / len(vals) if vals else 0.0
+
+    return {
+        "disponible": True,
+        "meses_usados": [g["mes"] for g in sel],
+        "meses_disponibles": disponibles,
+        "ticket_promedio": round(t_emit / t_pol) if t_pol else 0,
+        "conversion_pct": round(t_pol / t_cont * 100, 2) if t_cont else 0.0,
+        "contactabilidad_pct": round(t_cont / t_llam * 100, 1) if t_llam else 0.0,
+        "llamadas_asesor_dia": round(_avg("llamadas_prom_asesor_dia"), 1),
+        "dias_habiles": round(_avg("dias_operativos")) or 21,
+        "tasa_anulacion_pct": round((t_emit - t_neta) / t_emit * 100, 1) if t_emit else 0.0,
+        "intentos_por_registro": 2.0,  # marcaciones promedio por registro de base (ajustable)
+    }
+
+
+@router.get("/simulador")
+async def televentas_simulador(
+    meta_prima: Optional[float] = Query(None, description="Meta de prima NETA mensual (Gs)"),
+    asesores: Optional[float] = Query(None, description="Dotación disponible"),
+    meses: Optional[str] = Query(None, description="Meses base del modelo, YYYY-MM separados por coma"),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Simulador gerencial de ventas. Sin argumentos devuelve los parámetros reales;
+    con `meta_prima` o `asesores` devuelve además la simulación y escenarios.
+    `meses` define qué meses alimentan las tasas (default: últimos 3 completos)."""
+    meses_sel = [m.strip() for m in meses.split(",") if m.strip()] if meses else None
+    params = await _parametros_simulador(db, meses_sel)
+    out: dict = {"parametros": params}
+    if params.get("disponible") and (meta_prima is not None or asesores is not None):
+        out["resultado"] = simular(params, meta_prima=meta_prima, asesores=asesores)
+        if meta_prima is not None:
+            out["escenarios"] = escenarios(params, meta_prima)
+    return out
 
 
 @router.get("/tendencias")
