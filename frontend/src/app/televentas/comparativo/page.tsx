@@ -238,6 +238,8 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
   const [filtro, setFiltro] = useState("");
   const [estadoF, setEstadoF] = useState("all");
   const [soloEquipo, setSoloEquipo] = useState(false);
+  const [convOp, setConvOp] = useState<"<=" | ">=">("<=");
+  const [convVal, setConvVal] = useState("");
   const [sort, setSort] = useState<{ k: string; dir: 1 | -1 } | null>(null);
 
   const clickSort = (k: string) =>
@@ -258,6 +260,15 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
     }
     if (estadoF !== "all") rows = rows.filter((o) => o.estado === estadoF);
     if (soloEquipo) rows = rows.filter((o) => o.es_equipo);
+    if (convVal.trim() !== "" && !isNaN(Number(convVal))) {
+      // Filtra por la conversión del ÚLTIMO mes seleccionado (operadores sin datos quedan fuera).
+      const ult = cmp?.meses?.[cmp.meses.length - 1];
+      const v = Number(convVal);
+      rows = rows.filter((o) => {
+        const c = o.por_mes?.[ult]?.conversion_pct;
+        return c != null && (convOp === "<=" ? c <= v : c >= v);
+      });
+    }
     if (sort) {
       const { k, dir } = sort;
       rows = [...rows].sort((a, b) => {
@@ -377,6 +388,19 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
                   <input type="checkbox" checked={soloEquipo} onChange={(e) => setSoloEquipo(e.target.checked)} className="accent-brand-primary" />
                   Solo equipo con llamadas
                 </label>
+                <div className="flex items-center gap-1.5 text-sm text-brand-graphite">
+                  <span className="whitespace-nowrap">Conversión (últ. mes)</span>
+                  <select value={convOp} onChange={(e) => setConvOp(e.target.value as "<=" | ">=")}
+                    className="border border-brand-border rounded px-1.5 py-1.5 bg-white text-sm">
+                    <option value="<=">≤</option>
+                    <option value=">=">≥</option>
+                  </select>
+                  <input type="number" step="0.5" min="0" value={convVal} onChange={(e) => setConvVal(e.target.value)}
+                    placeholder="%" className="input max-w-[72px] !py-1.5 text-sm" />
+                  {convVal !== "" && (
+                    <button onClick={() => setConvVal("")} className="text-brand-mist hover:text-brand-primary text-sm" title="Limpiar">✕</button>
+                  )}
+                </div>
                 <span className="text-xs text-brand-slate ml-auto">{filas.length} de {cmp.por_operador.length} operadores</span>
               </div>
             </div>
