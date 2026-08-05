@@ -424,6 +424,76 @@ async def _metricas_del_mes(db: AsyncSession, month: str) -> dict:
     }
 
 
+@router.get("/comparar")
+async def televentas_comparar(
+    meses: str = Query(..., description="2 o 3 meses YYYY-MM separados por coma, ej: 2026-05,2026-07"),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Comparación de MESES SELECCIONADOS por el usuario (2 o 3): métricas generales
+    por mes lado a lado, rendimiento por operador mes a mes e insights entre extremos."""
+    sel = sorted({m.strip() for m in meses.split(",") if m.strip()})
+    if not 2 <= len(sel) <= 3:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Seleccioná 2 o 3 meses (YYYY-MM).")
+
+    disponibles: set[str] = set()
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport):
+        for (pm,) in (await db.execute(
+            select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
+        )).all():
+            if pm:
+                disponibles.add(pm.strftime("%Y-%m"))
+    faltan = [m for m in sel if m not in disponibles]
+    if faltan:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Sin datos publicados para: {', '.join(faltan)}")
+
+    generales = [await _metricas_del_mes(db, m) for m in sel]
+    ovs = {m: await _overview_del_mes(db, m) for m in sel}
+
+    # ---- por operador: unión de vendedores de todos los meses seleccionados ----
+    vendedores: dict[str, dict] = {}
+    for m in sel:
+        for v in ovs[m].get("por_vendedor", []):
+            slot = vendedores.setdefault(v["vendedor"], {"es_equipo": False, "por_mes": {}})
+            slot["es_equipo"] = slot["es_equipo"] or bool(v.get("es_equipo"))
+            slot["por_mes"][m] = {
+                "llamadas": v.get("llamadas", 0),
+                "contactadas": v.get("contestadas", 0),
+                "contacto_pct": v.get("pct_contestadas", 0),
+                "polizas": v.get("polizas", 0),
+                "prima_emitida": v.get("prima_emitida", 0),
+                "conversion_pct": v.get("conversion_pct", 0),
+            }
+    primero, ultimo = sel[0], sel[-1]
+
+    def _pct_delta(cur: float, prev: float):
+        return round((cur - prev) / abs(prev) * 100, 1) if prev else None
+
+    filas = []
+    for nombre, slot in vendedores.items():
+        a = slot["por_mes"].get(primero)
+        b = slot["por_mes"].get(ultimo)
+        prima_pct = _pct_delta((b or {}).get("prima_emitida", 0), (a or {}).get("prima_emitida", 0))
+        estado = "estable"
+        if a is None and b is not None:
+            estado = "nuevo"
+        elif b is None:
+            estado = "salio"
+        elif prima_pct is not None and prima_pct <= -25:
+            estado = "cayo"
+        elif prima_pct is not None and prima_pct >= 25:
+            estado = "subio"
+        filas.append({"vendedor": nombre, "es_equipo": slot["es_equipo"], "estado": estado,
+                      "por_mes": slot["por_mes"], "prima_delta_pct": prima_pct})
+    filas.sort(key=lambda x: -(x["por_mes"].get(ultimo, x["por_mes"].get(primero, {})).get("prima_emitida", 0)))
+
+    comp = comparativo_televentas(ovs[primero], ovs[ultimo], primero, ultimo)
+    return {"meses": sel, "generales": generales, "por_operador": filas,
+            "insights": comp["insights"], "extremos": {"desde": primero, "hasta": ultimo},
+            "available_months": sorted(disponibles, reverse=True)}
+
+
 @router.get("/tendencias")
 async def televentas_tendencias(
     meses: int = Query(12, ge=2, le=24, description="Máximo de meses a incluir (más recientes)"),
