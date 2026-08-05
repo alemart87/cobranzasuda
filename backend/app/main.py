@@ -84,6 +84,10 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("televentas_produccion_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
     ("televentas_produccion_reports", "published_by", "VARCHAR(36)"),
     ("televentas_produccion_reports", "title", "VARCHAR(255)"),
+    ("televentas_crm_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
+    ("televentas_crm_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
+    ("televentas_crm_reports", "published_by", "VARCHAR(36)"),
+    ("televentas_crm_reports", "title", "VARCHAR(255)"),
     # agente: resumen de razonamiento + consumo de tokens/costo (tabla nueva)
     ("agent_messages", "reasoning", "TEXT NOT NULL DEFAULT ''"),
     ("agent_messages", "input_tokens", "INTEGER NOT NULL DEFAULT 0"),

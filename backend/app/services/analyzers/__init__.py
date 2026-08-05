@@ -13,6 +13,8 @@ from .televentas_tendencias import (
     proyeccion_cierre, comparar_meses, caidas_vendedores, comparativo_televentas,
     analizar_tendencia_mensual,
 )
+from .televentas_crm import analyze_televentas_crm, build_crm_items
+from .voz_ventas import analizar_voz_ventas, clasificar_motivo
 
 __all__ = [
     "analyze_cartera", "analyze_recupero", "project_recupero",
@@ -23,4 +25,5 @@ __all__ = [
     "build_produccion_items", "combine_televentas",
     "proyeccion_cierre", "comparar_meses", "caidas_vendedores", "comparativo_televentas",
     "analizar_tendencia_mensual",
+    "analyze_televentas_crm", "build_crm_items", "analizar_voz_ventas", "clasificar_motivo",
 ]

@@ -12,6 +12,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 
 from ...core.database import session_scope
+from ...models.televentas_crm_report import TeleventasCrmReport
 from ...models.televentas_llamadas_report import TeleventasLlamadasReport
 from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_item import TeleventasProduccionItem
@@ -226,6 +227,38 @@ async def tv_tendencias_impl(meses: int = 12) -> dict[str, Any]:
         return {"sin_datos": True, "mensaje": "Se necesitan al menos 2 meses con datos para ver tendencias.",
                 "meses": serie}
     return {"meses": serie, "insights": analizar_tendencia_mensual(serie), "total_meses": len(serie)}
+
+
+async def tv_gestiones_crm_impl(mes: Optional[str] = None) -> dict[str, Any]:
+    """Gestiones CRM del mes: KPIs del funnel (contacto/no acepta/agendado/acepta),
+    productividad por operador, por campaña y la Voz del Cliente en Ventas
+    (motivos generales + motivos de NO-VENTA con lo que dice el cliente)."""
+    periodos = await _periodos()
+    # meses con CRM (puede diferir de llamadas/producción)
+    async with session_scope() as db:
+        crm_meses = sorted({pm.strftime("%Y-%m") for (pm,) in (await db.execute(
+            select(TeleventasCrmReport.period_month).where(TeleventasCrmReport.period_month.isnot(None))
+        )).all() if pm}, reverse=True)
+    mes = (mes or "").strip()
+    month = mes if mes in crm_meses else (crm_meses[0] if crm_meses else None)
+    crm = await _latest(TeleventasCrmReport, month) if month else None
+    if not crm:
+        return {"sin_datos": True, "mensaje": f"No hay reporte de Gestiones CRM para {month or 'ningún mes'}."}
+    d = crm.data or {}
+    voz = d.get("voz_ventas", {}) or {}
+    return {
+        "mes": month, "kpis": d.get("kpis", {}),
+        "por_subestado": d.get("por_subestado", []),
+        "por_operador": d.get("por_operador", []),
+        "por_campana": d.get("por_campana", [])[:15],
+        "por_dia": d.get("por_dia", []),
+        "voz_ventas": {
+            "total_observaciones": voz.get("total_observaciones", 0),
+            "motivos": voz.get("motivos", []),
+            "no_venta": voz.get("no_venta", {}),
+            "frases": voz.get("frases", [])[:10],
+        },
+    }
 
 
 async def tv_focus_impl(focus_refs: Optional[list[str]]) -> dict[str, Any]:

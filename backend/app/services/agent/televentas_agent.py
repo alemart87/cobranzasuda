@@ -13,8 +13,8 @@ from . import core
 from .core import AgentNotConfigured
 from .televentas_tools import (
     tv_buscar_polizas_impl, tv_caidas_vendedores_impl, tv_comparar_meses_impl, tv_focus_impl,
-    tv_listar_periodos_impl, tv_llamadas_impl, tv_overview_impl, tv_produccion_impl,
-    tv_proyeccion_impl, tv_ranking_vendedores_impl, tv_tendencias_impl,
+    tv_gestiones_crm_impl, tv_listar_periodos_impl, tv_llamadas_impl, tv_overview_impl,
+    tv_produccion_impl, tv_proyeccion_impl, tv_ranking_vendedores_impl, tv_tendencias_impl,
 )
 from .tools import AgentContext
 
@@ -58,6 +58,10 @@ activos, contactabilidad, prima). Leé sus insights (ej. conversión cayendo N m
 peor contacto = base deteriorada) y graficá la evolución con `emit_canvas` (tipo 'line').
 10. Caídas de vendedores: usá `tv_caidas_vendedores` para señalar quién bajó fuerte (prima, pólizas o \
 llamadas) vs el mes anterior, con el % de caída y una acción. Requiere 2+ meses; si hay uno solo, decilo.
+11. GESTIONES CRM (`tv_gestiones_crm`): funnel de gestión comercial (no contesta → no acepta / \
+agendado / acepta), tasa de contacto y aceptación, productividad por operador y por campaña/base. \
+Para "por qué no compran" o "qué dice el cliente", usá su `voz_ventas`: motivos clasificados y \
+motivos de NO-VENTA con ejemplos textuales. Citá ejemplos reales al explicar motivos.
 
 FOCO del usuario: llamá `tv_focus` PRIMERO. Si seleccionó reportes, centrá el análisis en ellos.
 
@@ -66,7 +70,8 @@ Si no hay nada, sugerí subir y publicar los reportes. La identidad de los asegu
 ([cliente]): no la pidas ni la inventes; el análisis es de performance comercial, no de clientes.
 
 Tools: `tv_focus`, `tv_listar_periodos`, `tv_overview`, `tv_ranking_vendedores`, `tv_produccion`, \
-`tv_llamadas`, `tv_buscar_polizas`, `tv_proyeccion`, `tv_comparar_meses`, `tv_caidas_vendedores`.
+`tv_llamadas`, `tv_gestiones_crm`, `tv_buscar_polizas`, `tv_proyeccion`, `tv_comparar_meses`, \
+`tv_tendencias`, `tv_caidas_vendedores`.
 
 Visualización con `emit_canvas` (panel derecho) — usá EXACTAMENTE estas formas de `datos`:
 - KPIs: tipo="kpis", datos={"kpis":[{"label":"Prima emitida","valor":"Gs 300.362.597"},{"label":"Conversión","valor":"3,0 %"}]}
@@ -144,6 +149,14 @@ def _build_televentas_agent():
         return await tv_comparar_meses_impl(mes, mes_previo)
 
     @function_tool(strict_mode=False)
+    async def tv_gestiones_crm(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None) -> dict:
+        """GESTIONES CRM del mes: funnel de gestión comercial (no contesta / no acepta / agendado /
+        acepta), tasa de contacto y de aceptación, productividad por operador (gestiones/día), por
+        campaña/base, y la VOZ DEL CLIENTE EN VENTAS: motivos clasificados de las observaciones y
+        motivos de NO-VENTA (qué dice el cliente al rechazar, con ejemplos). `mes` YYYY-MM."""
+        return await tv_gestiones_crm_impl(mes)
+
+    @function_tool(strict_mode=False)
     async def tv_tendencias(ctx: RunContextWrapper[AgentContext], meses: int = 12) -> dict:
         """TENDENCIA multi-mes (varios meses juntos): serie de conversión, llamadas totales y
         promedio (por día y por asesor), agentes activos, contactabilidad, prima y pólizas, con
@@ -171,8 +184,8 @@ def _build_televentas_agent():
         return {"ok": True, "artifact_id": artifact["id"]}
 
     tools = [tv_focus, tv_listar_periodos, tv_overview, tv_ranking_vendedores, tv_produccion,
-             tv_llamadas, tv_buscar_polizas, tv_proyeccion, tv_comparar_meses, tv_tendencias,
-             tv_caidas_vendedores, emit_canvas]
+             tv_llamadas, tv_gestiones_crm, tv_buscar_polizas, tv_proyeccion, tv_comparar_meses,
+             tv_tendencias, tv_caidas_vendedores, emit_canvas]
 
     model_settings = None
     try:

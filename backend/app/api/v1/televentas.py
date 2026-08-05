@@ -18,6 +18,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.config import settings
 from ...core.database import get_db
 from ...jobs.televentas_queue import signal_televentas_queue
+from ...models.televentas_crm_report import TeleventasCrmReport
+from ...models.televentas_crm_upload import TeleventasCrmUpload
 from ...models.televentas_llamadas_report import TeleventasLlamadasReport
 from ...models.televentas_llamadas_upload import TeleventasLlamadasUpload
 from ...models.televentas_produccion_item import TeleventasProduccionItem
@@ -25,6 +27,8 @@ from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_upload import TeleventasProduccionUpload
 from ...schemas.televentas import (
     PublishRequest,
+    TeleventasCrmReportDetail, TeleventasCrmReportList, TeleventasCrmReportSummary,
+    TeleventasCrmUploadList, TeleventasCrmUploadRead,
     TeleventasLlamadasReportDetail, TeleventasLlamadasReportList, TeleventasLlamadasReportSummary,
     TeleventasLlamadasUploadList, TeleventasLlamadasUploadRead,
     TeleventasProduccionReportDetail, TeleventasProduccionReportList, TeleventasProduccionReportSummary,
@@ -284,6 +288,98 @@ async def delete_produccion_report(report_id: str, request: Request,
     return {"status": "deleted", "report_id": report_id}
 
 
+# ============================ GESTIONES CRM ============================
+@router.post("/crm/uploads", response_model=TeleventasCrmUploadRead, status_code=status.HTTP_202_ACCEPTED)
+async def create_crm_upload(
+    background_tasks: BackgroundTasks, request: Request,
+    file: UploadFile = File(..., description="Export de Gestiones CRM (ventas)"),
+    period_month: Optional[str] = Form(None),
+    user: CurrentUser = Depends(require_analyst_or_admin),
+    db: AsyncSession = Depends(get_db),
+) -> TeleventasCrmUpload:
+    upload = TeleventasCrmUpload(uploaded_by=user.id, status="pending", period_month=_parse_period(period_month))
+    db.add(upload)
+    await db.commit()
+    await db.refresh(upload)
+    upload.filename, upload.file_path, upload.file_sha256 = await _save(file, "crm", "crm", upload.id)
+    await db.commit()
+    await record_action(db, user_id=user.id, action="create_televentas_crm_upload",
+                        resource_type="televentas_crm_upload", resource_id=upload.id,
+                        ip=client_ip(request), extra={"period_month": period_month})
+    signal_televentas_queue()
+    return upload
+
+
+@router.get("/crm/uploads", response_model=TeleventasCrmUploadList)
+async def list_crm_uploads(user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    items = (await db.execute(
+        select(TeleventasCrmUpload).order_by(TeleventasCrmUpload.uploaded_at.desc()).limit(100)
+    )).scalars().all()
+    return TeleventasCrmUploadList(items=[TeleventasCrmUploadRead.model_validate(u) for u in items], total=len(items))
+
+
+@router.get("/crm/uploads/{upload_id}", response_model=TeleventasCrmUploadRead)
+async def get_crm_upload(upload_id: str, user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    upload = await db.get(TeleventasCrmUpload, upload_id)
+    if not upload:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Upload no encontrado")
+    return upload
+
+
+@router.get("/crm/reports", response_model=TeleventasCrmReportList)
+async def list_crm_reports(user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    stmt = select(TeleventasCrmReport).order_by(TeleventasCrmReport.generated_at.desc()).limit(100)
+    if user.is_client:
+        stmt = stmt.where(TeleventasCrmReport.is_published == True)  # noqa: E712
+    items = (await db.execute(stmt)).scalars().all()
+    return TeleventasCrmReportList(items=[TeleventasCrmReportSummary.model_validate(r) for r in items], total=len(items))
+
+
+@router.get("/crm/reports/{report_id}", response_model=TeleventasCrmReportDetail)
+async def get_crm_report(report_id: str, request: Request, user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    report = await db.get(TeleventasCrmReport, report_id)
+    if not report:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Reporte no encontrado")
+    if user.is_client and not report.is_published:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Reporte no publicado")
+    await record_action(db, user_id=user.id, action="view_televentas_crm_report",
+                        resource_type="televentas_crm_report", resource_id=report_id,
+                        ip=client_ip(request), extra={"role": user.role})
+    return report
+
+
+@router.post("/crm/reports/{report_id}/publish", response_model=TeleventasCrmReportSummary)
+async def publish_crm_report(report_id: str, payload: PublishRequest, request: Request,
+                             user: CurrentUser = Depends(require_analyst_or_admin), db: AsyncSession = Depends(get_db)):
+    report = await db.get(TeleventasCrmReport, report_id)
+    if not report:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Reporte no encontrado")
+    report.is_published = payload.is_published
+    report.published_at = datetime.utcnow() if payload.is_published else None
+    report.published_by = user.id if payload.is_published else None
+    if payload.title is not None:
+        report.title = payload.title
+    await db.commit()
+    await db.refresh(report)
+    await record_action(db, user_id=user.id,
+                        action="publish_televentas_crm_report" if payload.is_published else "unpublish_televentas_crm_report",
+                        resource_type="televentas_crm_report", resource_id=report_id, ip=client_ip(request))
+    return report
+
+
+@router.delete("/crm/reports/{report_id}")
+async def delete_crm_report(report_id: str, request: Request,
+                            user: CurrentUser = Depends(require_analyst_or_admin), db: AsyncSession = Depends(get_db)):
+    report = await db.get(TeleventasCrmReport, report_id)
+    if not report:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Reporte no encontrado")
+    await db.delete(report)
+    await db.commit()
+    await record_action(db, user_id=user.id, action="delete_televentas_crm_report",
+                        resource_type="televentas_crm_report", resource_id=report_id, ip=client_ip(request))
+    return {"status": "deleted", "report_id": report_id}
+
+
 # ============================ OVERVIEW ============================
 def _month_bounds(month: str):
     start = datetime.strptime(month, "%Y-%m").date().replace(day=1)
@@ -366,7 +462,7 @@ async def televentas_comparativo(
     """Comparativo del mes vs el mes anterior (publicados): KPIs, por operador
     (conversión, contactabilidad, llamadas, prima) e insights del cambio."""
     months = set()
-    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport):
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport, TeleventasCrmReport):
         for (pm,) in (await db.execute(
             select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
         )).all():
@@ -398,13 +494,22 @@ async def _metricas_del_mes(db: AsyncSession, month: str) -> dict:
 
     ll = await _latest(TeleventasLlamadasReport)
     pr = await _latest(TeleventasProduccionReport)
+    crm = await _latest(TeleventasCrmReport)
     llk = (ll.data or {}).get("kpis", {}) if ll else {}
     prk = (pr.data or {}).get("kpis", {}) if pr else {}
+    crmk = (crm.data or {}).get("kpis", {}) if crm else {}
     contestadas = llk.get("contestadas", 0)
     polizas = prk.get("polizas_emitidas", 0)
     conversion = round(polizas / contestadas * 100, 1) if contestadas else 0.0
     return {
         "mes": month,
+        "gestiones_crm": crmk.get("total_gestiones", 0),
+        "tasa_contacto_crm": crmk.get("tasa_contacto_pct", 0.0),
+        "aceptas_crm": crmk.get("aceptas", 0),
+        "agendados_crm": crmk.get("agendados", 0),
+        "tasa_aceptacion_crm": crmk.get("tasa_aceptacion_pct", 0.0),
+        "prom_gestiones_operador_dia": crmk.get("prom_gestiones_operador_dia", 0.0),
+        "tiene_crm": crm is not None,
         "total_llamadas": llk.get("total_llamadas", 0),
         "contestadas": contestadas,
         "llamadas_prom_dia": llk.get("promedio_diario", 0),
@@ -437,7 +542,7 @@ async def televentas_comparar(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Seleccioná 2 o 3 meses (YYYY-MM).")
 
     disponibles: set[str] = set()
-    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport):
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport, TeleventasCrmReport):
         for (pm,) in (await db.execute(
             select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
         )).all():
@@ -503,7 +608,7 @@ async def televentas_tendencias(
     """Serie de TENDENCIA multi-mes (publicados): conversión, llamadas totales y
     promedio, agentes activos, contactabilidad, prima, etc. + insights de tendencia."""
     months = set()
-    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport):
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport, TeleventasCrmReport):
         for (pm,) in (await db.execute(
             select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
         )).all():

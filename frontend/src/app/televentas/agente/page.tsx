@@ -32,6 +32,8 @@ export default function AgenteTeleventasPage() {
         }));
       }}
       suggestions={[
+        "¿Por qué no compran? Motivos de no-venta del CRM con ejemplos",
+        "Productividad de gestiones CRM por operador este mes",
         "Mostrame la tendencia de conversión y contactabilidad de los últimos meses",
         "¿Cómo vienen evolucionando las llamadas y los agentes activos?",
         "¿Hay señales de deterioro de las bases entre meses?",
