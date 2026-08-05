@@ -59,16 +59,28 @@ export default function SimuladorPage() {
   const [metaPrima, setMetaPrima] = useState("500000000");
   const [asesores, setAsesores] = useState("20");
   const [loading, setLoading] = useState(true);
+  const [mesesSel, setMesesSel] = useState<string[]>([]);
 
-  useEffect(() => {
-    apiFetch<any>("/api/v1/televentas/simulador").then((d) => {
+  const cargar = (meses?: string[]) => {
+    setLoading(true);
+    const q = meses?.length ? `?meses=${meses.join(",")}` : "";
+    apiFetch<any>(`/api/v1/televentas/simulador${q}`).then((d) => {
       setMeta(d.parametros);
       if (d.parametros?.disponible) {
-        const { disponible, meses_usados, mensaje, ...p } = d.parametros;
+        const { disponible, meses_usados, meses_disponibles, mensaje, ...p } = d.parametros;
         setParams(p as Params);
+        setMesesSel(meses_usados || []);
       }
     }).finally(() => setLoading(false));
-  }, []);
+  };
+  useEffect(() => { cargar(); }, []);
+
+  const toggleMes = (m: string) => {
+    const next = mesesSel.includes(m) ? mesesSel.filter((x) => x !== m) : [...mesesSel, m];
+    if (next.length === 0) return; // siempre al menos un mes
+    setMesesSel(next);
+    cargar(next); // re-siembra las tasas pooled con la nueva selección
+  };
 
   const r = useMemo(() => {
     if (!params) return null;
@@ -118,9 +130,48 @@ export default function SimuladorPage() {
             <div className="flex items-baseline justify-between mb-1">
               <h2 className="font-display text-xl text-brand-ink uppercase">Parámetros del modelo</h2>
             </div>
-            <p className="text-[11px] text-brand-slate mb-4">
-              Basados en {meta.meses_usados?.map((m: string) => monthLabel(m)).join(", ")} (publicados). Ajustalos para simular otros supuestos.
+
+            <p className="text-[11px] text-brand-slate mb-2">
+              <b>Meses base</b> — elegí cuáles alimentan las tasas (un mes atípico distorsiona el modelo).
+              Las tasas se calculan sobre los <b>totales</b> de los meses elegidos.
             </p>
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {(meta.meses_disponibles || []).map((m: any) => {
+                const on = mesesSel.includes(m.mes);
+                return (
+                  <button key={m.mes} onClick={() => toggleMes(m.mes)}
+                    title={`Conv. ${m.conversion_pct}% · Contacto ${m.contactabilidad_pct}% · ${m.agentes} agentes`}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                      on ? "bg-brand-primary text-white border-brand-primary" : "border-brand-border text-brand-graphite hover:border-brand-primary"}`}>
+                    {monthLabel(m.mes)} · {m.conversion_pct}%
+                  </button>
+                );
+              })}
+            </div>
+            {(meta.meses_disponibles || []).length > 1 && (
+              <div className="mb-4 overflow-x-auto">
+                <table className="w-full text-[11px]">
+                  <thead><tr className="text-brand-slate uppercase tracking-wider2 text-[9px]">
+                    <th className="text-left py-1">Mes</th><th className="text-right">Conv.%</th>
+                    <th className="text-right">Cont.%</th><th className="text-right">Ticket</th>
+                    <th className="text-right">Llam/as/día</th><th className="text-right">Agentes</th>
+                  </tr></thead>
+                  <tbody>
+                    {meta.meses_disponibles.map((m: any) => (
+                      <tr key={m.mes} className={`border-t border-brand-border ${mesesSel.includes(m.mes) ? "" : "opacity-40"}`}>
+                        <td className="py-1 font-medium text-brand-ink">{monthLabel(m.mes)}</td>
+                        <td className="text-right font-mono">{m.conversion_pct}%</td>
+                        <td className="text-right font-mono">{m.contactabilidad_pct}%</td>
+                        <td className="text-right">{formatGs(m.ticket_promedio)}</td>
+                        <td className="text-right">{m.llamadas_asesor_dia}</td>
+                        <td className="text-right">{m.agentes}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             <div className="space-y-3">
               {PARAM_DEFS.map((d) => (
                 <div key={d.key} className="flex items-center gap-3">

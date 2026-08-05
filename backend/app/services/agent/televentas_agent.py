@@ -154,13 +154,16 @@ def _build_televentas_agent():
 
     @function_tool(strict_mode=False)
     async def tv_simulador(ctx: RunContextWrapper[AgentContext], meta_prima: Optional[float] = None,
-                           asesores: Optional[float] = None, overrides: Optional[dict] = None) -> dict:
+                           asesores: Optional[float] = None, overrides: Optional[dict] = None,
+                           meses: Optional[list[str]] = None) -> dict:
         """SIMULADOR GERENCIAL: con las tasas reales del call center (ticket, conversión,
         contactabilidad, llamadas/asesor/día, anulación) proyecta cuántos ASESORES y cuántos
         REGISTROS DE BASE hacen falta para vender una `meta_prima` (Gs netos/mes), o cuánta
         prima produce una dotación de `asesores`. Con meta incluye escenarios ±15% de conversión.
-        `overrides` ajusta cualquier parámetro del modelo."""
-        return await tv_simulador_impl(meta_prima, asesores, overrides)
+        `meses` (lista YYYY-MM) elige qué meses alimentan las tasas — IMPORTANTE si un mes fue
+        atípico (ej. conversión mucho más alta): sugerí usar los meses representativos. Las tasas
+        son pooled (totales de los meses elegidos). `overrides` ajusta cualquier parámetro."""
+        return await tv_simulador_impl(meta_prima, asesores, overrides, meses)
 
     @function_tool(strict_mode=False)
     async def tv_gestiones_crm(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None) -> dict:

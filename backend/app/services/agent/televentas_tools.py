@@ -262,7 +262,8 @@ async def tv_gestiones_crm_impl(mes: Optional[str] = None) -> dict[str, Any]:
 
 
 async def tv_simulador_impl(meta_prima: Optional[float] = None, asesores: Optional[float] = None,
-                            overrides: Optional[dict] = None) -> dict[str, Any]:
+                            overrides: Optional[dict] = None,
+                            meses: Optional[list[str]] = None) -> dict[str, Any]:
     """Simulador gerencial: con las tasas REALES (últimos meses completos publicados)
     proyecta cuántos asesores y registros de base hacen falta para una meta de prima,
     o cuánta prima produce una dotación. `overrides` permite ajustar parámetros
@@ -271,7 +272,7 @@ async def tv_simulador_impl(meta_prima: Optional[float] = None, asesores: Option
     from ...services.analyzers import simular, escenarios
     from ...api.v1.televentas import _parametros_simulador
     async with session_scope() as db:
-        params = await _parametros_simulador(db)
+        params = await _parametros_simulador(db, meses)
     if not params.get("disponible"):
         return {"sin_datos": True, "mensaje": params.get("mensaje", "Sin meses completos publicados.")}
     if overrides:
