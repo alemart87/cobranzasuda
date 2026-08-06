@@ -69,6 +69,12 @@ export default function MetodologiaPage() {
             Pero si julio tuvo el doble de llamadas, la realidad combinada está más cerca de 5,7%.
             Y si mayo fue atípico (otro equipo), lo correcto es directamente excluirlo.
           </div>
+          <p>
+            <b>Asesores efectivos:</b> en los promedios "por asesor" y en la dotación solo cuentan los asesores
+            con actividad significativa en el día (al menos 5 llamadas y no menos de la cuarta parte de lo que marcó
+            el asesor típico de esa jornada). Un operador que rotó y dejó un puñado de llamadas residuales, o una
+            cuenta de supervisión que marcó una vez, no arrastra el promedio hacia abajo ni infla la dotación.
+          </p>
         </S>
 
         <S n="3" title="La validación estadística (regresión)">

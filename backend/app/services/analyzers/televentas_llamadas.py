@@ -18,6 +18,72 @@ from typing import Any
 # Una llamada se cuenta como CONTESTADA (contacto efectivo) a partir de 34 segundos.
 UMBRAL_CONTESTADA_SEG = 34
 
+# Asesor EFECTIVO del día: hizo al menos max(5, 25% de la mediana de llamadas por
+# asesor de ese día). Deja fuera actividad marginal (operadores que rotaron y dejaron
+# llamadas residuales, cuentas de supervisión) sin excluir a un asesor genuinamente
+# lento — los promedios "por asesor" se calculan solo sobre efectivos.
+EFECTIVO_MIN_LLAMADAS = 5
+EFECTIVO_FRAC_MEDIANA = 0.25
+
+
+def _efectivos_del_dia(counts: dict[str, int]) -> set[str]:
+    """Operadores con actividad significativa en el día (regla efectivo).
+    Si nadie alcanza el umbral (día raro/chico), se devuelven todos como fallback."""
+    if not counts:
+        return set()
+    piso = max(EFECTIVO_MIN_LLAMADAS, median(counts.values()) * EFECTIVO_FRAC_MEDIANA)
+    efectivos = {u for u, c in counts.items() if c >= piso}
+    return efectivos or set(counts)
+
+
+def por_dia_llamadas(rows: list[dict[str, Any]], umbral: int = UMBRAL_CONTESTADA_SEG) -> tuple[list[dict], dict]:
+    """Serie diaria de llamadas + estadísticas de asesores efectivos.
+
+    Los promedios "por asesor" se calculan SOLO sobre asesores efectivos del día:
+    la actividad marginal (rotaciones, cuentas residuales) no entra al denominador.
+    La usan el analyzer y el self-heal de reportes ya generados."""
+    pd: dict[str, dict] = defaultdict(lambda: {
+        "llamadas": 0, "contestadas": 0, "talk_cont_seg": 0.0, "por_asesor": defaultdict(int),
+    })
+    for r in rows:
+        if not r["fecha"]:
+            continue
+        d = pd[r["fecha"].date().isoformat()]
+        d["llamadas"] += 1
+        d["por_asesor"][r["usuario"]] += 1
+        if r["duracion_seg"] >= umbral:
+            d["contestadas"] += 1
+            d["talk_cont_seg"] += r["duracion_seg"]
+
+    por_dia = []
+    asesor_dias_ef = asesor_dias_brutos = llamadas_ef = 0
+    efectivos_por_dia: list[int] = []
+    for k, v in sorted(pd.items()):
+        counts: dict[str, int] = dict(v["por_asesor"])
+        efectivos = _efectivos_del_dia(counts)
+        n_ef = len(efectivos)
+        llam_ef = sum(counts[u] for u in efectivos)
+        asesor_dias_ef += n_ef
+        llamadas_ef += llam_ef
+        asesor_dias_brutos += len(counts)
+        efectivos_por_dia.append(n_ef)
+        por_dia.append({
+            "fecha": k, "llamadas": v["llamadas"], "contestadas": v["contestadas"],
+            "no_contestadas": v["llamadas"] - v["contestadas"],
+            "asesores_activos": len(counts),
+            "asesores_efectivos": n_ef,
+            "promedio_por_asesor": round(llam_ef / n_ef) if n_ef else 0,
+            "tmo_seg": round(v["talk_cont_seg"] / v["contestadas"]) if v["contestadas"] else 0,
+        })
+
+    total_con_fecha = sum(v["llamadas"] for v in pd.values())
+    stats = {
+        "promedio_llamadas_asesor_dia": round(llamadas_ef / asesor_dias_ef, 1) if asesor_dias_ef else 0.0,
+        "promedio_llamadas_asesor_dia_bruto": round(total_con_fecha / asesor_dias_brutos, 1) if asesor_dias_brutos else 0.0,
+        "asesores_efectivos_mediana_dia": round(median(efectivos_por_dia)) if efectivos_por_dia else 0,
+    }
+    return por_dia, stats
+
 
 def _hms(seg: float) -> str:
     seg = int(round(seg))
@@ -90,29 +156,8 @@ def analyze_televentas_llamadas(rows: list[dict[str, Any]], umbral: int = UMBRAL
         })
     por_vendedor.sort(key=lambda x: -x["llamadas"])
 
-    # ---- por día (con asesores activos, promedio por asesor y TMO del día) ----
-    pd: dict[str, dict] = defaultdict(lambda: {"llamadas": 0, "contestadas": 0, "talk_cont_seg": 0.0, "asesores": set()})
-    for r in rows:
-        if not r["fecha"]:
-            continue
-        k = r["fecha"].date().isoformat()
-        pd[k]["llamadas"] += 1
-        pd[k]["asesores"].add(r["usuario"])
-        if r["duracion_seg"] >= umbral:
-            pd[k]["contestadas"] += 1
-            pd[k]["talk_cont_seg"] += r["duracion_seg"]
-    por_dia = []
-    total_asesor_dias = 0
-    for k, v in sorted(pd.items()):
-        n_ase = len(v["asesores"])
-        total_asesor_dias += n_ase
-        por_dia.append({
-            "fecha": k, "llamadas": v["llamadas"], "contestadas": v["contestadas"],
-            "no_contestadas": v["llamadas"] - v["contestadas"],
-            "asesores_activos": n_ase,
-            "promedio_por_asesor": round(v["llamadas"] / n_ase) if n_ase else 0,
-            "tmo_seg": round(v["talk_cont_seg"] / v["contestadas"]) if v["contestadas"] else 0,
-        })
+    # ---- por día (asesores activos/efectivos, promedio por asesor y TMO del día) ----
+    por_dia, dia_stats = por_dia_llamadas(rows, umbral)
 
     # ---- curva horaria ----
     ph: dict[int, dict] = defaultdict(lambda: {"llamadas": 0, "contestadas": 0})
@@ -146,7 +191,6 @@ def analyze_televentas_llamadas(rows: list[dict[str, Any]], umbral: int = UMBRAL
         serie_diaria.append(row)
 
     tmo_global = talk_cont / n_cont if n_cont else 0.0
-    prom_asesor_dia = round(total / total_asesor_dias, 1) if total_asesor_dias else 0.0
 
     insights = _generar_insights(por_vendedor, _pct(n_cont, total), period_start, period_end)
 
@@ -169,7 +213,9 @@ def analyze_televentas_llamadas(rows: list[dict[str, Any]], umbral: int = UMBRAL
             "vendedores_activos": len(pv),
             "dias_operativos": n_dias,
             "promedio_diario": round(total / n_dias) if n_dias else 0,
-            "promedio_llamadas_asesor_dia": prom_asesor_dia,
+            "promedio_llamadas_asesor_dia": dia_stats["promedio_llamadas_asesor_dia"],
+            "promedio_llamadas_asesor_dia_bruto": dia_stats["promedio_llamadas_asesor_dia_bruto"],
+            "asesores_efectivos_mediana_dia": dia_stats["asesores_efectivos_mediana_dia"],
             "umbral_contestada_seg": umbral,
         },
         "por_vendedor": por_vendedor,

@@ -21,7 +21,7 @@ const PARAM_DEFS: Array<{ key: keyof Params; label: string; hint: string; step: 
   { key: "ticket_promedio", label: "Ticket promedio (Gs)", hint: "prima emitida ÷ pólizas", step: 10000 },
   { key: "conversion_pct", label: "Conversión %", hint: "pólizas ÷ llamadas contestadas", step: 0.1, suffix: "%" },
   { key: "contactabilidad_pct", label: "Contactabilidad %", hint: "contestadas (≥34s) ÷ llamadas", step: 0.5, suffix: "%" },
-  { key: "llamadas_asesor_dia", label: "Llamadas / asesor / día", hint: "ritmo de marcación", step: 1 },
+  { key: "llamadas_asesor_dia", label: "Llamadas / asesor / día", hint: "ritmo de marcación (solo asesores efectivos)", step: 1 },
   { key: "dias_habiles", label: "Días hábiles del mes", hint: "días operativos", step: 1 },
   { key: "intentos_por_registro", label: "Intentos por registro", hint: "marcaciones promedio a cada registro de la base", step: 0.5 },
   { key: "tasa_anulacion_pct", label: "Tasa de anulación %", hint: "prima anulada ÷ emitida (histórica)", step: 0.5, suffix: "%" },
@@ -108,7 +108,9 @@ export default function SimuladorPage() {
   const setP = (k: keyof Params, v: string) => params && setParams({ ...params, [k]: Number(v) });
 
   const conv = reg?.conversion; // regresión diaria: {pct, ic95_pct, r2, n}
-  const dotActual = meta?.meses_disponibles?.[0]?.agentes ?? null; // mes completo más reciente
+  // Dotación efectiva por día del mes completo más reciente (mediana de asesores
+  // efectivos: no cuenta rotaciones ni cuentas con actividad marginal).
+  const dotActual = meta?.meses_disponibles?.[0]?.agentes ?? null;
 
   // La variabilidad histórica (IC 95% de la regresión diaria) se aplica RELATIVA a la
   // conversión vigente del modelo — así el rango siempre envuelve al escenario base,
@@ -320,7 +322,7 @@ export default function SimuladorPage() {
                 const on = mesesSel.includes(m.mes);
                 return (
                   <button key={m.mes} onClick={() => toggleMes(m.mes)}
-                    title={`Conv. ${m.conversion_pct}% · Contacto ${m.contactabilidad_pct}% · ${m.agentes} agentes`}
+                    title={`Conv. ${m.conversion_pct}% · Contacto ${m.contactabilidad_pct}% · ${m.agentes} agentes efectivos/día`}
                     className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
                       on ? "bg-brand-primary text-white border-brand-primary" : "border-brand-border text-brand-graphite hover:border-brand-primary"}`}>
                     {monthLabel(m.mes)} · {m.conversion_pct}%
@@ -334,7 +336,7 @@ export default function SimuladorPage() {
                   <thead><tr className="text-brand-slate uppercase tracking-wider2 text-[9px]">
                     <th className="text-left py-1">Mes</th><th className="text-right">Conv.%</th>
                     <th className="text-right">Cont.%</th><th className="text-right">Ticket</th>
-                    <th className="text-right">Llam/as/día</th><th className="text-right">Agentes</th>
+                    <th className="text-right">Llam/as/día</th><th className="text-right">Agentes/día</th>
                   </tr></thead>
                   <tbody>
                     {meta.meses_disponibles.map((m: any) => (
@@ -344,11 +346,15 @@ export default function SimuladorPage() {
                         <td className="text-right font-mono">{m.contactabilidad_pct}%</td>
                         <td className="text-right">{formatGs(m.ticket_promedio)}</td>
                         <td className="text-right">{m.llamadas_asesor_dia}</td>
-                        <td className="text-right">{m.agentes}</td>
+                        <td className="text-right" title={m.agentes_nombres ? `${m.agentes_nombres} nombres distintos en el mes` : undefined}>{m.agentes}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+                <p className="text-[10px] text-brand-slate mt-1">
+                  Agentes/día: mediana de asesores <b>efectivos</b> por día — los operadores con actividad marginal
+                  (rotaciones, cuentas residuales) no cuentan en los promedios ni en la dotación.
+                </p>
               </div>
             )}
 
@@ -588,7 +594,9 @@ export default function SimuladorPage() {
                     </ComposedChart>
                   </ResponsiveContainer>
                   <Lectura>
-                    Cada barra es el promedio real de llamadas que hizo cada asesor ese día.
+                    Cada barra es el promedio real de llamadas que hizo cada asesor efectivo ese día — los operadores
+                    con actividad marginal (rotaciones, cuentas con un puñado de llamadas) se excluyen del promedio
+                    para no desvirtuarlo.
                     {idealRitmo ? (
                       <> La línea roja punteada es el ritmo ideal: si cada asesor promedia ese número de llamadas por día,
                       la meta se alcanza con la conversión observada en los datos reales. Días consistentemente por debajo
