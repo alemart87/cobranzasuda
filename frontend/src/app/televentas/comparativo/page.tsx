@@ -301,8 +301,9 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
   const hayCrm = !!cmp?.generales?.some((g: any) => (g.gestiones_crm ?? 0) > 0);
   const metricas: Array<{ key: string; label: string; fmt: (v: number) => string; inverso?: boolean }> = [
     { key: "total_llamadas", label: "Llamadas", fmt: formatInt },
-    { key: "llamadas_prom_asesor_dia", label: "Prom. llamadas / asesor / día", fmt: formatInt },
-    { key: "agentes_activos", label: "Agentes activos", fmt: formatInt },
+    { key: "llamadas_prom_asesor_dia", label: "Prom. llamadas / asesor / día (efectivos)", fmt: formatInt },
+    { key: "agentes_activos", label: "Agentes activos (nombres en el mes)", fmt: formatInt },
+    { key: "agentes_efectivos", label: "Agentes efectivos / día (mediana)", fmt: formatInt },
     { key: "contactabilidad", label: "Contactabilidad %", fmt: (v) => formatPct(v) },
     { key: "polizas_emitidas", label: "Pólizas emitidas", fmt: formatInt },
     { key: "prima_emitida", label: "Prima emitida", fmt: formatGs },

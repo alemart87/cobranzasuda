@@ -51,6 +51,24 @@ def test_llamadas_contestadas_por_umbral():
     assert a["por_dia"][1]["tmo_seg"] == 120  # día 2
 
 
+def test_llamadas_asesores_efectivos_no_promedia_marginales():
+    # 3 asesores plenos (80 llamadas) + 1 rotado con 2 llamadas residuales el mismo día:
+    # el rotado NO debe entrar al promedio por asesor ni a la dotación efectiva.
+    rows = []
+    for _ in range(80):
+        for op in ("Ana", "Beto", "Carla"):
+            rows.append(_llam(op, datetime(2026, 6, 1, 9, 0), 60))
+    rows += [_llam("Rotado", datetime(2026, 6, 1, 9, 0), 60) for _ in range(2)]
+    a = analyze_televentas_llamadas(rows, umbral=34)
+    d = a["por_dia"][0]
+    assert d["asesores_activos"] == 4          # nombres con registro
+    assert d["asesores_efectivos"] == 3        # actividad significativa
+    assert d["promedio_por_asesor"] == 80      # sin la regla daría 61 (242/4)
+    assert a["kpis"]["promedio_llamadas_asesor_dia"] == 80.0
+    assert a["kpis"]["promedio_llamadas_asesor_dia_bruto"] == 60.5
+    assert a["kpis"]["asesores_efectivos_mediana_dia"] == 3
+
+
 def test_llamadas_profundidad_y_insights():
     # Ana marca 2 días desde el 1; "Nuevo" arranca el día 15 (arranca tarde).
     rows = []

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -40,6 +39,7 @@ from ...schemas.televentas import (
 from ...services.analyzers import (
     combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
 )
+from ...services.analyzers.televentas_llamadas import por_dia_llamadas
 from ...services.analyzers.televentas_simulador import regresion_diaria
 from ...services.parsers import parse_televentas_llamadas
 from ...services.audit_service import record_action
@@ -128,6 +128,7 @@ async def get_llamadas_report(report_id: str, request: Request, user: CurrentUse
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Reporte no encontrado")
     if user.is_client and not report.is_published:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Reporte no publicado")
+    await _heal_llamadas_diario(db, report)
     await record_action(db, user_id=user.id, action="view_televentas_llamadas_report",
                         resource_type="televentas_llamadas_report", resource_id=report_id,
                         ip=client_ip(request), extra={"role": user.role})
@@ -502,6 +503,8 @@ async def _metricas_del_mes(db: AsyncSession, month: str) -> dict:
     ll = await _latest(TeleventasLlamadasReport)
     pr = await _latest(TeleventasProduccionReport)
     crm = await _latest(TeleventasCrmReport)
+    if ll:
+        await _heal_llamadas_diario(db, ll)
     llk = (ll.data or {}).get("kpis", {}) if ll else {}
     prk = (pr.data or {}).get("kpis", {}) if pr else {}
     crmk = (crm.data or {}).get("kpis", {}) if crm else {}
@@ -522,6 +525,9 @@ async def _metricas_del_mes(db: AsyncSession, month: str) -> dict:
         "llamadas_prom_dia": llk.get("promedio_diario", 0),
         "llamadas_prom_asesor_dia": llk.get("promedio_llamadas_asesor_dia", 0),
         "agentes_activos": llk.get("vendedores_activos", 0),
+        # Dotación REAL por día (mediana de asesores efectivos): no cuenta rotaciones
+        # ni cuentas con actividad marginal — es la base del simulador.
+        "agentes_efectivos": llk.get("asesores_efectivos_mediana_dia", 0),
         "dias_operativos": llk.get("dias_operativos", 0),
         "contactabilidad": llk.get("pct_contestadas", 0),
         "tmo_hms": llk.get("tmo_hms", "00:00:00"),
@@ -641,7 +647,10 @@ async def _parametros_simulador(db: AsyncSession, meses_sel: Optional[list[str]]
         "llamadas_asesor_dia": g.get("llamadas_prom_asesor_dia", 0),
         "polizas": g.get("polizas_emitidas", 0),
         "llamadas": g.get("total_llamadas", 0),
-        "agentes": g.get("agentes_activos", 0),
+        # Dotación efectiva por día (mediana); si el reporte es viejo y no se pudo
+        # sanar, cae al conteo bruto de nombres del mes.
+        "agentes": g.get("agentes_efectivos") or g.get("agentes_activos", 0),
+        "agentes_nombres": g.get("agentes_activos", 0),
     } for g in completos]
 
     sel = [g for g in completos if g["mes"] in (meses_sel or [])]
@@ -696,13 +705,14 @@ async def televentas_simulador(
     return out
 
 
-async def _heal_tmo_diario(db: AsyncSession, report: TeleventasLlamadasReport) -> None:
-    """Self-heal: agrega `tmo_seg` a cada día de `por_dia` en reportes generados antes
-    de que el analyzer lo calculara, re-leyendo el archivo original del upload.
+async def _heal_llamadas_diario(db: AsyncSession, report: TeleventasLlamadasReport) -> None:
+    """Self-heal: recalcula la serie `por_dia` (TMO diario, asesores efectivos y
+    promedio por asesor SOLO sobre efectivos) y los KPIs derivados en reportes
+    generados antes de estas reglas, re-leyendo el archivo original del upload.
     Se persiste una sola vez; si el archivo ya no existe, se omite en silencio."""
     data = report.data or {}
     por_dia = data.get("por_dia") or []
-    if not por_dia or all("tmo_seg" in d for d in por_dia):
+    if not por_dia or all("tmo_seg" in d and "asesores_efectivos" in d for d in por_dia):
         return
     upload = await db.get(TeleventasLlamadasUpload, report.upload_id)
     if not upload or not upload.file_path or not Path(upload.file_path).exists():
@@ -712,16 +722,9 @@ async def _heal_tmo_diario(db: AsyncSession, report: TeleventasLlamadasReport) -
     except Exception:
         return
     umbral = (data.get("kpis") or {}).get("umbral_contestada_seg", 34)
-    acc: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
-    for r in rows:
-        if r.get("fecha") and r.get("duracion_seg", 0) >= umbral:
-            k = r["fecha"].date().isoformat()
-            acc[k][0] += r["duracion_seg"]
-            acc[k][1] += 1
-    for d in por_dia:
-        talk, n = acc.get(d.get("fecha"), (0.0, 0.0))
-        d["tmo_seg"] = round(talk / n) if n else 0
-    report.data = {**data, "por_dia": por_dia}
+    nuevo_por_dia, dia_stats = por_dia_llamadas(rows, umbral)
+    report.data = {**data, "por_dia": nuevo_por_dia,
+                   "kpis": {**(data.get("kpis") or {}), **dia_stats}}
     await db.commit()
 
 
@@ -745,7 +748,7 @@ async def _regresion_diaria_meses(db: AsyncSession, meses: list[str]) -> dict:
         pr = await _latest(TeleventasProduccionReport)
         if not ll:
             continue
-        await _heal_tmo_diario(db, ll)
+        await _heal_llamadas_diario(db, ll)
         prod_dia = {d.get("fecha"): d for d in ((pr.data or {}).get("por_dia") or [])} if pr else {}
         for d in ((ll.data or {}).get("por_dia") or []):
             f = d.get("fecha")
@@ -756,6 +759,7 @@ async def _regresion_diaria_meses(db: AsyncSession, meses: list[str]) -> dict:
             puntos.append({"fecha": f, "contestadas": d.get("contestadas", 0),
                            "polizas": pd.get("polizas", 0), "prima": pd.get("prima", 0),
                            "asesores_activos": d.get("asesores_activos", 0),
+                           "asesores_efectivos": d.get("asesores_efectivos", d.get("asesores_activos", 0)),
                            "promedio_por_asesor": d.get("promedio_por_asesor", 0),
                            "tmo_seg": d.get("tmo_seg", 0)})
     puntos.sort(key=lambda p: p["fecha"])

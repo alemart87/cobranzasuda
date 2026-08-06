@@ -55,15 +55,18 @@ export default function TeleventasLlamadasDetailPage() {
         <KpiCard label="TMO (contestadas)" value={k.tmo_hms} accent="purple" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Prom. llamadas / asesor / día" value={formatInt(k.promedio_llamadas_asesor_dia)} hint="llamadas del día ÷ asesores activos" accent="primary" />
+        <KpiCard label="Prom. llamadas / asesor / día" value={formatInt(k.promedio_llamadas_asesor_dia)} hint="solo asesores efectivos (excluye actividad marginal)" accent="primary" />
         <KpiCard label="Total hablado" value={`${k.total_talk_horas} hs`} accent="neutral" />
-        <KpiCard label="Vendedores activos" value={formatInt(k.vendedores_activos)} accent="cyan" />
+        <KpiCard label="Vendedores activos" value={formatInt(k.vendedores_activos)} hint={k.asesores_efectivos_mediana_dia ? `${formatInt(k.asesores_efectivos_mediana_dia)} efectivos/día (mediana)` : undefined} accent="cyan" />
         <KpiCard label="Días operativos" value={formatInt(k.dias_operativos)} accent="neutral" />
       </div>
 
       <section className="card p-6 mb-6">
         <h2 className="font-display text-xl text-brand-ink uppercase mb-1">Llamadas por día</h2>
-        <p className="text-xs text-brand-slate mb-4">Barras: contestadas / no contestadas. Línea: promedio de llamadas por asesor activo.</p>
+        <p className="text-xs text-brand-slate mb-4">
+          Barras: contestadas / no contestadas. Línea: promedio de llamadas por asesor efectivo del día
+          (los operadores con actividad marginal — rotaciones, cuentas residuales — no entran al promedio).
+        </p>
         <ResponsiveContainer width="100%" height={280}>
           <ComposedChart data={report.data.por_dia}>
             <CartesianGrid strokeDasharray="3 3" />
