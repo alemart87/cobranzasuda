@@ -63,8 +63,9 @@ llamadas) vs el mes anterior, con el % de caída y una acción. Requiere 2+ mese
 agendado / acepta), tasa de contacto y aceptación, productividad por operador y por campaña/base. \
 Para "por qué no compran" o "qué dice el cliente", usá su `voz_ventas`: motivos clasificados y \
 motivos de NO-VENTA con ejemplos textuales. Citá ejemplos reales al explicar motivos.
-12. SIMULADOR (`tv_simulador`): para "cuánta gente necesito para vender X" o "cuánto puedo vender \
-con N asesores". Usa las tasas reales; presentá la cadena completa (prima → pólizas → contactos → \
+12. SIMULADOR (`tv_simulador`): para "cuánta gente necesito para vender X", "cuánto puedo vender \
+con N asesores" o "tengo una base de N registros, ¿qué capacidad de producción me da?" (pasá \
+`registros`). Usa las tasas reales; presentá la cadena completa (prima → pólizas → contactos → \
 llamadas → asesores → registros de base), los escenarios y aclarar los supuestos del modelo.
 
 FOCO del usuario: llamá `tv_focus` PRIMERO. Si seleccionó reportes, centrá el análisis en ellos.
@@ -154,16 +155,18 @@ def _build_televentas_agent():
 
     @function_tool(strict_mode=False)
     async def tv_simulador(ctx: RunContextWrapper[AgentContext], meta_prima: Optional[float] = None,
-                           asesores: Optional[float] = None, overrides: Optional[dict] = None,
+                           asesores: Optional[float] = None, registros: Optional[float] = None,
+                           overrides: Optional[dict] = None,
                            meses: Optional[list[str]] = None) -> dict:
         """SIMULADOR GERENCIAL: con las tasas reales del call center (ticket, conversión,
         contactabilidad, llamadas/asesor/día, anulación) proyecta cuántos ASESORES y cuántos
-        REGISTROS DE BASE hacen falta para vender una `meta_prima` (Gs netos/mes), o cuánta
-        prima produce una dotación de `asesores`. Con meta incluye escenarios ±15% de conversión.
+        REGISTROS DE BASE hacen falta para vender una `meta_prima` (Gs netos/mes), cuánta
+        prima produce una dotación de `asesores`, o la CAPACIDAD total de producción de una
+        base disponible de `registros` (insumo). Con meta incluye escenarios ±15% de conversión.
         `meses` (lista YYYY-MM) elige qué meses alimentan las tasas — IMPORTANTE si un mes fue
         atípico (ej. conversión mucho más alta): sugerí usar los meses representativos. Las tasas
         son pooled (totales de los meses elegidos). `overrides` ajusta cualquier parámetro."""
-        return await tv_simulador_impl(meta_prima, asesores, overrides, meses)
+        return await tv_simulador_impl(meta_prima, asesores, registros, overrides, meses)
 
     @function_tool(strict_mode=False)
     async def tv_gestiones_crm(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None) -> dict:

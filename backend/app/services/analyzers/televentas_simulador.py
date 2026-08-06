@@ -6,7 +6,10 @@ Cadena del modelo (tasas históricas reales, ajustables por el usuario):
                → llamadas (÷ contactabilidad) → asesores (÷ llamadas/asesor/día × días)
                → registros de base (÷ intentos de marcación por registro)
 
-También en sentido inverso: con N asesores, cuánta prima se puede proyectar.
+También en sentido inverso: con N asesores, cuánta prima se puede proyectar; y
+desde el insumo: con N registros de base disponibles, cuál es la capacidad total
+de producción (llamadas posibles → contactos → pólizas → prima) y cuánta dotación
+hace falta para trabajarla en el mes.
 La prima efectiva descuenta la tasa histórica de anulación.
 """
 from __future__ import annotations
@@ -16,11 +19,12 @@ from typing import Any, Optional
 
 
 def simular(params: dict[str, Any], meta_prima: Optional[float] = None,
-            asesores: Optional[float] = None) -> dict[str, Any]:
+            asesores: Optional[float] = None,
+            registros: Optional[float] = None) -> dict[str, Any]:
     """`params` (todas > 0 salvo anulación):
       ticket_promedio, conversion_pct, contactabilidad_pct, llamadas_asesor_dia,
       dias_habiles, intentos_por_registro, tasa_anulacion_pct (0-100).
-    Pasar `meta_prima` (Gs) O `asesores` (dotación disponible)."""
+    Pasar `meta_prima` (Gs), `asesores` (dotación) O `registros` (base disponible)."""
     ticket = max(float(params.get("ticket_promedio") or 0), 1.0)
     conv = max(float(params.get("conversion_pct") or 0), 0.01) / 100.0
     contact = max(float(params.get("contactabilidad_pct") or 0), 0.01) / 100.0
@@ -73,7 +77,29 @@ def simular(params: dict[str, Any], meta_prima: Optional[float] = None,
             "parametros": params,
         }
 
-    return {"error": "Indicá meta_prima (Gs) o asesores (dotación)."}
+    if registros is not None:
+        # Capacidad desde el INSUMO: la base disponible limita las llamadas posibles.
+        llamadas = float(registros) * intentos
+        contactos = llamadas * contact
+        polizas = contactos * conv
+        prima_emitida = polizas * ticket
+        prima_neta = prima_emitida * (1.0 - anul)
+        asesores_nec = llamadas / cap_llamadas_asesor_mes
+        return {
+            "modo": "base",
+            "registros_base": round(float(registros)),
+            "llamadas_posibles": round(llamadas),
+            "contactos_proyectados": round(contactos),
+            "polizas_proyectadas": round(polizas, 1),
+            "prima_emitida_proyectada": round(prima_emitida),
+            "prima_neta_proyectada": round(prima_neta),
+            "asesores_para_trabajarla": round(asesores_nec, 1),
+            "asesores_para_trabajarla_redondeo": math.ceil(asesores_nec),
+            "llamadas_por_asesor_mes": round(cap_llamadas_asesor_mes),
+            "parametros": params,
+        }
+
+    return {"error": "Indicá meta_prima (Gs), asesores (dotación) o registros (base disponible)."}
 
 
 def regresion_origen(x: list[float], y: list[float]) -> dict[str, Any]:

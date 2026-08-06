@@ -262,11 +262,13 @@ async def tv_gestiones_crm_impl(mes: Optional[str] = None) -> dict[str, Any]:
 
 
 async def tv_simulador_impl(meta_prima: Optional[float] = None, asesores: Optional[float] = None,
+                            registros: Optional[float] = None,
                             overrides: Optional[dict] = None,
                             meses: Optional[list[str]] = None) -> dict[str, Any]:
     """Simulador gerencial: con las tasas REALES (últimos meses completos publicados)
     proyecta cuántos asesores y registros de base hacen falta para una meta de prima,
-    o cuánta prima produce una dotación. `overrides` permite ajustar parámetros
+    cuánta prima produce una dotación, o la capacidad total de producción de una
+    base/insumo disponible (`registros`). `overrides` permite ajustar parámetros
     (ticket_promedio, conversion_pct, contactabilidad_pct, llamadas_asesor_dia,
     dias_habiles, intentos_por_registro, tasa_anulacion_pct)."""
     from ...services.analyzers import simular, escenarios
@@ -278,10 +280,10 @@ async def tv_simulador_impl(meta_prima: Optional[float] = None, asesores: Option
     if overrides:
         params = {**params, **{k: v for k, v in overrides.items() if v is not None}}
     out: dict[str, Any] = {"parametros": params}
-    if meta_prima is None and asesores is None:
-        out["nota"] = "Pasá meta_prima (Gs netos) o asesores para simular."
+    if meta_prima is None and asesores is None and registros is None:
+        out["nota"] = "Pasá meta_prima (Gs netos), asesores o registros (base disponible) para simular."
         return out
-    out["resultado"] = simular(params, meta_prima=meta_prima, asesores=asesores)
+    out["resultado"] = simular(params, meta_prima=meta_prima, asesores=asesores, registros=registros)
     if meta_prima is not None:
         out["escenarios"] = escenarios(params, meta_prima)
     return out

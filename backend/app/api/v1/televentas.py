@@ -686,20 +686,21 @@ async def _parametros_simulador(db: AsyncSession, meses_sel: Optional[list[str]]
 async def televentas_simulador(
     meta_prima: Optional[float] = Query(None, description="Meta de prima NETA mensual (Gs)"),
     asesores: Optional[float] = Query(None, description="Dotación disponible"),
+    registros: Optional[float] = Query(None, description="Registros de base disponibles (insumo)"),
     meses: Optional[str] = Query(None, description="Meses base del modelo, YYYY-MM separados por coma"),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Simulador gerencial de ventas. Sin argumentos devuelve los parámetros reales;
-    con `meta_prima` o `asesores` devuelve además la simulación y escenarios.
+    con `meta_prima`, `asesores` o `registros` devuelve además la simulación.
     `meses` define qué meses alimentan las tasas (default: últimos 3 completos)."""
     meses_sel = [m.strip() for m in meses.split(",") if m.strip()] if meses else None
     params = await _parametros_simulador(db, meses_sel)
     out: dict = {"parametros": params}
     if params.get("disponible"):
         out["regresion"] = await _regresion_diaria_meses(db, params.get("meses_usados", []))
-    if params.get("disponible") and (meta_prima is not None or asesores is not None):
-        out["resultado"] = simular(params, meta_prima=meta_prima, asesores=asesores)
+    if params.get("disponible") and (meta_prima is not None or asesores is not None or registros is not None):
+        out["resultado"] = simular(params, meta_prima=meta_prima, asesores=asesores, registros=registros)
         if meta_prima is not None:
             out["escenarios"] = escenarios(params, meta_prima)
     return out
