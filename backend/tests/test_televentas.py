@@ -245,3 +245,26 @@ def test_simulador_meta_y_dotacion():
     # escenarios: conservador requiere más asesores que optimista
     esc = escenarios(P, 100_000_000)
     assert esc[0]["asesores_necesarios"] >= esc[2]["asesores_necesarios"]
+
+
+def test_regresion_origen_recupera_pendiente():
+    """La regresión OLS por el origen recupera la tasa real dentro del IC 95%."""
+    import random
+    from app.services.analyzers.televentas_simulador import regresion_origen, regresion_diaria
+    random.seed(3)
+    xs, ys = [], []
+    for _ in range(30):
+        c = random.randint(100, 500)
+        xs.append(float(c))
+        ys.append(max(0.0, c * 0.05 + random.gauss(0, 2)))
+    r = regresion_origen(xs, ys)
+    assert r["disponible"] and r["n"] == 30
+    assert r["ic95"][0] <= 0.05 <= r["ic95"][1]      # la tasa real cae en el IC
+    assert 0 <= r["r2"] <= 1
+    # pocos puntos → no disponible (honestidad estadística)
+    assert regresion_origen([1, 2, 3], [1, 2, 3])["disponible"] is False
+    # regresion_diaria arma ambas regresiones
+    pts = [{"fecha": f"2026-07-{i+1:02d}", "contestadas": x, "polizas": y, "prima": y * 1_000_000}
+           for i, (x, y) in enumerate(zip(xs, ys))]
+    d = regresion_diaria(pts)
+    assert "conversion" in d and "prima_por_contacto" in d

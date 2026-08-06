@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
+import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
 import { monthLabel } from "@/lib/month";
@@ -60,12 +62,14 @@ export default function SimuladorPage() {
   const [asesores, setAsesores] = useState("20");
   const [loading, setLoading] = useState(true);
   const [mesesSel, setMesesSel] = useState<string[]>([]);
+  const [reg, setReg] = useState<any>(null);
 
   const cargar = (meses?: string[]) => {
     setLoading(true);
     const q = meses?.length ? `?meses=${meses.join(",")}` : "";
     apiFetch<any>(`/api/v1/televentas/simulador${q}`).then((d) => {
       setMeta(d.parametros);
+      setReg(d.regresion ?? null);
       if (d.parametros?.disponible) {
         const { disponible, meses_usados, meses_disponibles, mensaje, ...p } = d.parametros;
         setParams(p as Params);
@@ -100,6 +104,95 @@ export default function SimuladorPage() {
   }, [params, modo, metaPrima]);
 
   const setP = (k: keyof Params, v: string) => params && setParams({ ...params, [k]: Number(v) });
+
+  const conv = reg?.conversion; // regresión diaria: {pct, ic95_pct, r2, n}
+  const dotActual = meta?.meses_disponibles?.[0]?.agentes ?? null; // mes completo más reciente
+
+  // Rango de asesores según el IC 95% de la conversión diaria.
+  const rangoAsesores = useMemo(() => {
+    if (!params || modo !== "meta" || !(Number(metaPrima) > 0) || !conv?.ic95_pct) return null;
+    const lo: any = simular({ ...params, conversion_pct: conv.ic95_pct[1] }, Number(metaPrima), null);
+    const hi: any = simular({ ...params, conversion_pct: Math.max(conv.ic95_pct[0], 0.01) }, Number(metaPrima), null);
+    return { min: Math.ceil(lo.asesores), max: Math.ceil(hi.asesores) };
+  }, [params, modo, metaPrima, conv]);
+
+  // Curva: asesores necesarios según nivel de meta (con banda IC si hay regresión).
+  const curvaDotacion = useMemo(() => {
+    if (!params || !(Number(metaPrima) > 0)) return [];
+    const base = Number(metaPrima);
+    const pts: any[] = [];
+    for (let f = 0.4; f <= 1.61; f += 0.2) {
+      const m = base * f;
+      const row: any = { meta: `${Math.round(m / 1e6)}M`, base: Math.ceil((simular(params, m, null) as any).asesores) };
+      if (conv?.ic95_pct) {
+        row.optimista = Math.ceil((simular({ ...params, conversion_pct: conv.ic95_pct[1] }, m, null) as any).asesores);
+        row.conservador = Math.ceil((simular({ ...params, conversion_pct: Math.max(conv.ic95_pct[0], 0.01) }, m, null) as any).asesores);
+      }
+      pts.push(row);
+    }
+    return pts;
+  }, [params, metaPrima, conv]);
+
+  // Recomendaciones dinámicas (se recalculan con cada cambio de parámetros/meta).
+  const recomendaciones = useMemo(() => {
+    if (!params || !r) return [];
+    const out: any[] = [];
+    const capMes = Math.max(params.llamadas_asesor_dia, 1) * Math.max(params.dias_habiles, 1);
+    if (r.modo === "meta") {
+      const need = Math.ceil(r.asesores);
+      if (dotActual != null) {
+        if (need > dotActual) {
+          const contact = Math.max(params.contactabilidad_pct, 0.01) / 100;
+          const convReq = (r.polizas / (dotActual * capMes * contact)) * 100;
+          const proy: any = simular(params, null, dotActual);
+          out.push({ tipo: "dotacion", severidad: "alert",
+            titulo: `Faltan ${need - dotActual} asesores para la meta`,
+            detalle: `Con la dotación del último mes (${dotActual}) proyectás ${formatGs(proy.neta)} netos. Opciones: sumar ${need - dotActual} asesores, o subir la conversión a ${convReq.toFixed(2)}% (hoy ${params.conversion_pct}%).` });
+        } else {
+          out.push({ tipo: "dotacion", severidad: "info",
+            titulo: "La dotación actual alcanza",
+            detalle: `Necesitás ${need} asesores y el último mes operaron ${dotActual}. Margen: ${dotActual - need}.` });
+        }
+      }
+      const ahorroConv = need - Math.ceil((simular({ ...params, conversion_pct: params.conversion_pct + 0.5 }, Number(metaPrima), null) as any).asesores);
+      if (ahorroConv > 0) out.push({ tipo: "palanca", severidad: "info",
+        titulo: `Palanca: +0,5 pt de conversión ≈ −${ahorroConv} asesores`,
+        detalle: `Subir la conversión de ${params.conversion_pct}% a ${(params.conversion_pct + 0.5).toFixed(2)}% (coaching de cierre, mejores bases) reduce la dotación necesaria de ${need} a ${need - ahorroConv}.` });
+      const ahorroRitmo = need - Math.ceil((simular({ ...params, llamadas_asesor_dia: params.llamadas_asesor_dia + 5 }, Number(metaPrima), null) as any).asesores);
+      if (ahorroRitmo > 0) out.push({ tipo: "palanca", severidad: "info",
+        titulo: `Palanca: +5 llamadas/asesor/día ≈ −${ahorroRitmo} asesores`,
+        detalle: `Pasar de ${params.llamadas_asesor_dia} a ${params.llamadas_asesor_dia + 5} llamadas por asesor/día cubre la misma meta con menos dotación.` });
+      if (params.tasa_anulacion_pct >= 10) out.push({ tipo: "anulacion", severidad: "warning",
+        titulo: `La anulación (${params.tasa_anulacion_pct}%) encarece la meta`,
+        detalle: `Para ${formatGs(Number(metaPrima))} netos hay que emitir ${formatGs(r.emitir)}. Reducir la anulación a la mitad ahorraría ${formatGs(r.emitir - Number(metaPrima) / (1 - params.tasa_anulacion_pct / 200))} de emisión.` });
+      out.push({ tipo: "base", severidad: "info",
+        titulo: `Base de datos: ${formatInt(r.registros)} registros frescos`,
+        detalle: `A ${params.intentos_por_registro} intento(s) por registro se necesitan ${formatInt(r.llamadas)} marcaciones. Bases agotadas bajan la contactabilidad y rompen la proyección.` });
+    } else {
+      out.push({ tipo: "proyeccion", severidad: "info",
+        titulo: `Con ${asesores} asesores: ${formatGs(r.neta)} netos proyectados`,
+        detalle: conv?.ic95_pct
+          ? `Rango estadístico (IC 95% de la conversión diaria): entre ${formatGs((simular({ ...params, conversion_pct: Math.max(conv.ic95_pct[0], 0.01) }, null, Number(asesores)) as any).neta)} y ${formatGs((simular({ ...params, conversion_pct: conv.ic95_pct[1] }, null, Number(asesores)) as any).neta)}.`
+          : `Requiere ${formatInt(r.registros)} registros de base en el mes.` });
+    }
+    if (conv) {
+      const [lo, hi] = conv.ic95_pct;
+      if (params.conversion_pct < lo || params.conversion_pct > hi) out.push({ tipo: "estadistica", severidad: "warning",
+        titulo: `La conversión del modelo (${params.conversion_pct}%) está fuera del rango estadístico`,
+        detalle: `La regresión diaria (${conv.n} días) estima conversión entre ${lo}% y ${hi}% (IC 95%). Revisá los meses seleccionados o el supuesto ingresado.` });
+      if (conv.r2 < 0.4) out.push({ tipo: "estadistica", severidad: "warning",
+        titulo: `Relación llamadas→ventas débil (R² ${conv.r2})`,
+        detalle: "Las ventas diarias no siguen de cerca a las llamadas (desfase de emisión, calidad de base variable). Usá los rangos, no el punto exacto." });
+    } else if (reg) {
+      out.push({ tipo: "estadistica", severidad: "info",
+        titulo: "Aún sin regresión diaria",
+        detalle: reg.mensaje || "Se necesitan al menos 5 días con datos de llamadas y producción en los meses elegidos." });
+    }
+    return out;
+  }, [params, r, reg, conv, dotActual, modo, metaPrima, asesores]);
+
+  const maxX = Math.max(...(reg?.puntos ?? []).map((p: any) => p.contestadas), 0);
+  const fitData = conv ? [{ contestadas: 0, polizas: 0 }, { contestadas: maxX, polizas: (maxX * conv.pct) / 100 }] : [];
 
   return (
     <AppShell>
@@ -225,6 +318,9 @@ export default function SimuladorPage() {
                   ]} />
                   <p className="text-[11px] text-brand-slate mt-3">
                     Capacidad por asesor: {formatInt(r.capMes)} llamadas/mes ({params.llamadas_asesor_dia}/día × {params.dias_habiles} días).
+                    {rangoAsesores && (
+                      <> · <b className="text-brand-ink">Rango estadístico: {rangoAsesores.min}–{rangoAsesores.max} asesores</b> (IC 95% de la conversión diaria).</>
+                    )}
                   </p>
                 </>
               )}
@@ -247,6 +343,10 @@ export default function SimuladorPage() {
                 </>
               )}
             </section>
+
+            {recomendaciones.length > 0 && (
+              <InsightsPanel insights={recomendaciones} titulo="Recomendaciones (se actualizan con cada cambio)" />
+            )}
 
             {escenarios.length > 0 && (
               <section className="card p-5">
@@ -277,9 +377,62 @@ export default function SimuladorPage() {
               </section>
             )}
 
+            <div className="grid xl:grid-cols-2 gap-6">
+              {curvaDotacion.length > 0 && (
+                <section className="card p-5">
+                  <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Dotación según meta</h2>
+                  <p className="text-xs text-brand-slate mb-3">Asesores necesarios para distintos niveles de meta{conv ? " (banda = IC 95% de la conversión diaria)" : ""}.</p>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <LineChart data={curvaDotacion} margin={{ top: 8, right: 12 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="meta" fontSize={11} />
+                      <YAxis fontSize={11} allowDecimals={false} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      {conv && <Line dataKey="conservador" name="Conservador (IC inf.)" stroke="#E6332A" strokeDasharray="4 3" dot={false} />}
+                      <Line dataKey="base" name="Base" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3 }} />
+                      {conv && <Line dataKey="optimista" name="Optimista (IC sup.)" stroke="#10B981" strokeDasharray="4 3" dot={false} />}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </section>
+              )}
+
+              {reg?.puntos?.length >= 5 && (
+                <section className="card p-5">
+                  <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Validación estadística</h2>
+                  <p className="text-xs text-brand-slate mb-2">
+                    Regresión lineal (mínimos cuadrados, por el origen) sobre los <b>{reg.n_dias} días reales</b> de los meses elegidos:
+                    contestadas/día → pólizas/día.
+                  </p>
+                  {conv && (
+                    <div className="flex flex-wrap gap-2 mb-3 text-[11px]">
+                      <span className="px-2 py-1 rounded bg-brand-bg font-mono">β = {conv.pct}%</span>
+                      <span className="px-2 py-1 rounded bg-brand-bg font-mono">IC 95%: {conv.ic95_pct[0]}–{conv.ic95_pct[1]}%</span>
+                      <span className="px-2 py-1 rounded bg-brand-bg font-mono">R² = {conv.r2}</span>
+                      <span className="px-2 py-1 rounded bg-brand-bg font-mono">pooled: {params.conversion_pct}%</span>
+                    </div>
+                  )}
+                  <ResponsiveContainer width="100%" height={220}>
+                    <ScatterChart margin={{ top: 8, right: 12 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis type="number" dataKey="contestadas" name="Contestadas/día" fontSize={11} domain={[0, "dataMax"]} />
+                      <YAxis type="number" dataKey="polizas" name="Pólizas/día" fontSize={11} allowDecimals={false} />
+                      <ZAxis range={[28, 28]} />
+                      <Tooltip cursor={{ strokeDasharray: "3 3" }} />
+                      <Scatter name="Días" data={reg.puntos} fill="#0EA5E9" fillOpacity={0.6} />
+                      {fitData.length > 0 && (
+                        <Scatter name="Ajuste" data={fitData} fill="#E6332A" line={{ stroke: "#E6332A", strokeWidth: 2 }} shape={() => <g />} legendType="line" />
+                      )}
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </section>
+              )}
+            </div>
+
             <p className="text-[11px] text-brand-slate">
-              Modelo lineal sobre promedios históricos: no contempla curva de aprendizaje de asesores nuevos,
-              estacionalidad ni calidad diferencial de bases. Usalo como orden de magnitud gerencial.
+              Modelo: estimador de razón (pooled) sobre los meses elegidos + regresión OLS por el origen sobre los días reales
+              para validar la relación e informar el intervalo de confianza. No contempla curva de aprendizaje de asesores
+              nuevos, estacionalidad ni calidad diferencial de bases — usalo como rango gerencial, no como punto exacto.
             </p>
           </div>
         </div>

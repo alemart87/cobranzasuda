@@ -76,6 +76,67 @@ def simular(params: dict[str, Any], meta_prima: Optional[float] = None,
     return {"error": "Indicá meta_prima (Gs) o asesores (dotación)."}
 
 
+def regresion_origen(x: list[float], y: list[float]) -> dict[str, Any]:
+    """Regresión lineal por el origen y = β·x (mínimos cuadrados ordinarios).
+
+    Es el modelo correcto para el funnel (0 llamadas → 0 ventas). Devuelve la
+    pendiente β, su error estándar, IC 95% (t de Student aproximada), y R².
+    Nota: el estimador pooled (Σy/Σx) es la versión ponderada de esta misma
+    regresión; acá se reporta la OLS diaria para validar la relación y dar IC.
+    """
+    n = len(x)
+    if n < 5:
+        return {"disponible": False, "n": n, "mensaje": "Se necesitan al menos 5 días con datos."}
+    sxx = sum(a * a for a in x)
+    if sxx <= 0:
+        return {"disponible": False, "n": n, "mensaje": "Sin variación en la variable independiente."}
+    sxy = sum(a * b for a, b in zip(x, y))
+    beta = sxy / sxx
+    resid = [yi - beta * xi for xi, yi in zip(x, y)]
+    sse = sum(r * r for r in resid)
+    df = n - 1
+    s2 = sse / df if df > 0 else 0.0
+    se = (s2 / sxx) ** 0.5
+    ybar = sum(y) / n
+    sst = sum((yi - ybar) ** 2 for yi in y)
+    r2 = max(0.0, 1 - sse / sst) if sst > 0 else 0.0
+    # t crítico 95% aproximado según grados de libertad.
+    t = 2.78 if df <= 4 else 2.26 if df <= 9 else 2.09 if df <= 19 else 2.02 if df <= 39 else 1.98
+    return {
+        "disponible": True, "n": n,
+        "pendiente": beta, "se": se,
+        "ic95": [max(0.0, beta - t * se), beta + t * se],
+        "r2": round(r2, 3),
+    }
+
+
+def regresion_diaria(puntos: list[dict[str, Any]]) -> dict[str, Any]:
+    """Regresiones sobre los DÍAS reales de operación (contestadas → pólizas y → prima).
+
+    `puntos`: [{fecha, contestadas, polizas, prima}]. Devuelve las dos regresiones
+    (pendiente = conversión marginal y Gs por contacto) con IC 95% y R².
+    """
+    xs = [float(p.get("contestadas") or 0) for p in puntos]
+    y_pol = [float(p.get("polizas") or 0) for p in puntos]
+    y_pri = [float(p.get("prima") or 0) for p in puntos]
+    rp = regresion_origen(xs, y_pol)
+    rg = regresion_origen(xs, y_pri)
+    out: dict[str, Any] = {"puntos": puntos, "n_dias": len(puntos)}
+    if rp.get("disponible"):
+        out["conversion"] = {
+            "pct": round(rp["pendiente"] * 100, 2),
+            "ic95_pct": [round(rp["ic95"][0] * 100, 2), round(rp["ic95"][1] * 100, 2)],
+            "r2": rp["r2"], "n": rp["n"],
+        }
+    if rg.get("disponible"):
+        out["prima_por_contacto"] = {
+            "gs": round(rg["pendiente"]),
+            "ic95_gs": [round(rg["ic95"][0]), round(rg["ic95"][1])],
+            "r2": rg["r2"], "n": rg["n"],
+        }
+    return out
+
+
 def escenarios(params: dict[str, Any], meta_prima: float,
                variacion_pct: float = 15.0) -> list[dict[str, Any]]:
     """Sensibilidad: conservador / base / optimista variando la conversión ±variacion_pct%."""
