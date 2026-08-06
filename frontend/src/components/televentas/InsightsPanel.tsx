@@ -8,10 +8,10 @@ interface Insight {
   vendedores?: string[];
 }
 
-const STYLES: Record<string, { bar: string; chip: string; icon: string }> = {
-  alert: { bar: "border-brand-primary", chip: "bg-brand-primary/10 text-brand-primary", icon: "⚠" },
-  warning: { bar: "border-brand-orange", chip: "bg-brand-orange/10 text-brand-orange", icon: "▲" },
-  info: { bar: "border-brand-cyan", chip: "bg-brand-cyan/10 text-brand-cyan", icon: "ℹ" },
+const STYLES: Record<string, { bar: string; chip: string }> = {
+  alert: { bar: "border-brand-primary", chip: "bg-brand-primary/10 text-brand-primary" },
+  warning: { bar: "border-brand-orange", chip: "bg-brand-orange/10 text-brand-orange" },
+  info: { bar: "border-brand-cyan", chip: "bg-brand-cyan/10 text-brand-cyan" },
 };
 
 const LABEL: Record<string, string> = { alert: "Alerta", warning: "Atención", info: "Info" };
@@ -28,7 +28,7 @@ export function InsightsPanel({ insights, titulo = "Análisis automático" }: { 
             <div key={idx} className={`card p-4 border-l-4 ${s.bar}`}>
               <div className="flex items-center gap-2 mb-1">
                 <span className={`text-[10px] uppercase tracking-wider2 font-bold px-1.5 py-0.5 rounded ${s.chip}`}>
-                  {s.icon} {LABEL[i.severidad] ?? i.severidad}
+                  {LABEL[i.severidad] ?? i.severidad}
                 </span>
                 <span className="font-semibold text-brand-ink text-sm">{i.titulo}</span>
               </div>
