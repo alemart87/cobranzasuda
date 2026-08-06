@@ -46,6 +46,9 @@ def test_llamadas_contestadas_por_umbral():
     assert a["kpis"]["dias_operativos"] == 2
     assert a["kpis"]["tmo_seg"] == 90  # (60+120)/2
     assert a["por_vendedor"][0]["vendedor"] == "Ana Pérez"
+    # TMO por día (insumo del gráfico de TMO del simulador).
+    assert a["por_dia"][0]["tmo_seg"] == 60   # día 1: solo la de 60s contestada
+    assert a["por_dia"][1]["tmo_seg"] == 120  # día 2
 
 
 def test_llamadas_profundidad_y_insights():

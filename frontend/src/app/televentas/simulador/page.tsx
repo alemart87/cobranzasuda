@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
+import { Bar, CartesianGrid, ComposedChart, Legend, Line, LineChart, ReferenceLine, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
@@ -205,6 +205,40 @@ export default function SimuladorPage() {
 
   const maxX = Math.max(...(reg?.puntos ?? []).map((p: any) => p.contestadas), 0);
   const fitData = conv ? [{ contestadas: 0, polizas: 0 }, { contestadas: maxX, polizas: (maxX * conv.pct) / 100 }] : [];
+
+  // Ritmo IDEAL: llamadas promedio por asesor/día necesarias para que la meta se
+  // cumpla con la conversión OBSERVADA en los días reales (misma regresión del
+  // gráfico de validación). Se calcula sobre la dotación del último mes completo.
+  const idealRitmo = useMemo(() => {
+    if (!params || !r || r.modo !== "meta" || !conv?.pct) return null;
+    const contact = Math.max(params.contactabilidad_pct, 0.01) / 100;
+    const dias = Math.max(params.dias_habiles, 1);
+    const dot = dotActual ?? Math.ceil(r.asesores);
+    if (!dot) return null;
+    const llamadas = (r.polizas / (conv.pct / 100)) / contact;
+    const llamadasPiso = (r.polizas / (Math.max(conv.ic95_pct[0], 0.01) / 100)) / contact;
+    return {
+      dot,
+      ideal: Math.ceil(llamadas / (dot * dias)),
+      prudente: Math.ceil(llamadasPiso / (dot * dias)),
+    };
+  }, [params, r, conv, dotActual]);
+
+  // TMO diario (si los reportes lo traen): promedio general y TMO de los días
+  // con mejor conversión — la referencia de "tiempo medio ideal".
+  const tmoPuntos = useMemo(() => (reg?.puntos ?? []).filter((p: any) => (p.tmo_seg ?? 0) > 0), [reg]);
+  const tmoStats = useMemo(() => {
+    if (tmoPuntos.length < 5) return null;
+    const prom = tmoPuntos.reduce((s: number, p: any) => s + p.tmo_seg, 0) / tmoPuntos.length;
+    const conVentas = tmoPuntos.filter((p: any) => p.contestadas > 0);
+    if (conVentas.length < 4) return { prom: Math.round(prom), mejores: null };
+    const ordenados = [...conVentas].sort((a: any, b: any) => b.polizas / b.contestadas - a.polizas / a.contestadas);
+    const top = ordenados.slice(0, Math.max(Math.floor(ordenados.length / 2), 1));
+    const mejores = top.reduce((s: number, p: any) => s + p.tmo_seg, 0) / top.length;
+    return { prom: Math.round(prom), mejores: Math.round(mejores) };
+  }, [tmoPuntos]);
+
+  const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
   // Conclusión ejecutiva: la decisión ideal en lenguaje claro y concreto.
   const conclusion = useMemo(() => {
@@ -489,6 +523,11 @@ export default function SimuladorPage() {
                       <span className="px-2 py-1 rounded bg-brand-bg">Conversión observada: <b>{conv.pct}%</b></span>
                       <span className="px-2 py-1 rounded bg-brand-bg">Varía entre <b>{conv.ic95_pct[0]}%</b> y <b>{conv.ic95_pct[1]}%</b> (95% de los casos)</span>
                       <span className="px-2 py-1 rounded bg-brand-bg">Consistencia (R²): <b>{conv.r2}</b></span>
+                      {idealRitmo && (
+                        <span className="px-2 py-1 rounded bg-brand-primary text-white font-semibold">
+                          Ideal para la meta: <b>{idealRitmo.ideal}</b> llamadas/asesor/día (con {idealRitmo.dot} asesores)
+                        </span>
+                      )}
                     </div>
                   )}
                   <ResponsiveContainer width="100%" height={220}>
@@ -509,6 +548,94 @@ export default function SimuladorPage() {
                     pólizas vendidas. La línea roja es la tendencia promedio. Cuanto más pegados están los puntos a la línea,
                     más confiable es proyectar ventas a partir de llamadas; si están muy dispersos, conviene decidir con el
                     plan prudente y no con el escenario probable.
+                    {idealRitmo && (
+                      <> El recuadro rojo indica el ritmo de marcación ideal por asesor para alcanzar la meta con la
+                      conversión observada en estos datos.</>
+                    )}
+                  </Lectura>
+                </section>
+              )}
+
+              {reg?.puntos?.length >= 5 && (
+                <section className="card p-5">
+                  <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Llamadas por asesor por día</h2>
+                  <p className="text-xs text-brand-slate mb-2">
+                    Ritmo real de marcación de cada día frente al ideal necesario para la meta.
+                  </p>
+                  {idealRitmo && (
+                    <div className="flex flex-wrap gap-2 mb-3 text-[11px]">
+                      <span className="px-2 py-1 rounded bg-brand-primary text-white font-semibold">
+                        Ideal: <b>{idealRitmo.ideal}</b> llamadas/asesor/día
+                      </span>
+                      <span className="px-2 py-1 rounded bg-brand-orange/10 text-brand-orange font-semibold">
+                        En un mes flojo: {idealRitmo.prudente} llamadas/asesor/día
+                      </span>
+                      <span className="px-2 py-1 rounded bg-brand-bg">Ritmo actual: <b>{params.llamadas_asesor_dia}</b></span>
+                    </div>
+                  )}
+                  <ResponsiveContainer width="100%" height={220}>
+                    <ComposedChart data={reg.puntos} margin={{ top: 8, right: 12 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="fecha" fontSize={10} tickFormatter={(f: string) => f.slice(5)} minTickGap={24} />
+                      <YAxis fontSize={11} allowDecimals={false} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 11 }} />
+                      <Bar dataKey="promedio_por_asesor" name="Llamadas/asesor (real)" fill="#0EA5E9" fillOpacity={0.7} />
+                      {idealRitmo && (
+                        <ReferenceLine y={idealRitmo.ideal} stroke="#E6332A" strokeWidth={2} strokeDasharray="6 3"
+                          label={{ value: `Ideal: ${idealRitmo.ideal}`, position: "insideTopRight", fill: "#E6332A", fontSize: 11, fontWeight: 700 }} />
+                      )}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                  <Lectura>
+                    Cada barra es el promedio real de llamadas que hizo cada asesor ese día.
+                    {idealRitmo ? (
+                      <> La línea roja punteada es el ritmo ideal: si cada asesor promedia ese número de llamadas por día,
+                      la meta se alcanza con la conversión observada en los datos reales. Días consistentemente por debajo
+                      de la línea significan que la meta exigirá más asesores, mejores bases o más conversión. La referencia
+                      naranja del encabezado indica el ritmo que cubriría la meta incluso en un mes flojo.</>
+                    ) : (
+                      <> Sirve para ver la consistencia del ritmo de marcación del equipo día a día. Para ver el ritmo ideal
+                      frente a una meta, usá el modo &quot;Por meta de prima&quot;.</>
+                    )}
+                  </Lectura>
+                </section>
+              )}
+
+              {tmoPuntos.length >= 5 && (
+                <section className="card p-5">
+                  <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Tiempo medio de llamada por día</h2>
+                  <p className="text-xs text-brand-slate mb-2">
+                    TMO diario de las llamadas atendidas (≥34s), con la referencia de los días que mejor convirtieron.
+                  </p>
+                  {tmoStats && (
+                    <div className="flex flex-wrap gap-2 mb-3 text-[11px]">
+                      <span className="px-2 py-1 rounded bg-brand-bg">TMO promedio: <b>{mmss(tmoStats.prom)} min</b></span>
+                      {tmoStats.mejores != null && (
+                        <span className="px-2 py-1 rounded bg-emerald-600 text-white font-semibold">
+                          TMO de los días con mejor conversión: <b>{mmss(tmoStats.mejores)} min</b>
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={tmoPuntos} margin={{ top: 8, right: 12 }}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="fecha" fontSize={10} tickFormatter={(f: string) => f.slice(5)} minTickGap={24} />
+                      <YAxis fontSize={11} tickFormatter={(s: number) => mmss(s)} />
+                      <Tooltip formatter={(v: any) => [`${mmss(Number(v))} min`, "TMO del día"]} />
+                      <Line dataKey="tmo_seg" name="TMO del día" stroke="#0F1116" strokeWidth={2} dot={{ r: 2.5 }} />
+                      {tmoStats?.mejores != null && (
+                        <ReferenceLine y={tmoStats.mejores} stroke="#10B981" strokeWidth={2} strokeDasharray="6 3"
+                          label={{ value: `Mejores días: ${mmss(tmoStats.mejores)}`, position: "insideTopRight", fill: "#10B981", fontSize: 11, fontWeight: 700 }} />
+                      )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <Lectura>
+                    La línea negra muestra cuánto duró en promedio una llamada atendida cada día. La línea verde es la
+                    referencia ideal: el tiempo medio de los días que mejor convirtieron llamadas en pólizas. Si el TMO diario
+                    se aleja mucho de esa referencia — conversaciones demasiado cortas (poco argumentario) o demasiado largas
+                    (sin cierre) — conviene revisar el guion y el manejo de objeciones en esos días.
                   </Lectura>
                 </section>
               )}

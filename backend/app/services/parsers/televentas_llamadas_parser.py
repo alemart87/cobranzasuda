@@ -67,7 +67,9 @@ def parse_televentas_llamadas(path: str | Path) -> list[dict[str, Any]]:
         raise ValueError(f"Export de llamadas vacío. Hojas: {list(sheets.keys())}")
 
     headers = list(sheet_rows[0])
-    i_user = find_col(headers, "usuario") or find_col(headers, "operador") or find_col(headers, "agente")
+    # `or` no sirve acá: la columna puede estar en el índice 0 (falsy).
+    i_user = next((i for i in (find_col(headers, "usuario"), find_col(headers, "operador"),
+                               find_col(headers, "agente")) if i is not None), None)
     i_fecha = find_col(headers, "fecha")
     i_dur = find_col(headers, "duracion")
     i_dir = find_col(headers, "direccion")
