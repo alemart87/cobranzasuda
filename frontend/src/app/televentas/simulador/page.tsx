@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
+import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
@@ -194,19 +195,62 @@ export default function SimuladorPage() {
   const maxX = Math.max(...(reg?.puntos ?? []).map((p: any) => p.contestadas), 0);
   const fitData = conv ? [{ contestadas: 0, polizas: 0 }, { contestadas: maxX, polizas: (maxX * conv.pct) / 100 }] : [];
 
+  // Conclusión ejecutiva: la decisión ideal en lenguaje claro, basada en la estadística.
+  const conclusion = useMemo(() => {
+    if (!params || !r) return null;
+    if (r.modo === "meta") {
+      const need = Math.ceil(r.asesores);
+      const partes: string[] = [];
+      partes.push(`Para alcanzar ${formatGs(Number(metaPrima))} netos al mes se necesitan ${need} asesores` +
+        (rangoAsesores ? ` (rango estadístico ${rangoAsesores.min}–${rangoAsesores.max} con 95% de confianza)` : "") +
+        ` y una base de ${formatInt(r.registros)} registros frescos.`);
+      if (dotActual != null) {
+        if (dotActual >= need) {
+          partes.push(`La dotación actual (${dotActual} asesores) es suficiente: la meta es alcanzable sin contrataciones.`);
+        } else {
+          const proy: any = simular(params, null, dotActual);
+          partes.push(`Con la dotación actual (${dotActual}) se proyectan ${formatGs(proy.neta)} — una brecha de ${formatGs(Number(metaPrima) - proy.neta)}.`);
+        }
+      }
+      partes.push(rangoAsesores
+        ? `Decisión recomendada: si la meta es un compromiso firme, dimensionar con el escenario conservador (${rangoAsesores.max} asesores); si es un objetivo aspiracional, el escenario base (${need}) es razonable.`
+        : "Decisión recomendada: dimensionar con el escenario conservador de la tabla de escenarios.");
+      return partes.join(" ");
+    }
+    const rangoPrima = conv?.ic95_pct ? {
+      lo: (simular({ ...params, conversion_pct: Math.max(conv.ic95_pct[0], 0.01) }, null, Number(asesores)) as any).neta,
+      hi: (simular({ ...params, conversion_pct: conv.ic95_pct[1] }, null, Number(asesores)) as any).neta,
+    } : null;
+    return `Con ${asesores} asesores la proyección es ${formatGs(r.neta)} netos al mes` +
+      (rangoPrima ? ` (entre ${formatGs(rangoPrima.lo)} y ${formatGs(rangoPrima.hi)} con 95% de confianza)` : "") +
+      `, marcando una base de ${formatInt(r.registros)} registros. Decisión recomendada: comprometer como meta el piso del rango` +
+      (rangoPrima ? ` (${formatGs(rangoPrima.lo)})` : "") + ` y tratar el resto como potencial adicional.`;
+  }, [params, r, rangoAsesores, dotActual, metaPrima, asesores, conv]);
+
   return (
     <AppShell>
       <div className="mb-2 text-xs text-brand-slate">
         <Link href="/televentas" className="hover:text-brand-primary">Televentas</Link>
         <span className="mx-2">/</span><span className="text-brand-ink font-semibold">Simulador</span>
       </div>
-      <div className="mb-6">
-        <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Simulador de Ventas</h1>
-        <p className="text-sm text-brand-slate mt-1 max-w-3xl">
-          Proyectá el call center: cuántos asesores y cuántos registros de base hacen falta para una meta de prima
-          — o cuánto puede vender una dotación. Parámetros sembrados con las <b>tasas reales</b> de la operación.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Simulador de Ventas</h1>
+          <p className="text-sm text-brand-slate mt-1 max-w-3xl">
+            Proyectá el call center: cuántos asesores y cuántos registros de base hacen falta para una meta de prima
+            — o cuánto puede vender una dotación. Parámetros sembrados con las <b>tasas reales</b> de la operación.{" "}
+            <Link href="/televentas/simulador/metodologia" className="text-brand-primary font-semibold hover:underline no-print">
+              ¿Cómo funciona el modelo? →
+            </Link>
+          </p>
+        </div>
+        <PrintButton label="Imprimir / Guardar PDF" />
       </div>
+
+      <PrintCover
+        titulo={`Simulación de Ventas${modo === "meta" && Number(metaPrima) > 0 ? ` — Meta ${formatGs(Number(metaPrima))} netos` : modo === "dotacion" ? ` — ${asesores} asesores` : ""}`}
+        periodo={meta?.meses_usados?.length ? `Modelo basado en ${meta.meses_usados.map((m: string) => monthLabel(m)).join(", ")}` : undefined}
+      />
 
       {loading && <div className="text-brand-slate">Cargando tasas reales…</div>}
 
@@ -217,9 +261,9 @@ export default function SimuladorPage() {
       )}
 
       {!loading && params && (
-        <div className="grid lg:grid-cols-5 gap-6">
-          {/* Parámetros */}
-          <section className="card p-5 lg:col-span-2 h-fit">
+        <div className="grid lg:grid-cols-5 gap-6 print:block">
+          {/* Parámetros (interactivos — en el PDF van como 'Supuestos') */}
+          <section className="card p-5 lg:col-span-2 h-fit no-print">
             <div className="flex items-baseline justify-between mb-1">
               <h2 className="font-display text-xl text-brand-ink uppercase">Parámetros del modelo</h2>
             </div>
@@ -281,8 +325,30 @@ export default function SimuladorPage() {
 
           {/* Simulación */}
           <div className="lg:col-span-3 space-y-6">
+            {/* Supuestos del modelo — solo en el PDF */}
+            <div className="print-only card p-4">
+              <h3 className="text-sm font-semibold text-brand-ink mb-2">Supuestos del modelo (tasas reales de la operación)</h3>
+              <p className="text-xs text-brand-graphite leading-relaxed">
+                Meses base: <b>{mesesSel.map((m) => monthLabel(m)).join(", ")}</b> ·
+                Ticket promedio: <b>{formatGs(params.ticket_promedio)}</b> ·
+                Conversión: <b>{params.conversion_pct}%</b>{conv ? ` (IC 95%: ${conv.ic95_pct[0]}–${conv.ic95_pct[1]}%, R² ${conv.r2}, ${conv.n} días)` : ""} ·
+                Contactabilidad: <b>{params.contactabilidad_pct}%</b> ·
+                Ritmo: <b>{params.llamadas_asesor_dia} llamadas/asesor/día × {params.dias_habiles} días</b> ·
+                Anulación: <b>{params.tasa_anulacion_pct}%</b> ·
+                Intentos por registro: <b>{params.intentos_por_registro}</b>
+              </p>
+            </div>
+
+            {/* Conclusión ejecutiva — siempre visible y en el PDF */}
+            {conclusion && (
+              <section className="card p-5 border-l-4 border-brand-ink bg-white">
+                <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">🎯 Conclusión ejecutiva</h2>
+                <p className="text-[15px] text-brand-ink leading-relaxed font-medium">{conclusion}</p>
+              </section>
+            )}
+
             <section className="card p-5">
-              <div className="flex flex-wrap items-center gap-3 mb-4">
+              <div className="flex flex-wrap items-center gap-3 mb-4 no-print">
                 <div className="flex rounded-md border border-brand-border overflow-hidden">
                   <button onClick={() => setModo("meta")} className={`px-4 py-2 text-sm font-semibold ${modo === "meta" ? "bg-brand-primary text-white" : "text-brand-graphite hover:bg-brand-bg"}`}>Por meta de prima</button>
                   <button onClick={() => setModo("dotacion")} className={`px-4 py-2 text-sm font-semibold ${modo === "dotacion" ? "bg-brand-primary text-white" : "text-brand-graphite hover:bg-brand-bg"}`}>Por dotación</button>
