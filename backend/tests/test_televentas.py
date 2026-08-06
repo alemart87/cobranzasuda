@@ -266,6 +266,14 @@ def test_simulador_meta_y_dotacion():
     # escenarios: conservador requiere más asesores que optimista
     esc = escenarios(P, 100_000_000)
     assert esc[0]["asesores_necesarios"] >= esc[2]["asesores_necesarios"]
+    # modo base: el insumo cierra el triángulo (2000 registros → la misma meta)
+    r4 = simular(P, registros=2000)
+    assert r4["modo"] == "base"
+    assert r4["llamadas_posibles"] == 4000         # 2000 × 2 intentos
+    assert r4["contactos_proyectados"] == 2000
+    assert r4["polizas_proyectadas"] == 100
+    assert r4["prima_neta_proyectada"] == 100_000_000
+    assert r4["asesores_para_trabajarla_redondeo"] == 5
 
 
 def test_regresion_origen_recupera_pendiente():

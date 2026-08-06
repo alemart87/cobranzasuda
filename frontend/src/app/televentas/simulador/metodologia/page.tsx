@@ -50,6 +50,14 @@ export default function MetodologiaPage() {
             se necesitan <b>2.000 conversaciones</b>. Si atiende la mitad (contactabilidad 50%), son
             <b> 4.000 llamadas</b>. Y si cada asesor hace 800 llamadas al mes, se necesitan <b>5 asesores</b>.
           </div>
+          <p>
+            La misma cadena funciona en las tres direcciones: desde la <b>meta</b> (cuánta gente y base necesito),
+            desde la <b>dotación</b> (cuánto puede vender mi equipo) y desde el <b>insumo</b> (tengo una base de
+            N registros: qué capacidad total de producción me da y cuánta gente hace falta para trabajarla).
+            En este último caso el simulador también avisa cuál es el cuello de botella: si la base rinde más
+            llamadas de las que la dotación puede marcar, el límite real es la gente — y al revés, si la base
+            se agota antes de fin de mes, el límite es el insumo.
+          </p>
         </S>
 
         <S n="2" title="De dónde salen las tasas">

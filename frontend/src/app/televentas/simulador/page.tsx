@@ -27,7 +27,7 @@ const PARAM_DEFS: Array<{ key: keyof Params; label: string; hint: string; step: 
   { key: "tasa_anulacion_pct", label: "Tasa de anulación %", hint: "prima anulada ÷ emitida (histórica)", step: 0.5, suffix: "%" },
 ];
 
-function simular(p: Params, metaPrima: number | null, asesores: number | null) {
+function simular(p: Params, metaPrima: number | null, asesores: number | null, registrosBase: number | null = null) {
   const ticket = Math.max(p.ticket_promedio, 1);
   const conv = Math.max(p.conversion_pct, 0.01) / 100;
   const contact = Math.max(p.contactabilidad_pct, 0.01) / 100;
@@ -45,6 +45,18 @@ function simular(p: Params, metaPrima: number | null, asesores: number | null) {
       registros: Math.ceil(llamadas / intentos), capMes,
     };
   }
+  if (registrosBase != null) {
+    // Capacidad desde el INSUMO: la base disponible limita las llamadas posibles.
+    const llamadas = registrosBase * intentos;
+    const contactos = llamadas * contact;
+    const polizas = contactos * conv;
+    const emitida = polizas * ticket;
+    return {
+      modo: "base" as const, registros: Math.round(registrosBase), llamadas: Math.round(llamadas),
+      contactos: Math.round(contactos), polizas: Math.round(polizas * 10) / 10,
+      emitida, neta: emitida * (1 - anul), asesores: llamadas / capMes, capMes,
+    };
+  }
   const llamadas = (asesores ?? 0) * capMes;
   const contactos = llamadas * contact;
   const polizas = contactos * conv;
@@ -59,9 +71,10 @@ function simular(p: Params, metaPrima: number | null, asesores: number | null) {
 export default function SimuladorPage() {
   const [meta, setMeta] = useState<any>(null);
   const [params, setParams] = useState<Params | null>(null);
-  const [modo, setModo] = useState<"meta" | "dotacion">("meta");
+  const [modo, setModo] = useState<"meta" | "dotacion" | "base">("meta");
   const [metaPrima, setMetaPrima] = useState("500000000");
   const [asesores, setAsesores] = useState("20");
+  const [baseRegistros, setBaseRegistros] = useState("30000");
   const [loading, setLoading] = useState(true);
   const [mesesSel, setMesesSel] = useState<string[]>([]);
   const [reg, setReg] = useState<any>(null);
@@ -90,11 +103,12 @@ export default function SimuladorPage() {
 
   const r = useMemo(() => {
     if (!params) return null;
-    const m = Number(metaPrima), a = Number(asesores);
+    const m = Number(metaPrima), a = Number(asesores), b = Number(baseRegistros);
     if (modo === "meta" && m > 0) return simular(params, m, null);
     if (modo === "dotacion" && a > 0) return simular(params, null, a);
+    if (modo === "base" && b > 0) return simular(params, null, null, b);
     return null;
-  }, [params, modo, metaPrima, asesores]);
+  }, [params, modo, metaPrima, asesores, baseRegistros]);
 
   const escenarios = useMemo(() => {
     if (!params || modo !== "meta" || !(Number(metaPrima) > 0)) return [];
@@ -178,6 +192,28 @@ export default function SimuladorPage() {
     };
   }, [params, r, conv, dotActual, ritmoMejor]);
 
+  // Modo base: contraste entre lo que rinde el insumo y lo que puede marcar la
+  // dotación actual — la capacidad real del mes es el MENOR de los dos.
+  const capBase = useMemo(() => {
+    if (!params || !r || r.modo !== "base" || dotActual == null || !dotActual) return null;
+    const lpd = Math.max(params.llamadas_asesor_dia, 1);
+    const intentos = Math.max(params.intentos_por_registro, 0.1);
+    const capDot = dotActual * lpd * Math.max(params.dias_habiles, 1); // llamadas que puede marcar el equipo
+    if (r.llamadas > capDot) {
+      const proy: any = simular(params, null, dotActual);
+      return {
+        limitado: true as const, capDot,
+        netaReal: proy.neta, polizasReal: proy.polizas,
+        registrosSobrantes: Math.ceil((r.llamadas - capDot) / intentos),
+      };
+    }
+    return {
+      limitado: false as const, capDot,
+      dias: Math.ceil(r.llamadas / (dotActual * lpd)),
+      registrosMesCompleto: Math.ceil(capDot / intentos),
+    };
+  }, [params, r, dotActual]);
+
   // Recomendaciones dinámicas (se recalculan con cada cambio de parámetros/meta).
   const recomendaciones = useMemo(() => {
     if (!params || !r) return [];
@@ -216,6 +252,18 @@ export default function SimuladorPage() {
       if (idealRitmo && !idealRitmo.alcanzable) out.push({ tipo: "ritmo", severidad: "alert",
         titulo: "Esta meta no se alcanza solo con ritmo de marcación",
         detalle: `Con ${idealRitmo.dot} asesores, la meta exigiría ${idealRitmo.ideal} llamadas por asesor/día — el mejor día real del equipo fue ${idealRitmo.ritmoMejor}. La meta se cubre con dotación: ${idealRitmo.asesoresRitmoActual} asesores al ritmo actual (${params.llamadas_asesor_dia}/día)${idealRitmo.asesoresMejorRitmo ? ` o ${idealRitmo.asesoresMejorRitmo} sosteniendo el mejor ritmo observado (${idealRitmo.ritmoMejor}/día)` : ""}.` });
+    } else if (r.modo === "base") {
+      out.push({ tipo: "capacidad", severidad: "info",
+        titulo: `Capacidad de la base: ${formatGs(r.neta)} netos (${r.polizas} pólizas)`,
+        detalle: convBounds
+          ? `Con las tasas cargadas, ${formatInt(r.registros)} registros rinden ${formatInt(r.llamadas)} llamadas. Rango estadístico de la producción: entre ${formatGs((simular({ ...params, conversion_pct: convBounds.piso }, null, null, Number(baseRegistros)) as any).neta)} (mes flojo) y ${formatGs((simular({ ...params, conversion_pct: convBounds.techo }, null, null, Number(baseRegistros)) as any).neta)} (mes fuerte).`
+          : `Con las tasas cargadas, ${formatInt(r.registros)} registros rinden ${formatInt(r.llamadas)} llamadas y ${formatInt(r.contactos)} contactos.` });
+      if (capBase?.limitado) out.push({ tipo: "capacidad", severidad: "warning",
+        titulo: "El cuello de botella es la dotación, no la base",
+        detalle: `La base da para ${formatInt(r.llamadas)} llamadas pero los ${dotActual} asesores actuales pueden marcar ${formatInt(capBase.capDot)} en el mes. La capacidad real del mes queda en ${formatGs(capBase.netaReal)} netos; ~${formatInt(capBase.registrosSobrantes)} registros no se alcanzan a trabajar. Opciones: sumar ${Math.max(Math.ceil(r.asesores) - dotActual, 1)} asesores o reservar el sobrante para el mes siguiente.` });
+      if (capBase && !capBase.limitado && capBase.dias < Math.max(params.dias_habiles, 1)) out.push({ tipo: "capacidad", severidad: "alert",
+        titulo: `La base se agota en ~${capBase.dias} días de marcación`,
+        detalle: `Con ${dotActual} asesores al ritmo actual, esta base se consume antes de terminar el mes (${params.dias_habiles} días hábiles). Para sostener el mes completo se necesitan ~${formatInt(capBase.registrosMesCompleto)} registros; de lo contrario, la contactabilidad cae al re-marcar registros quemados.` });
     } else {
       out.push({ tipo: "proyeccion", severidad: "info",
         titulo: `Con ${asesores} asesores: ${formatGs(r.neta)} netos proyectados`,
@@ -237,7 +285,7 @@ export default function SimuladorPage() {
         detalle: reg.mensaje || "Se necesitan al menos 5 días con datos de llamadas y producción en los meses elegidos." });
     }
     return out;
-  }, [params, r, reg, conv, dotActual, modo, metaPrima, asesores, idealRitmo]);
+  }, [params, r, reg, conv, dotActual, modo, metaPrima, asesores, idealRitmo, capBase, convBounds, baseRegistros]);
 
   const maxX = Math.max(...(reg?.puntos ?? []).map((p: any) => p.contestadas), 0);
   const fitData = conv ? [{ contestadas: 0, polizas: 0 }, { contestadas: maxX, polizas: (maxX * conv.pct) / 100 }] : [];
@@ -284,12 +332,24 @@ export default function SimuladorPage() {
       }
       return partes.join(" ");
     }
+    if (r.modo === "base") {
+      const partes: string[] = [];
+      partes.push(`Una base de ${formatInt(r.registros)} registros da capacidad para ${formatInt(r.llamadas)} llamadas y una producción proyectada de ${formatGs(r.neta)} netos (${r.polizas} pólizas). Para trabajarla completa en el mes se necesitan ${Math.ceil(r.asesores)} asesores.`);
+      if (capBase?.limitado) {
+        partes.push(`Con la dotación actual (${dotActual}) la capacidad real del mes queda en ${formatGs(capBase.netaReal)}: el insumo sobra, lo que falta es gente. Decisión recomendada: dimensionar la compra de bases según la dotación, o sumar asesores antes de ampliar la base.`);
+      } else if (capBase && capBase.dias < Math.max(params.dias_habiles, 1)) {
+        partes.push(`Con la dotación actual (${dotActual}) la base se agota en ~${capBase.dias} días. Decisión recomendada: asegurar ~${formatInt(capBase.registrosMesCompleto)} registros para sostener el mes completo.`);
+      } else if (capBase) {
+        partes.push(`La dotación actual (${dotActual}) alcanza para trabajarla dentro del mes.`);
+      }
+      return partes.join(" ");
+    }
     const piso = convBounds ? (simular({ ...params, conversion_pct: convBounds.piso }, null, Number(asesores)) as any).neta : null;
     return `Con ${asesores} asesores la venta esperada es ${formatGs(r.neta)} netos al mes, usando ${formatInt(r.registros)} registros de base.` +
       (piso != null
         ? ` En un mes flojo (conversión en su piso histórico) serían ${formatGs(piso)}. Decisión recomendada: comprometer ${formatGs(piso)} como meta y tratar el resto como potencial adicional.`
         : " Decisión recomendada: comprometer una meta por debajo de la proyección para conservar margen.");
-  }, [params, r, rangoAsesores, convBounds, dotActual, metaPrima, asesores, idealRitmo]);
+  }, [params, r, rangoAsesores, convBounds, dotActual, metaPrima, asesores, idealRitmo, capBase]);
 
   return (
     <AppShell>
@@ -301,8 +361,9 @@ export default function SimuladorPage() {
         <div>
           <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Simulador de Ventas</h1>
           <p className="text-sm text-brand-slate mt-1 max-w-3xl">
-            Proyectá el call center: cuántos asesores y cuántos registros de base hacen falta para una meta de prima
-            — o cuánto puede vender una dotación. Parámetros sembrados con las <b>tasas reales</b> de la operación.{" "}
+            Proyectá el call center: cuántos asesores y cuántos registros de base hacen falta para una meta de prima,
+            cuánto puede vender una dotación — o qué capacidad total de producción te da una base/insumo disponible.
+            Parámetros sembrados con las <b>tasas reales</b> de la operación.{" "}
             <Link href="/televentas/simulador/metodologia" className="text-brand-primary font-semibold hover:underline no-print">
               ¿Cómo funciona el modelo? →
             </Link>
@@ -312,7 +373,7 @@ export default function SimuladorPage() {
       </div>
 
       <PrintCover
-        titulo={`Simulación de Ventas${modo === "meta" && Number(metaPrima) > 0 ? ` — Meta ${formatGs(Number(metaPrima))} netos` : modo === "dotacion" ? ` — ${asesores} asesores` : ""}`}
+        titulo={`Simulación de Ventas${modo === "meta" && Number(metaPrima) > 0 ? ` — Meta ${formatGs(Number(metaPrima))} netos` : modo === "dotacion" ? ` — ${asesores} asesores` : modo === "base" && Number(baseRegistros) > 0 ? ` — Base de ${formatInt(Number(baseRegistros))} registros` : ""}`}
         periodo={meta?.meses_usados?.length ? `Modelo basado en ${meta.meses_usados.map((m: string) => monthLabel(m)).join(", ")}` : undefined}
       />
 
@@ -420,16 +481,24 @@ export default function SimuladorPage() {
                 <div className="flex rounded-md border border-brand-border overflow-hidden">
                   <button onClick={() => setModo("meta")} className={`px-4 py-2 text-sm font-semibold ${modo === "meta" ? "bg-brand-primary text-white" : "text-brand-graphite hover:bg-brand-bg"}`}>Por meta de prima</button>
                   <button onClick={() => setModo("dotacion")} className={`px-4 py-2 text-sm font-semibold ${modo === "dotacion" ? "bg-brand-primary text-white" : "text-brand-graphite hover:bg-brand-bg"}`}>Por dotación</button>
+                  <button onClick={() => setModo("base")} className={`px-4 py-2 text-sm font-semibold ${modo === "base" ? "bg-brand-primary text-white" : "text-brand-graphite hover:bg-brand-bg"}`}>Por base disponible</button>
                 </div>
-                {modo === "meta" ? (
+                {modo === "meta" && (
                   <label className="flex items-center gap-2 text-sm">
                     Meta de prima <b>neta</b> (Gs)
                     <input type="number" step={10000000} value={metaPrima} onChange={(e) => setMetaPrima(e.target.value)} className="input max-w-[180px] !py-1.5 text-right" />
                   </label>
-                ) : (
+                )}
+                {modo === "dotacion" && (
                   <label className="flex items-center gap-2 text-sm">
                     Asesores disponibles
                     <input type="number" step={1} value={asesores} onChange={(e) => setAsesores(e.target.value)} className="input max-w-[100px] !py-1.5 text-right" />
+                  </label>
+                )}
+                {modo === "base" && (
+                  <label className="flex items-center gap-2 text-sm">
+                    Registros de base disponibles
+                    <input type="number" step={1000} value={baseRegistros} onChange={(e) => setBaseRegistros(e.target.value)} className="input max-w-[140px] !py-1.5 text-right" />
                   </label>
                 )}
               </div>
@@ -474,6 +543,33 @@ export default function SimuladorPage() {
                     { label: "Prima emitida", valor: formatGs(r.emitida) },
                     { label: "Prima neta", valor: formatGs(r.neta) },
                   ]} />
+                </>
+              )}
+
+              {r && r.modo === "base" && (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                    <Res label="Capacidad de producción" value={formatGs(r.neta)} hint={`emitida ${formatGs(r.emitida)}`} big accent="#10B981" />
+                    <Res label="Pólizas proyectadas" value={`${r.polizas}`} big accent="#F39200" />
+                    <Res label="Asesores para trabajarla" value={`${Math.ceil(r.asesores)}`} hint={`${r.asesores.toFixed(1)} exacto en el mes`} big accent="#E6332A" />
+                  </div>
+                  <Cadena pasos={[
+                    { label: "Registros de base", valor: formatInt(r.registros) },
+                    { label: "Llamadas posibles", valor: formatInt(r.llamadas) },
+                    { label: "Contactos", valor: formatInt(r.contactos) },
+                    { label: "Pólizas", valor: `${r.polizas}` },
+                    { label: "Prima emitida", valor: formatGs(r.emitida) },
+                    { label: "Prima neta", valor: formatGs(r.neta) },
+                  ]} />
+                  <p className="text-[11px] text-brand-slate mt-3">
+                    A {params.intentos_por_registro} intento(s) por registro, la base rinde {formatInt(r.llamadas)} llamadas.
+                    {capBase && capBase.limitado && (
+                      <> · <b className="text-brand-ink">Capacidad real con {dotActual} asesores: {formatGs(capBase.netaReal)}</b> — la dotación es el límite, no la base.</>
+                    )}
+                    {capBase && !capBase.limitado && (
+                      <> · Con la dotación actual ({dotActual}) se trabaja en <b className="text-brand-ink">~{capBase.dias} días</b> de marcación.</>
+                    )}
+                  </p>
                 </>
               )}
             </section>
