@@ -6,6 +6,7 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Scatter, S
 import { AppShell } from "@/components/AppShell";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
+import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
 import { monthLabel } from "@/lib/month";
@@ -109,13 +110,23 @@ export default function SimuladorPage() {
   const conv = reg?.conversion; // regresión diaria: {pct, ic95_pct, r2, n}
   const dotActual = meta?.meses_disponibles?.[0]?.agentes ?? null; // mes completo más reciente
 
-  // Rango de asesores según el IC 95% de la conversión diaria.
+  // La variabilidad histórica (IC 95% de la regresión diaria) se aplica RELATIVA a la
+  // conversión vigente del modelo — así el rango siempre envuelve al escenario base,
+  // incluso si el usuario ajustó la conversión a mano.
+  const convBounds = useMemo(() => {
+    if (!params || !conv?.ic95_pct || !conv.pct) return null;
+    const piso = Math.max(params.conversion_pct * (conv.ic95_pct[0] / conv.pct), 0.01);
+    const techo = Math.max(params.conversion_pct * (conv.ic95_pct[1] / conv.pct), 0.01);
+    return { piso: Math.round(piso * 100) / 100, techo: Math.round(techo * 100) / 100 };
+  }, [params, conv]);
+
+  // Plan prudente: asesores necesarios si la conversión rinde en su piso histórico.
   const rangoAsesores = useMemo(() => {
-    if (!params || modo !== "meta" || !(Number(metaPrima) > 0) || !conv?.ic95_pct) return null;
-    const lo: any = simular({ ...params, conversion_pct: conv.ic95_pct[1] }, Number(metaPrima), null);
-    const hi: any = simular({ ...params, conversion_pct: Math.max(conv.ic95_pct[0], 0.01) }, Number(metaPrima), null);
-    return { min: Math.ceil(lo.asesores), max: Math.ceil(hi.asesores) };
-  }, [params, modo, metaPrima, conv]);
+    if (!params || modo !== "meta" || !(Number(metaPrima) > 0) || !convBounds) return null;
+    const conTecho: any = simular({ ...params, conversion_pct: convBounds.techo }, Number(metaPrima), null);
+    const conPiso: any = simular({ ...params, conversion_pct: convBounds.piso }, Number(metaPrima), null);
+    return { min: Math.ceil(conTecho.asesores), max: Math.ceil(conPiso.asesores) };
+  }, [params, modo, metaPrima, convBounds]);
 
   // Curva: asesores necesarios según nivel de meta (con banda IC si hay regresión).
   const curvaDotacion = useMemo(() => {
@@ -125,14 +136,14 @@ export default function SimuladorPage() {
     for (let f = 0.4; f <= 1.61; f += 0.2) {
       const m = base * f;
       const row: any = { meta: `${Math.round(m / 1e6)}M`, base: Math.ceil((simular(params, m, null) as any).asesores) };
-      if (conv?.ic95_pct) {
-        row.optimista = Math.ceil((simular({ ...params, conversion_pct: conv.ic95_pct[1] }, m, null) as any).asesores);
-        row.conservador = Math.ceil((simular({ ...params, conversion_pct: Math.max(conv.ic95_pct[0], 0.01) }, m, null) as any).asesores);
+      if (convBounds) {
+        row.techo = Math.ceil((simular({ ...params, conversion_pct: convBounds.techo }, m, null) as any).asesores);
+        row.prudente = Math.ceil((simular({ ...params, conversion_pct: convBounds.piso }, m, null) as any).asesores);
       }
       pts.push(row);
     }
     return pts;
-  }, [params, metaPrima, conv]);
+  }, [params, metaPrima, convBounds]);
 
   // Recomendaciones dinámicas (se recalculan con cada cambio de parámetros/meta).
   const recomendaciones = useMemo(() => {
@@ -179,11 +190,11 @@ export default function SimuladorPage() {
     if (conv) {
       const [lo, hi] = conv.ic95_pct;
       if (params.conversion_pct < lo || params.conversion_pct > hi) out.push({ tipo: "estadistica", severidad: "warning",
-        titulo: `La conversión del modelo (${params.conversion_pct}%) está fuera del rango estadístico`,
-        detalle: `La regresión diaria (${conv.n} días) estima conversión entre ${lo}% y ${hi}% (IC 95%). Revisá los meses seleccionados o el supuesto ingresado.` });
+        titulo: `La conversión cargada (${params.conversion_pct}%) es muy distinta de la observada`,
+        detalle: `En los ${conv.n} días reales analizados, la conversión se movió entre ${lo}% y ${hi}%. Si se usa un valor fuera de ese rango, la proyección es una hipótesis, no una expectativa respaldada por datos.` });
       if (conv.r2 < 0.4) out.push({ tipo: "estadistica", severidad: "warning",
-        titulo: `Relación llamadas→ventas débil (R² ${conv.r2})`,
-        detalle: "Las ventas diarias no siguen de cerca a las llamadas (desfase de emisión, calidad de base variable). Usá los rangos, no el punto exacto." });
+        titulo: `Relación llamadas-ventas poco consistente (R² ${conv.r2})`,
+        detalle: "Las ventas diarias no siguen de cerca a las llamadas (desfase de emisión, calidad de base variable). Recomendación: decidir con el plan prudente, no con el escenario probable." });
     } else if (reg) {
       out.push({ tipo: "estadistica", severidad: "info",
         titulo: "Aún sin regresión diaria",
@@ -195,37 +206,35 @@ export default function SimuladorPage() {
   const maxX = Math.max(...(reg?.puntos ?? []).map((p: any) => p.contestadas), 0);
   const fitData = conv ? [{ contestadas: 0, polizas: 0 }, { contestadas: maxX, polizas: (maxX * conv.pct) / 100 }] : [];
 
-  // Conclusión ejecutiva: la decisión ideal en lenguaje claro, basada en la estadística.
+  // Conclusión ejecutiva: la decisión ideal en lenguaje claro y concreto.
   const conclusion = useMemo(() => {
     if (!params || !r) return null;
     if (r.modo === "meta") {
       const need = Math.ceil(r.asesores);
+      const prudente = rangoAsesores?.max ?? null;
       const partes: string[] = [];
-      partes.push(`Para alcanzar ${formatGs(Number(metaPrima))} netos al mes se necesitan ${need} asesores` +
-        (rangoAsesores ? ` (rango estadístico ${rangoAsesores.min}–${rangoAsesores.max} con 95% de confianza)` : "") +
-        ` y una base de ${formatInt(r.registros)} registros frescos.`);
+      partes.push(`Para vender ${formatGs(Number(metaPrima))} netos al mes se necesitan ${need} asesores y una base de ${formatInt(r.registros)} registros frescos.`);
       if (dotActual != null) {
         if (dotActual >= need) {
-          partes.push(`La dotación actual (${dotActual} asesores) es suficiente: la meta es alcanzable sin contrataciones.`);
+          partes.push(`La dotación actual (${dotActual} asesores) alcanza: la meta es lograble sin contrataciones.`);
         } else {
           const proy: any = simular(params, null, dotActual);
-          partes.push(`Con la dotación actual (${dotActual}) se proyectan ${formatGs(proy.neta)} — una brecha de ${formatGs(Number(metaPrima) - proy.neta)}.`);
+          partes.push(`Con la dotación actual (${dotActual}) se llegaría a ${formatGs(proy.neta)}: faltan ${formatGs(Number(metaPrima) - proy.neta)} para la meta.`);
         }
       }
-      partes.push(rangoAsesores
-        ? `Decisión recomendada: si la meta es un compromiso firme, dimensionar con el escenario conservador (${rangoAsesores.max} asesores); si es un objetivo aspiracional, el escenario base (${need}) es razonable.`
-        : "Decisión recomendada: dimensionar con el escenario conservador de la tabla de escenarios.");
+      if (prudente != null && prudente > need) {
+        partes.push(`Decisión recomendada: planificar con ${prudente} asesores. Ese es el plan prudente — cubre la meta aun si la conversión rinde en su piso histórico (${convBounds!.piso}% en vez de ${params.conversion_pct}%). Con ${need} la meta se logra solo si el mes rinde como el promedio.`);
+      } else {
+        partes.push(`Decisión recomendada: si la meta es un compromiso firme, usar el escenario conservador de la tabla de escenarios; ${need} asesores alcanzan si el mes rinde como el promedio.`);
+      }
       return partes.join(" ");
     }
-    const rangoPrima = conv?.ic95_pct ? {
-      lo: (simular({ ...params, conversion_pct: Math.max(conv.ic95_pct[0], 0.01) }, null, Number(asesores)) as any).neta,
-      hi: (simular({ ...params, conversion_pct: conv.ic95_pct[1] }, null, Number(asesores)) as any).neta,
-    } : null;
-    return `Con ${asesores} asesores la proyección es ${formatGs(r.neta)} netos al mes` +
-      (rangoPrima ? ` (entre ${formatGs(rangoPrima.lo)} y ${formatGs(rangoPrima.hi)} con 95% de confianza)` : "") +
-      `, marcando una base de ${formatInt(r.registros)} registros. Decisión recomendada: comprometer como meta el piso del rango` +
-      (rangoPrima ? ` (${formatGs(rangoPrima.lo)})` : "") + ` y tratar el resto como potencial adicional.`;
-  }, [params, r, rangoAsesores, dotActual, metaPrima, asesores, conv]);
+    const piso = convBounds ? (simular({ ...params, conversion_pct: convBounds.piso }, null, Number(asesores)) as any).neta : null;
+    return `Con ${asesores} asesores la venta esperada es ${formatGs(r.neta)} netos al mes, usando ${formatInt(r.registros)} registros de base.` +
+      (piso != null
+        ? ` En un mes flojo (conversión en su piso histórico) serían ${formatGs(piso)}. Decisión recomendada: comprometer ${formatGs(piso)} como meta y tratar el resto como potencial adicional.`
+        : " Decisión recomendada: comprometer una meta por debajo de la proyección para conservar margen.");
+  }, [params, r, rangoAsesores, convBounds, dotActual, metaPrima, asesores]);
 
   return (
     <AppShell>
@@ -342,7 +351,7 @@ export default function SimuladorPage() {
             {/* Conclusión ejecutiva — siempre visible y en el PDF */}
             {conclusion && (
               <section className="card p-5 border-l-4 border-brand-ink bg-white">
-                <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">🎯 Conclusión ejecutiva</h2>
+                <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Conclusión ejecutiva</h2>
                 <p className="text-[15px] text-brand-ink leading-relaxed font-medium">{conclusion}</p>
               </section>
             )}
@@ -384,8 +393,8 @@ export default function SimuladorPage() {
                   ]} />
                   <p className="text-[11px] text-brand-slate mt-3">
                     Capacidad por asesor: {formatInt(r.capMes)} llamadas/mes ({params.llamadas_asesor_dia}/día × {params.dias_habiles} días).
-                    {rangoAsesores && (
-                      <> · <b className="text-brand-ink">Rango estadístico: {rangoAsesores.min}–{rangoAsesores.max} asesores</b> (IC 95% de la conversión diaria).</>
+                    {rangoAsesores && convBounds && (
+                      <> · <b className="text-brand-ink">Plan prudente: {rangoAsesores.max} asesores</b> — cubre la meta aun si la conversión rinde en su piso histórico ({convBounds.piso}%).</>
                     )}
                   </p>
                 </>
@@ -447,7 +456,7 @@ export default function SimuladorPage() {
               {curvaDotacion.length > 0 && (
                 <section className="card p-5">
                   <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Dotación según meta</h2>
-                  <p className="text-xs text-brand-slate mb-3">Asesores necesarios para distintos niveles de meta{conv ? " (banda = IC 95% de la conversión diaria)" : ""}.</p>
+                  <p className="text-xs text-brand-slate mb-3">Cuántos asesores hacen falta para cada nivel de meta mensual.</p>
                   <ResponsiveContainer width="100%" height={240}>
                     <LineChart data={curvaDotacion} margin={{ top: 8, right: 12 }}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -455,27 +464,31 @@ export default function SimuladorPage() {
                       <YAxis fontSize={11} allowDecimals={false} />
                       <Tooltip />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
-                      {conv && <Line dataKey="conservador" name="Conservador (IC inf.)" stroke="#E6332A" strokeDasharray="4 3" dot={false} />}
-                      <Line dataKey="base" name="Base" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3 }} />
-                      {conv && <Line dataKey="optimista" name="Optimista (IC sup.)" stroke="#10B981" strokeDasharray="4 3" dot={false} />}
+                      {convBounds && <Line dataKey="prudente" name="Plan prudente (mes flojo)" stroke="#E6332A" strokeDasharray="4 3" dot={false} />}
+                      <Line dataKey="base" name="Escenario probable" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3 }} />
+                      {convBounds && <Line dataKey="techo" name="Mejor caso (mes fuerte)" stroke="#10B981" strokeDasharray="4 3" dot={false} />}
                     </LineChart>
                   </ResponsiveContainer>
+                  <Lectura>
+                    Buscá la meta en el eje horizontal (en millones de Gs) y subí hasta la línea negra: esa altura es la cantidad
+                    de asesores que se necesitan en el escenario más probable. La línea roja punteada indica cuántos harían falta
+                    si el mes rinde flojo (conversión en su piso histórico) — es la referencia para planificar sin riesgo. La verde,
+                    cuántos bastarían en un mes muy bueno.
+                  </Lectura>
                 </section>
               )}
 
               {reg?.puntos?.length >= 5 && (
                 <section className="card p-5">
-                  <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Validación estadística</h2>
+                  <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Validación con datos reales</h2>
                   <p className="text-xs text-brand-slate mb-2">
-                    Regresión lineal (mínimos cuadrados, por el origen) sobre los <b>{reg.n_dias} días reales</b> de los meses elegidos:
-                    contestadas/día → pólizas/día.
+                    Relación entre llamadas atendidas y pólizas, día por día ({reg.n_dias} días reales de los meses elegidos).
                   </p>
                   {conv && (
                     <div className="flex flex-wrap gap-2 mb-3 text-[11px]">
-                      <span className="px-2 py-1 rounded bg-brand-bg font-mono">β = {conv.pct}%</span>
-                      <span className="px-2 py-1 rounded bg-brand-bg font-mono">IC 95%: {conv.ic95_pct[0]}–{conv.ic95_pct[1]}%</span>
-                      <span className="px-2 py-1 rounded bg-brand-bg font-mono">R² = {conv.r2}</span>
-                      <span className="px-2 py-1 rounded bg-brand-bg font-mono">pooled: {params.conversion_pct}%</span>
+                      <span className="px-2 py-1 rounded bg-brand-bg">Conversión observada: <b>{conv.pct}%</b></span>
+                      <span className="px-2 py-1 rounded bg-brand-bg">Varía entre <b>{conv.ic95_pct[0]}%</b> y <b>{conv.ic95_pct[1]}%</b> (95% de los casos)</span>
+                      <span className="px-2 py-1 rounded bg-brand-bg">Consistencia (R²): <b>{conv.r2}</b></span>
                     </div>
                   )}
                   <ResponsiveContainer width="100%" height={220}>
@@ -487,10 +500,16 @@ export default function SimuladorPage() {
                       <Tooltip cursor={{ strokeDasharray: "3 3" }} />
                       <Scatter name="Días" data={reg.puntos} fill="#0EA5E9" fillOpacity={0.6} />
                       {fitData.length > 0 && (
-                        <Scatter name="Ajuste" data={fitData} fill="#E6332A" line={{ stroke: "#E6332A", strokeWidth: 2 }} shape={() => <g />} legendType="line" />
+                        <Scatter name="Tendencia" data={fitData} fill="#E6332A" line={{ stroke: "#E6332A", strokeWidth: 2 }} shape={() => <g />} legendType="line" />
                       )}
                     </ScatterChart>
                   </ResponsiveContainer>
+                  <Lectura>
+                    Cada punto azul es un día real de operación: a la derecha, más llamadas atendidas ese día; más arriba, más
+                    pólizas vendidas. La línea roja es la tendencia promedio. Cuanto más pegados están los puntos a la línea,
+                    más confiable es proyectar ventas a partir de llamadas; si están muy dispersos, conviene decidir con el
+                    plan prudente y no con el escenario probable.
+                  </Lectura>
                 </section>
               )}
             </div>

@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
+import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt, formatPct } from "@/lib/format";
 import { monthLabel } from "@/lib/month";
@@ -107,7 +108,7 @@ export default function TeleventasTendenciasPage() {
           <InsightsPanel insights={tend?.insights} titulo="Tendencias detectadas" />
 
           <div className="grid lg:grid-cols-2 gap-6 mb-6">
-            <ChartCard title="Conversión mensual (%)">
+            <ChartCard title="Conversión mensual (%)" lectura="Cada punto es un mes: el valor indica cuántas pólizas se emitieron por cada 100 llamadas atendidas. Línea que baja = se necesita más esfuerzo telefónico por venta; línea que sube = el equipo cierra mejor.">
               <LineChart data={chartData} margin={{ top: 22, right: 16, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} /><YAxis fontSize={11} />
                 <Tooltip formatter={pctLbl} />
@@ -117,7 +118,7 @@ export default function TeleventasTendenciasPage() {
               </LineChart>
             </ChartCard>
 
-            <ChartCard title="Contactabilidad mensual (%)">
+            <ChartCard title="Contactabilidad mensual (%)" lectura="Porcentaje de llamadas que fueron atendidas por el cliente (34 segundos o más) en cada mes. Si baja de forma sostenida, la causa típica es el desgaste o la calidad de las bases de datos, no el desempeño de los operadores.">
               <LineChart data={chartData} margin={{ top: 22, right: 16, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} /><YAxis fontSize={11} />
                 <Tooltip formatter={pctLbl} />
@@ -127,7 +128,7 @@ export default function TeleventasTendenciasPage() {
               </LineChart>
             </ChartCard>
 
-            <ChartCard title="Llamadas: total y promedio por asesor/día">
+            <ChartCard title="Llamadas: total y promedio por asesor/día" lectura="Las barras grises muestran el total de llamadas del mes (esfuerzo total del equipo). La línea roja, cuántas llamadas hizo en promedio cada asesor por día (ritmo individual). Barras altas con línea baja = hay más gente marcando, pero cada uno marca menos.">
               <ComposedChart data={chartData} margin={{ top: 22, right: 8, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} />
                 <YAxis yAxisId="l" fontSize={11} /><YAxis yAxisId="r" orientation="right" fontSize={11} />
@@ -141,7 +142,7 @@ export default function TeleventasTendenciasPage() {
               </ComposedChart>
             </ChartCard>
 
-            <ChartCard title="Agentes activos y prima emitida">
+            <ChartCard title="Agentes activos y prima emitida" lectura="Las barras naranjas son la prima emitida de cada mes (en millones); la línea negra, cuántos agentes operaron. Si la dotación sube pero la prima no acompaña, los agentes nuevos aún no producen a pleno o la calidad de las bases cayó.">
               <ComposedChart data={chartData} margin={{ top: 22, right: 8, left: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="label" fontSize={11} />
                 <YAxis yAxisId="l" fontSize={11} tickFormatter={(v) => `${(v / 1e6).toFixed(0)}M`} />
@@ -470,11 +471,12 @@ function CompararMeses({ disponibles, seleccion, onToggle, onComparar, cmp, load
   );
 }
 
-function ChartCard({ title, children }: { title: string; children: React.ReactElement }) {
+function ChartCard({ title, lectura, children }: { title: string; lectura?: string; children: React.ReactElement }) {
   return (
     <section className="card p-6">
       <h2 className="font-display text-lg text-brand-ink uppercase mb-4">{title}</h2>
       <ResponsiveContainer width="100%" height={240}>{children}</ResponsiveContainer>
+      {lectura && <Lectura>{lectura}</Lectura>}
     </section>
   );
 }
