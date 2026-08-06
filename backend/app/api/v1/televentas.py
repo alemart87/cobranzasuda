@@ -37,6 +37,7 @@ from ...schemas.televentas import (
 from ...services.analyzers import (
     combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
 )
+from ...services.analyzers.televentas_simulador import regresion_diaria
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
@@ -682,11 +683,44 @@ async def televentas_simulador(
     meses_sel = [m.strip() for m in meses.split(",") if m.strip()] if meses else None
     params = await _parametros_simulador(db, meses_sel)
     out: dict = {"parametros": params}
+    if params.get("disponible"):
+        out["regresion"] = await _regresion_diaria_meses(db, params.get("meses_usados", []))
     if params.get("disponible") and (meta_prima is not None or asesores is not None):
         out["resultado"] = simular(params, meta_prima=meta_prima, asesores=asesores)
         if meta_prima is not None:
             out["escenarios"] = escenarios(params, meta_prima)
     return out
+
+
+async def _regresion_diaria_meses(db: AsyncSession, meses: list[str]) -> dict:
+    """Dataset DIARIO de los meses seleccionados: contestadas/día (llamadas) unido con
+    pólizas y prima/día (producción) por fecha, + regresiones OLS por el origen."""
+    puntos: list[dict] = []
+    for m in meses:
+        start, end = _month_bounds(m)
+
+        async def _latest(Model):
+            return (await db.execute(
+                select(Model).where(Model.period_month >= start, Model.period_month < end,
+                                    Model.is_published == True)  # noqa: E712
+                .order_by(Model.generated_at.desc()).limit(1)
+            )).scalars().first()
+
+        ll = await _latest(TeleventasLlamadasReport)
+        pr = await _latest(TeleventasProduccionReport)
+        if not ll:
+            continue
+        prod_dia = {d.get("fecha"): d for d in ((pr.data or {}).get("por_dia") or [])} if pr else {}
+        for d in ((ll.data or {}).get("por_dia") or []):
+            f = d.get("fecha")
+            if not f:
+                continue
+            pd = prod_dia.get(f, {})
+            # Día con marcación: pólizas/prima 0 si no hubo emisión ese día (cero real).
+            puntos.append({"fecha": f, "contestadas": d.get("contestadas", 0),
+                           "polizas": pd.get("polizas", 0), "prima": pd.get("prima", 0)})
+    puntos.sort(key=lambda p: p["fecha"])
+    return regresion_diaria(puntos)
 
 
 @router.get("/tendencias")
