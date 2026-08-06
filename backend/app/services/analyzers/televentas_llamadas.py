@@ -90,8 +90,8 @@ def analyze_televentas_llamadas(rows: list[dict[str, Any]], umbral: int = UMBRAL
         })
     por_vendedor.sort(key=lambda x: -x["llamadas"])
 
-    # ---- por día (con asesores activos y promedio por asesor) ----
-    pd: dict[str, dict] = defaultdict(lambda: {"llamadas": 0, "contestadas": 0, "asesores": set()})
+    # ---- por día (con asesores activos, promedio por asesor y TMO del día) ----
+    pd: dict[str, dict] = defaultdict(lambda: {"llamadas": 0, "contestadas": 0, "talk_cont_seg": 0.0, "asesores": set()})
     for r in rows:
         if not r["fecha"]:
             continue
@@ -100,6 +100,7 @@ def analyze_televentas_llamadas(rows: list[dict[str, Any]], umbral: int = UMBRAL
         pd[k]["asesores"].add(r["usuario"])
         if r["duracion_seg"] >= umbral:
             pd[k]["contestadas"] += 1
+            pd[k]["talk_cont_seg"] += r["duracion_seg"]
     por_dia = []
     total_asesor_dias = 0
     for k, v in sorted(pd.items()):
@@ -110,6 +111,7 @@ def analyze_televentas_llamadas(rows: list[dict[str, Any]], umbral: int = UMBRAL
             "no_contestadas": v["llamadas"] - v["contestadas"],
             "asesores_activos": n_ase,
             "promedio_por_asesor": round(v["llamadas"] / n_ase) if n_ase else 0,
+            "tmo_seg": round(v["talk_cont_seg"] / v["contestadas"]) if v["contestadas"] else 0,
         })
 
     # ---- curva horaria ----

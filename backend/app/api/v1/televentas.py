@@ -7,8 +7,11 @@ Más un overview combinado para el Gerente de Ventas (KPIs, ranking y alertas).
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
+from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
@@ -38,6 +41,7 @@ from ...services.analyzers import (
     combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
 )
 from ...services.analyzers.televentas_simulador import regresion_diaria
+from ...services.parsers import parse_televentas_llamadas
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
@@ -692,9 +696,40 @@ async def televentas_simulador(
     return out
 
 
+async def _heal_tmo_diario(db: AsyncSession, report: TeleventasLlamadasReport) -> None:
+    """Self-heal: agrega `tmo_seg` a cada día de `por_dia` en reportes generados antes
+    de que el analyzer lo calculara, re-leyendo el archivo original del upload.
+    Se persiste una sola vez; si el archivo ya no existe, se omite en silencio."""
+    data = report.data or {}
+    por_dia = data.get("por_dia") or []
+    if not por_dia or all("tmo_seg" in d for d in por_dia):
+        return
+    upload = await db.get(TeleventasLlamadasUpload, report.upload_id)
+    if not upload or not upload.file_path or not Path(upload.file_path).exists():
+        return
+    try:
+        rows = await asyncio.to_thread(parse_televentas_llamadas, upload.file_path)
+    except Exception:
+        return
+    umbral = (data.get("kpis") or {}).get("umbral_contestada_seg", 34)
+    acc: dict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    for r in rows:
+        if r.get("fecha") and r.get("duracion_seg", 0) >= umbral:
+            k = r["fecha"].date().isoformat()
+            acc[k][0] += r["duracion_seg"]
+            acc[k][1] += 1
+    for d in por_dia:
+        talk, n = acc.get(d.get("fecha"), (0.0, 0.0))
+        d["tmo_seg"] = round(talk / n) if n else 0
+    report.data = {**data, "por_dia": por_dia}
+    await db.commit()
+
+
 async def _regresion_diaria_meses(db: AsyncSession, meses: list[str]) -> dict:
     """Dataset DIARIO de los meses seleccionados: contestadas/día (llamadas) unido con
-    pólizas y prima/día (producción) por fecha, + regresiones OLS por el origen."""
+    pólizas y prima/día (producción) por fecha, + regresiones OLS por el origen.
+    Cada punto incluye además asesores activos, promedio de llamadas por asesor y
+    TMO del día — insumo de los gráficos de ritmo y tiempo medio del simulador."""
     puntos: list[dict] = []
     for m in meses:
         start, end = _month_bounds(m)
@@ -710,6 +745,7 @@ async def _regresion_diaria_meses(db: AsyncSession, meses: list[str]) -> dict:
         pr = await _latest(TeleventasProduccionReport)
         if not ll:
             continue
+        await _heal_tmo_diario(db, ll)
         prod_dia = {d.get("fecha"): d for d in ((pr.data or {}).get("por_dia") or [])} if pr else {}
         for d in ((ll.data or {}).get("por_dia") or []):
             f = d.get("fecha")
@@ -718,7 +754,10 @@ async def _regresion_diaria_meses(db: AsyncSession, meses: list[str]) -> dict:
             pd = prod_dia.get(f, {})
             # Día con marcación: pólizas/prima 0 si no hubo emisión ese día (cero real).
             puntos.append({"fecha": f, "contestadas": d.get("contestadas", 0),
-                           "polizas": pd.get("polizas", 0), "prima": pd.get("prima", 0)})
+                           "polizas": pd.get("polizas", 0), "prima": pd.get("prima", 0),
+                           "asesores_activos": d.get("asesores_activos", 0),
+                           "promedio_por_asesor": d.get("promedio_por_asesor", 0),
+                           "tmo_seg": d.get("tmo_seg", 0)})
     puntos.sort(key=lambda p: p["fecha"])
     return regresion_diaria(puntos)
 
