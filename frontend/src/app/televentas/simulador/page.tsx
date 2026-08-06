@@ -147,6 +147,37 @@ export default function SimuladorPage() {
     return pts;
   }, [params, metaPrima, convBounds]);
 
+  // Mejor ritmo REAL observado (llamadas/asesor efectivo en el mejor día): techo
+  // operativo contra el que se valida cualquier ritmo "ideal" calculado.
+  const ritmoMejor = useMemo(() => {
+    const vals = (reg?.puntos ?? []).map((p: any) => p.promedio_por_asesor ?? 0).filter((v: number) => v > 0);
+    return vals.length ? Math.max(...vals) : null;
+  }, [reg]);
+
+  // Ritmo IDEAL: llamadas promedio por asesor/día necesarias para que la meta se
+  // cumpla con la conversión OBSERVADA (misma regresión del gráfico de validación),
+  // sobre la dotación efectiva del último mes. Si supera el mejor día real, la meta
+  // NO se alcanza con ritmo y el mensaje pasa a dotación (alcanzable=false).
+  const idealRitmo = useMemo(() => {
+    if (!params || !r || r.modo !== "meta" || !conv?.pct) return null;
+    const contact = Math.max(params.contactabilidad_pct, 0.01) / 100;
+    const dias = Math.max(params.dias_habiles, 1);
+    const dot = dotActual ?? Math.ceil(r.asesores);
+    if (!dot) return null;
+    const llamadas = (r.polizas / (conv.pct / 100)) / contact;
+    const llamadasPiso = (r.polizas / (Math.max(conv.ic95_pct[0], 0.01) / 100)) / contact;
+    const ideal = Math.ceil(llamadas / (dot * dias));
+    return {
+      dot,
+      ideal,
+      prudente: Math.ceil(llamadasPiso / (dot * dias)),
+      alcanzable: ritmoMejor == null || ideal <= ritmoMejor,
+      ritmoMejor,
+      asesoresMejorRitmo: ritmoMejor ? Math.ceil(llamadas / (ritmoMejor * dias)) : null,
+      asesoresRitmoActual: Math.ceil(llamadas / (Math.max(params.llamadas_asesor_dia, 1) * dias)),
+    };
+  }, [params, r, conv, dotActual, ritmoMejor]);
+
   // Recomendaciones dinámicas (se recalculan con cada cambio de parámetros/meta).
   const recomendaciones = useMemo(() => {
     if (!params || !r) return [];
@@ -182,6 +213,9 @@ export default function SimuladorPage() {
       out.push({ tipo: "base", severidad: "info",
         titulo: `Base de datos: ${formatInt(r.registros)} registros frescos`,
         detalle: `A ${params.intentos_por_registro} intento(s) por registro se necesitan ${formatInt(r.llamadas)} marcaciones. Bases agotadas bajan la contactabilidad y rompen la proyección.` });
+      if (idealRitmo && !idealRitmo.alcanzable) out.push({ tipo: "ritmo", severidad: "alert",
+        titulo: "Esta meta no se alcanza solo con ritmo de marcación",
+        detalle: `Con ${idealRitmo.dot} asesores, la meta exigiría ${idealRitmo.ideal} llamadas por asesor/día — el mejor día real del equipo fue ${idealRitmo.ritmoMejor}. La meta se cubre con dotación: ${idealRitmo.asesoresRitmoActual} asesores al ritmo actual (${params.llamadas_asesor_dia}/día)${idealRitmo.asesoresMejorRitmo ? ` o ${idealRitmo.asesoresMejorRitmo} sosteniendo el mejor ritmo observado (${idealRitmo.ritmoMejor}/día)` : ""}.` });
     } else {
       out.push({ tipo: "proyeccion", severidad: "info",
         titulo: `Con ${asesores} asesores: ${formatGs(r.neta)} netos proyectados`,
@@ -203,28 +237,10 @@ export default function SimuladorPage() {
         detalle: reg.mensaje || "Se necesitan al menos 5 días con datos de llamadas y producción en los meses elegidos." });
     }
     return out;
-  }, [params, r, reg, conv, dotActual, modo, metaPrima, asesores]);
+  }, [params, r, reg, conv, dotActual, modo, metaPrima, asesores, idealRitmo]);
 
   const maxX = Math.max(...(reg?.puntos ?? []).map((p: any) => p.contestadas), 0);
   const fitData = conv ? [{ contestadas: 0, polizas: 0 }, { contestadas: maxX, polizas: (maxX * conv.pct) / 100 }] : [];
-
-  // Ritmo IDEAL: llamadas promedio por asesor/día necesarias para que la meta se
-  // cumpla con la conversión OBSERVADA en los días reales (misma regresión del
-  // gráfico de validación). Se calcula sobre la dotación del último mes completo.
-  const idealRitmo = useMemo(() => {
-    if (!params || !r || r.modo !== "meta" || !conv?.pct) return null;
-    const contact = Math.max(params.contactabilidad_pct, 0.01) / 100;
-    const dias = Math.max(params.dias_habiles, 1);
-    const dot = dotActual ?? Math.ceil(r.asesores);
-    if (!dot) return null;
-    const llamadas = (r.polizas / (conv.pct / 100)) / contact;
-    const llamadasPiso = (r.polizas / (Math.max(conv.ic95_pct[0], 0.01) / 100)) / contact;
-    return {
-      dot,
-      ideal: Math.ceil(llamadas / (dot * dias)),
-      prudente: Math.ceil(llamadasPiso / (dot * dias)),
-    };
-  }, [params, r, conv, dotActual]);
 
   // TMO diario (si los reportes lo traen): promedio general y TMO de los días
   // con mejor conversión — la referencia de "tiempo medio ideal".
@@ -263,6 +279,9 @@ export default function SimuladorPage() {
       } else {
         partes.push(`Decisión recomendada: si la meta es un compromiso firme, usar el escenario conservador de la tabla de escenarios; ${need} asesores alcanzan si el mes rinde como el promedio.`);
       }
+      if (idealRitmo && !idealRitmo.alcanzable) {
+        partes.push(`Importante: no es viable cubrir esta meta exigiendo más ritmo a la dotación actual — harían falta ${idealRitmo.ideal} llamadas por asesor/día y el mejor día real del equipo fue ${idealRitmo.ritmoMejor}.`);
+      }
       return partes.join(" ");
     }
     const piso = convBounds ? (simular({ ...params, conversion_pct: convBounds.piso }, null, Number(asesores)) as any).neta : null;
@@ -270,7 +289,7 @@ export default function SimuladorPage() {
       (piso != null
         ? ` En un mes flojo (conversión en su piso histórico) serían ${formatGs(piso)}. Decisión recomendada: comprometer ${formatGs(piso)} como meta y tratar el resto como potencial adicional.`
         : " Decisión recomendada: comprometer una meta por debajo de la proyección para conservar margen.");
-  }, [params, r, rangoAsesores, convBounds, dotActual, metaPrima, asesores]);
+  }, [params, r, rangoAsesores, convBounds, dotActual, metaPrima, asesores, idealRitmo]);
 
   return (
     <AppShell>
@@ -529,9 +548,14 @@ export default function SimuladorPage() {
                       <span className="px-2 py-1 rounded bg-brand-bg">Conversión observada: <b>{conv.pct}%</b></span>
                       <span className="px-2 py-1 rounded bg-brand-bg">Varía entre <b>{conv.ic95_pct[0]}%</b> y <b>{conv.ic95_pct[1]}%</b> (95% de los casos)</span>
                       <span className="px-2 py-1 rounded bg-brand-bg">Consistencia (R²): <b>{conv.r2}</b></span>
-                      {idealRitmo && (
+                      {idealRitmo && idealRitmo.alcanzable && (
                         <span className="px-2 py-1 rounded bg-brand-primary text-white font-semibold">
                           Ideal para la meta: <b>{idealRitmo.ideal}</b> llamadas/asesor/día (con {idealRitmo.dot} asesores)
+                        </span>
+                      )}
+                      {idealRitmo && !idealRitmo.alcanzable && (
+                        <span className="px-2 py-1 rounded bg-brand-primary text-white font-semibold">
+                          Con {idealRitmo.dot} asesores la meta exigiría {idealRitmo.ideal} llamadas/asesor/día — inviable: falta dotación
                         </span>
                       )}
                     </div>
@@ -554,9 +578,13 @@ export default function SimuladorPage() {
                     pólizas vendidas. La línea roja es la tendencia promedio. Cuanto más pegados están los puntos a la línea,
                     más confiable es proyectar ventas a partir de llamadas; si están muy dispersos, conviene decidir con el
                     plan prudente y no con el escenario probable.
-                    {idealRitmo && (
+                    {idealRitmo && idealRitmo.alcanzable && (
                       <> El recuadro rojo indica el ritmo de marcación ideal por asesor para alcanzar la meta con la
                       conversión observada en estos datos.</>
+                    )}
+                    {idealRitmo && !idealRitmo.alcanzable && (
+                      <> El recuadro rojo avisa que el ritmo que exigiría la meta con la dotación actual supera el mejor
+                      día real del equipo: la meta se cubre sumando asesores, no exigiendo más marcación.</>
                     )}
                   </Lectura>
                 </section>
@@ -568,14 +596,29 @@ export default function SimuladorPage() {
                   <p className="text-xs text-brand-slate mb-2">
                     Ritmo real de marcación de cada día frente al ideal necesario para la meta.
                   </p>
-                  {idealRitmo && (
+                  {idealRitmo && idealRitmo.alcanzable && (
                     <div className="flex flex-wrap gap-2 mb-3 text-[11px]">
                       <span className="px-2 py-1 rounded bg-brand-primary text-white font-semibold">
                         Ideal: <b>{idealRitmo.ideal}</b> llamadas/asesor/día
                       </span>
-                      <span className="px-2 py-1 rounded bg-brand-orange/10 text-brand-orange font-semibold">
-                        En un mes flojo: {idealRitmo.prudente} llamadas/asesor/día
+                      {idealRitmo.prudente <= (idealRitmo.ritmoMejor ?? Infinity) && (
+                        <span className="px-2 py-1 rounded bg-brand-orange/10 text-brand-orange font-semibold">
+                          En un mes flojo: {idealRitmo.prudente} llamadas/asesor/día
+                        </span>
+                      )}
+                      <span className="px-2 py-1 rounded bg-brand-bg">Ritmo actual: <b>{params.llamadas_asesor_dia}</b></span>
+                    </div>
+                  )}
+                  {idealRitmo && !idealRitmo.alcanzable && (
+                    <div className="flex flex-wrap gap-2 mb-3 text-[11px]">
+                      <span className="px-2 py-1 rounded bg-brand-primary text-white font-semibold">
+                        La meta exigiría {idealRitmo.ideal} llamadas/asesor/día — por encima del mejor día real ({idealRitmo.ritmoMejor})
                       </span>
+                      {idealRitmo.asesoresMejorRitmo != null && (
+                        <span className="px-2 py-1 rounded bg-brand-bg">
+                          Al mejor ritmo harían falta <b>{idealRitmo.asesoresMejorRitmo}</b> asesores
+                        </span>
+                      )}
                       <span className="px-2 py-1 rounded bg-brand-bg">Ritmo actual: <b>{params.llamadas_asesor_dia}</b></span>
                     </div>
                   )}
@@ -587,9 +630,13 @@ export default function SimuladorPage() {
                       <Tooltip />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar dataKey="promedio_por_asesor" name="Llamadas/asesor (real)" fill="#0EA5E9" fillOpacity={0.7} />
-                      {idealRitmo && (
-                        <ReferenceLine y={idealRitmo.ideal} stroke="#E6332A" strokeWidth={2} strokeDasharray="6 3"
+                      {idealRitmo && idealRitmo.alcanzable && (
+                        <ReferenceLine y={idealRitmo.ideal} stroke="#E6332A" strokeWidth={2} strokeDasharray="6 3" ifOverflow="extendDomain"
                           label={{ value: `Ideal: ${idealRitmo.ideal}`, position: "insideTopRight", fill: "#E6332A", fontSize: 11, fontWeight: 700 }} />
+                      )}
+                      {idealRitmo && !idealRitmo.alcanzable && idealRitmo.ritmoMejor != null && (
+                        <ReferenceLine y={idealRitmo.ritmoMejor} stroke="#10B981" strokeWidth={2} strokeDasharray="6 3"
+                          label={{ value: `Mejor día real: ${idealRitmo.ritmoMejor}`, position: "insideTopRight", fill: "#10B981", fontSize: 11, fontWeight: 700 }} />
                       )}
                     </ComposedChart>
                   </ResponsiveContainer>
@@ -597,12 +644,18 @@ export default function SimuladorPage() {
                     Cada barra es el promedio real de llamadas que hizo cada asesor efectivo ese día — los operadores
                     con actividad marginal (rotaciones, cuentas con un puñado de llamadas) se excluyen del promedio
                     para no desvirtuarlo.
-                    {idealRitmo ? (
+                    {idealRitmo && idealRitmo.alcanzable && (
                       <> La línea roja punteada es el ritmo ideal: si cada asesor promedia ese número de llamadas por día,
                       la meta se alcanza con la conversión observada en los datos reales. Días consistentemente por debajo
-                      de la línea significan que la meta exigirá más asesores, mejores bases o más conversión. La referencia
-                      naranja del encabezado indica el ritmo que cubriría la meta incluso en un mes flojo.</>
-                    ) : (
+                      de la línea significan que la meta exigirá más asesores, mejores bases o más conversión.</>
+                    )}
+                    {idealRitmo && !idealRitmo.alcanzable && (
+                      <> El ritmo que exigiría la meta con la dotación actual ({idealRitmo.ideal} llamadas/asesor/día) está
+                      por encima de lo que el equipo logró en su mejor día (línea verde) — pedirlo no es realista. La
+                      decisión correcta es sumar asesores o mejorar conversión/bases; los recuadros del encabezado
+                      indican cuánta dotación cubre la meta a ritmos reales.</>
+                    )}
+                    {!idealRitmo && (
                       <> Sirve para ver la consistencia del ritmo de marcación del equipo día a día. Para ver el ritmo ideal
                       frente a una meta, usá el modo &quot;Por meta de prima&quot;.</>
                     )}
