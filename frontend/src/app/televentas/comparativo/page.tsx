@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import React, { useEffect, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
+import { InformeAnalisis } from "@/components/televentas/InformeAnalisis";
+import { ResenaRegistro } from "@/components/televentas/ResenaRegistro";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
@@ -21,7 +23,7 @@ export default function TeleventasTendenciasPage() {
   const [tend, setTend] = useState<any>(null);
   const [comp, setComp] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"tendencias" | "comparar">("tendencias");
+  const [tab, setTab] = useState<"tendencias" | "comparar" | "informes">("tendencias");
   const [selMeses, setSelMeses] = useState<string[]>([]);
   const [cmp, setCmp] = useState<any>(null);
   const [cmpLoading, setCmpLoading] = useState(false);
@@ -73,8 +75,10 @@ export default function TeleventasTendenciasPage() {
         <p className="text-sm text-brand-slate mt-1">Evolución de varios meses: conversión, llamadas (total y promedio), agentes activos, contactabilidad y producción.</p>
       </div>
 
+      <ResenaRegistro />
+
       <div className="flex items-center gap-1 mb-6 border-b border-brand-border no-print">
-        {([["tendencias", "Tendencias"], ["comparar", "Comparar meses"]] as const).map(([id, label]) => (
+        {([["tendencias", "Tendencias"], ["comparar", "Comparar meses"], ["informes", "Informes del Analizador"]] as const).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             className={`px-4 py-2 text-sm font-semibold border-b-2 -mb-px transition-colors ${
               tab === id ? "border-brand-primary text-brand-primary" : "border-transparent text-brand-slate hover:text-brand-ink"}`}>
@@ -82,6 +86,8 @@ export default function TeleventasTendenciasPage() {
           </button>
         ))}
       </div>
+
+      {tab === "informes" && <InformesAnalizador />}
 
       {tab === "comparar" && (
         <CompararMeses
@@ -484,58 +490,29 @@ function ChartCard({ title, lectura, children }: { title: string; lectura?: stri
   );
 }
 
-const VEREDICTO: Record<string, { label: string; cls: string }> = {
-  ok: { label: "OK", cls: "bg-emerald-100 text-emerald-700" },
-  atencion: { label: "Atención", cls: "bg-brand-orange/10 text-brand-orange" },
-  causa: { label: "Causa", cls: "bg-brand-primary/10 text-brand-primary" },
-};
-
-function fmtVal(v: number, formato: string) {
-  if (formato === "gs") return formatGs(v);
-  if (formato === "pct") return `${v}%`;
-  return formatInt(v);
-}
-
-/** Analizador del comparativo: diagnóstico producción-vs-objetivo por método científico,
- *  con la consulta del usuario como parte de la hipótesis y log persistente. */
+/** Analizador del comparativo: diagnóstico producción-vs-objetivo por método científico.
+ *  Resultado compacto que llama la atención + informe expandible + versión imprimible. */
 function Analizador({ meses }: { meses: string[] }) {
   const [objetivo, setObjetivo] = useState("300000000");
   const [consulta, setConsulta] = useState("");
   const [res, setRes] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<any[]>([]);
-  const [verLogs, setVerLogs] = useState(false);
-
-  const cargarLogs = () =>
-    apiFetch<any>("/api/v1/televentas/analizador/logs?limit=10").then((d) => setLogs(d.logs ?? [])).catch(() => {});
-  useEffect(() => { cargarLogs(); }, []);
+  const [expandido, setExpandido] = useState(false);
 
   const ejecutar = async () => {
     if (!(Number(objetivo) > 0)) return;
-    setLoading(true); setError(null);
+    setLoading(true); setError(null); setExpandido(false);
     try {
       const d = await apiFetch<any>("/api/v1/televentas/analizador", {
         method: "POST",
         body: JSON.stringify({ meses, objetivo_prima: Number(objetivo), consulta: consulta.trim() || null }),
       });
       setRes(d);
-      cargarLogs();
     } catch (e: any) { setError(e.message); } finally { setLoading(false); }
   };
 
-  const abrirLog = async (id: string) => {
-    try {
-      const d = await apiFetch<any>(`/api/v1/televentas/analizador/logs/${id}`);
-      setRes({ ...d.data, log_id: d.id, meses: d.meses.split(","), esHistorico: true, created_at: d.created_at });
-      if (d.objetivo_prima) setObjetivo(String(Math.round(d.objetivo_prima)));
-      setConsulta(d.consulta || "");
-    } catch { /* noop */ }
-  };
-
   const obs = res?.observacion;
-  const serieMeses = (res?.series?.meses ?? []).map((m: any) => ({ ...m, label: monthLabel(m.mes) }));
-  const descomp = (res?.descomposicion ?? []).map((d: any) => ({ ...d, abs: Math.abs(d.aporte_gs) }));
 
   return (
     <section className="card p-5 mb-6">
@@ -546,7 +523,8 @@ function Analizador({ meses }: { meses: string[] }) {
       <p className="text-xs text-brand-slate mb-4 max-w-3xl">
         Hipótesis fija: <b>la producción del mes más reciente alcanza el objetivo</b>. El analizador verifica cada
         eslabón del funnel contra los meses previos seleccionados, descompone la variación en aportes exactos en Gs
-        y concluye con acciones. Tu consulta se incorpora a la hipótesis y todo queda registrado.
+        y concluye con acciones. Tu consulta se incorpora a la hipótesis y todo queda registrado en la pestaña
+        <b> Informes</b>.
       </p>
 
       <div className="flex flex-wrap items-end gap-3 mb-4 no-print">
@@ -563,172 +541,116 @@ function Analizador({ meses }: { meses: string[] }) {
         <button onClick={ejecutar} disabled={loading || !(Number(objetivo) > 0)} className="btn-primary disabled:opacity-50">
           {loading ? "Analizando…" : "Ejecutar análisis"}
         </button>
-        {logs.length > 0 && (
-          <button onClick={() => setVerLogs(!verLogs)} className="text-sm text-brand-graphite border border-brand-border rounded px-3 py-2 hover:border-brand-primary">
-            Historial ({logs.length})
-          </button>
-        )}
       </div>
       {error && <p className="text-sm text-brand-primary mb-3">{error}</p>}
 
-      {verLogs && logs.length > 0 && (
-        <div className="mb-4 border border-brand-border rounded-md overflow-hidden no-print">
-          <table className="w-full text-xs">
-            <thead className="bg-brand-bg text-[10px] uppercase tracking-wider2 text-brand-slate">
-              <tr><th className="px-3 py-1.5 text-left">Fecha</th><th className="px-3 py-1.5 text-left">Hipótesis</th>
-                <th className="px-3 py-1.5 text-right">Resultado</th><th className="px-3 py-1.5" /></tr>
-            </thead>
-            <tbody>
-              {logs.map((l) => (
-                <tr key={l.id} className="border-t border-brand-border hover:bg-brand-bg-soft">
-                  <td className="px-3 py-1.5 whitespace-nowrap text-brand-slate">{l.created_at ? new Date(l.created_at).toLocaleString("es-PY", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                  <td className="px-3 py-1.5 text-brand-graphite max-w-[380px] truncate" title={l.hipotesis}>{l.hipotesis}</td>
-                  <td className="px-3 py-1.5 text-right">
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${l.alcanzado ? "bg-emerald-100 text-emerald-700" : "bg-brand-primary/10 text-brand-primary"}`}>
-                      {l.alcanzado ? "Confirmada" : "Rechazada"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-1.5 text-right">
-                    <button onClick={() => abrirLog(l.id)} className="text-brand-primary font-semibold hover:underline">Ver</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
       {res && obs && (
-        <div className="space-y-5">
-          {/* 1. Hipótesis y resultado */}
-          <div className={`rounded-md border-l-4 p-4 ${obs.alcanzado ? "border-emerald-500 bg-emerald-50/50" : "border-brand-primary bg-brand-primary/5"}`}>
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate">Hipótesis</span>
-              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${obs.alcanzado ? "bg-emerald-100 text-emerald-700" : "bg-brand-primary/10 text-brand-primary"}`}>
-                {obs.alcanzado ? "CONFIRMADA" : "RECHAZADA"}
-              </span>
-              {res.esHistorico && <span className="text-[10px] text-brand-slate">(análisis registrado {res.created_at ? new Date(res.created_at).toLocaleString("es-PY") : ""})</span>}
+        <div className={`rounded-lg border-2 p-5 ${obs.alcanzado ? "border-emerald-500 bg-emerald-50/40" : "border-brand-primary bg-brand-primary/5"}`}>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className={`inline-block h-2.5 w-2.5 rounded-full animate-pulse ${obs.alcanzado ? "bg-emerald-500" : "bg-brand-primary"}`} />
+                <span className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate">Informe listo · registrado</span>
+              </div>
+              <div className={`font-display text-2xl uppercase ${obs.alcanzado ? "text-emerald-600" : "text-brand-primary"}`}>
+                Hipótesis {obs.alcanzado ? "confirmada" : "rechazada"}
+              </div>
+              <p className="text-sm text-brand-graphite mt-1">
+                {monthLabel(meses[meses.length - 1])}: <b>{formatGs(obs.prima_neta)}</b> de <b>{formatGs(obs.objetivo)}</b> ·
+                cumplimiento <b>{obs.cumplimiento_pct}%</b> · brecha <b>{formatGs(obs.brecha_gs)}</b>
+              </p>
             </div>
-            <p className="text-sm text-brand-ink font-medium">{res.hipotesis}</p>
-            <p className="text-xs text-brand-graphite mt-1">
-              Producción real: <b>{formatGs(obs.prima_neta)}</b> · Objetivo: <b>{formatGs(obs.objetivo)}</b> ·
-              Cumplimiento: <b>{obs.cumplimiento_pct}%</b> · Brecha: <b>{formatGs(obs.brecha_gs)}</b>
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={() => setExpandido(!expandido)} className="btn-primary !px-5 !py-2.5 text-sm shadow-lg">
+                {expandido ? "Cerrar informe" : "Ver informe →"}
+              </button>
+              {res.log_id && (
+                <Link href={`/televentas/analizador/${res.log_id}`}
+                  className="btn-ghost !px-4 !py-2.5 text-sm border border-brand-border rounded">
+                  Versión imprimible (PDF)
+                </Link>
+              )}
+            </div>
           </div>
 
-          <div className="grid xl:grid-cols-2 gap-5">
-            {/* 2. Producción vs objetivo */}
-            <div>
-              <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Producción vs objetivo</h3>
-              <ResponsiveContainer width="100%" height={220}>
-                <ComposedChart data={serieMeses} margin={{ top: 16, right: 12 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" fontSize={11} />
-                  <YAxis fontSize={10} tickFormatter={(v: number) => `${Math.round(v / 1e6)}M`} />
-                  <Tooltip formatter={(v: any) => formatGs(Number(v))} />
-                  <Bar dataKey="prima_neta" name="Prima neta" fill="#0EA5E9" fillOpacity={0.75} radius={[3, 3, 0, 0]}>
-                    <LabelList dataKey="prima_neta" position="top" formatter={(v: any) => `${Math.round(Number(v) / 1e6)}M`} fontSize={11} fontWeight={700} />
-                  </Bar>
-                  <ReferenceLine y={obs.objetivo} stroke="#E6332A" strokeWidth={2} strokeDasharray="6 3" ifOverflow="extendDomain"
-                    label={{ value: `Objetivo ${Math.round(obs.objetivo / 1e6)}M`, position: "insideTopRight", fill: "#E6332A", fontSize: 11, fontWeight: 700 }} />
-                </ComposedChart>
-              </ResponsiveContainer>
-              <Lectura>
-                Las barras son la prima neta real de cada mes seleccionado; la línea roja es el objetivo del mes
-                analizado (el más reciente). Si la última barra no llega a la línea, la hipótesis se rechaza y el
-                resto del análisis explica por qué.
-              </Lectura>
-            </div>
-
-            {/* 3. Descomposición de la variación */}
-            {descomp.length > 0 && (
-              <div>
-                <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Qué explicó la variación (aporte exacto en Gs)</h3>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={descomp} layout="vertical" margin={{ left: 30, right: 24 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" fontSize={10} tickFormatter={(v: number) => `${Math.round(v / 1e6)}M`} />
-                    <YAxis type="category" dataKey="factor" fontSize={10} width={170} />
-                    <Tooltip formatter={(v: any) => formatGs(Number(v))} />
-                    <Bar dataKey="aporte_gs" name="Aporte (Gs)" radius={[0, 3, 3, 0]}>
-                      {descomp.map((d: any, i: number) => (
-                        <Cell key={i} fill={d.aporte_gs < 0 ? "#E6332A" : "#10B981"} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-                <Lectura>
-                  La producción es volumen de contactos × conversión × ticket × retención. Cada barra muestra cuántos
-                  guaraníes aportó (verde) o restó (rojo) cada factor frente al período de referencia — la suma de las
-                  barras reproduce exactamente la variación total (descomposición LMDI). La barra roja más larga es la
-                  causa dominante y donde conviene actuar primero.
-                </Lectura>
-              </div>
-            )}
-          </div>
-
-          {/* 4. Verificación de datos */}
-          {res.verificaciones?.length > 0 && (
-            <div>
-              <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Verificación de datos (funnel vs referencia)</h3>
-              <div className="overflow-x-auto border border-brand-border rounded-md">
-                <table className="w-full text-xs min-w-[560px]">
-                  <thead className="bg-brand-bg text-[10px] uppercase tracking-wider2 text-brand-slate">
-                    <tr>
-                      <th className="px-3 py-1.5 text-left">Eslabón</th>
-                      <th className="px-3 py-1.5 text-right">Referencia</th>
-                      <th className="px-3 py-1.5 text-right">{monthLabel(meses[meses.length - 1])}</th>
-                      <th className="px-3 py-1.5 text-right">Δ%</th>
-                      <th className="px-3 py-1.5 text-center">Veredicto</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {res.verificaciones.map((v: any) => {
-                      const st = VEREDICTO[v.veredicto] ?? VEREDICTO.ok;
-                      return (
-                        <tr key={v.clave} className="border-t border-brand-border">
-                          <td className="px-3 py-1.5 font-medium text-brand-ink">{v.factor}</td>
-                          <td className="px-3 py-1.5 text-right font-mono">{fmtVal(v.referencia, v.formato)}</td>
-                          <td className="px-3 py-1.5 text-right font-mono font-semibold">{fmtVal(v.actual, v.formato)}</td>
-                          <td className={`px-3 py-1.5 text-right font-mono ${v.delta_pct != null && v.delta_pct < 0 ? "text-brand-primary" : "text-emerald-600"}`}>
-                            {v.delta_pct != null ? `${v.delta_pct > 0 ? "+" : ""}${v.delta_pct}%` : "—"}
-                          </td>
-                          <td className="px-3 py-1.5 text-center">
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${st.cls}`}>{st.label}</span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+          {expandido && (
+            <div className="mt-5 pt-5 border-t border-brand-border">
+              <InformeAnalisis res={res} meses={meses} />
             </div>
           )}
-
-          {/* 5. Conclusión y acciones */}
-          <div className="rounded-md border-l-4 border-brand-ink bg-white border border-brand-border p-4">
-            <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-1">Conclusión</h3>
-            <p className="text-sm text-brand-ink leading-relaxed font-medium">{res.conclusion}</p>
-          </div>
-          {res.acciones?.length > 0 && (
-            <div>
-              <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Acciones posibles</h3>
-              <ul className="space-y-1.5">
-                {res.acciones.map((a: string, i: number) => (
-                  <li key={i} className="text-sm text-brand-graphite flex gap-2">
-                    <span className="text-brand-primary font-bold shrink-0">{i + 1}.</span>{a}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <p className="text-[11px] text-brand-slate">
-            {res.metodo} {res.log_id ? `· Registrado en el log de hipótesis (#${String(res.log_id).slice(0, 8)}) para análisis posterior.` : ""}
-            {" "}Para profundizar con lenguaje natural, el <Link href="/televentas/agente" className="text-brand-primary font-semibold hover:underline">Agente IA</Link> dispone
-            de este mismo analizador con todo el contexto.
-          </p>
         </div>
       )}
+    </section>
+  );
+}
+
+/** Pestaña de históricos: todos los informes del Analizador registrados. */
+function InformesAnalizador() {
+  const [logs, setLogs] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    apiFetch<any>("/api/v1/televentas/analizador/logs?limit=50")
+      .then((d) => setLogs(d.logs ?? [])).catch(() => setLogs([]));
+  }, []);
+
+  if (logs === null) return <div className="text-brand-slate">Cargando informes…</div>;
+  if (logs.length === 0) return (
+    <div className="card p-10 text-center text-brand-slate">
+      Todavía no hay informes registrados. Corré el <b>Analizador</b> desde la pestaña "Comparar meses":
+      cada análisis queda guardado acá con su hipótesis, datos y conclusión.
+    </div>
+  );
+
+  return (
+    <section className="card overflow-x-auto">
+      <div className="px-4 pt-4">
+        <h2 className="font-display text-xl text-brand-ink uppercase">Informes del Analizador</h2>
+        <p className="text-xs text-brand-slate mb-3">
+          Registro histórico de hipótesis analizadas — cada informe conserva los datos con los que se corrió.
+        </p>
+      </div>
+      <table className="w-full text-sm min-w-[760px]">
+        <thead className="bg-brand-bg border-b border-brand-border">
+          <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
+            <th className="px-4 py-2 text-left">Fecha</th>
+            <th className="px-4 py-2 text-left">Mes analizado</th>
+            <th className="px-4 py-2 text-right">Objetivo</th>
+            <th className="px-4 py-2 text-center">Resultado</th>
+            <th className="px-4 py-2 text-left">Consulta</th>
+            <th className="px-4 py-2 text-right" />
+          </tr>
+        </thead>
+        <tbody>
+          {logs.map((l) => {
+            const meses = String(l.meses || "").split(",").filter(Boolean);
+            return (
+              <tr key={l.id} className="border-t border-brand-border hover:bg-brand-bg-soft">
+                <td className="px-4 py-2 whitespace-nowrap text-brand-slate text-xs">
+                  {l.created_at ? new Date(l.created_at).toLocaleString("es-PY", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}
+                </td>
+                <td className="px-4 py-2 font-medium text-brand-ink whitespace-nowrap">
+                  {monthLabel(meses[meses.length - 1])}
+                  <span className="text-[10px] text-brand-slate ml-1.5">vs {meses.slice(0, -1).map((m: string) => monthLabel(m)).join(" + ")}</span>
+                </td>
+                <td className="px-4 py-2 text-right font-mono text-xs">{formatGs(l.objetivo_prima)}</td>
+                <td className="px-4 py-2 text-center">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${l.alcanzado ? "bg-emerald-100 text-emerald-700" : "bg-brand-primary/10 text-brand-primary"}`}>
+                    {l.alcanzado ? "Confirmada" : "Rechazada"}
+                  </span>
+                </td>
+                <td className="px-4 py-2 text-xs text-brand-graphite max-w-[260px] truncate" title={l.consulta || undefined}>
+                  {l.consulta || <span className="text-brand-mist">—</span>}
+                </td>
+                <td className="px-4 py-2 text-right whitespace-nowrap">
+                  <Link href={`/televentas/analizador/${l.id}`} className="text-brand-primary font-semibold hover:underline text-sm">
+                    Ver informe →
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </section>
   );
 }

@@ -82,24 +82,26 @@ _ACCIONES_POR_FACTOR = {
 
 
 def analizar_cientifico(generales: list[dict], objetivo_prima: float,
-                        consulta: Optional[str] = None) -> dict[str, Any]:
-    """`generales`: métricas por mes (ordenadas cronológicamente, 2-3 meses del
-    comparativo). El mes ANALIZADO es el último; los previos son la referencia.
-    `objetivo_prima`: objetivo de prima NETA (Gs) del mes analizado.
+                        consulta: Optional[str] = None,
+                        etiqueta_produccion: str = "prima neta",
+                        unidad: str = "mes") -> dict[str, Any]:
+    """`generales`: métricas por período (ordenadas cronológicamente; meses del
+    comparativo o semanas del reporte semanal). El período ANALIZADO es el último;
+    los previos son la referencia. `objetivo_prima`: objetivo de producción (Gs).
     `consulta`: pregunta del usuario, incorporada a la hipótesis."""
     if len(generales) < 2:
         return {"disponible": False,
-                "mensaje": "El analizador necesita al menos 2 meses seleccionados en el comparativo."}
+                "mensaje": f"El analizador necesita al menos 2 {unidad}es con datos."}
     objetivo = float(objetivo_prima or 0)
     if objetivo <= 0:
-        return {"disponible": False, "mensaje": "Cargá un objetivo de prima neta (Gs) mayor a cero."}
+        return {"disponible": False, "mensaje": "Cargá un objetivo de producción (Gs) mayor a cero."}
 
     gs = sorted(generales, key=lambda g: g.get("mes", ""))
     actual, previos = gs[-1], gs[:-1]
     mes = actual.get("mes", "")
 
     # ---------- 1. HIPÓTESIS ----------
-    hipotesis = (f"La producción de {mes} (prima neta) alcanza el objetivo de "
+    hipotesis = (f"La producción de {mes} ({etiqueta_produccion}) alcanza el objetivo de "
                  f"Gs {objetivo:,.0f}.".replace(",", "."))
     if consulta and consulta.strip():
         hipotesis += f' Consulta incorporada del usuario: "{consulta.strip()}"'
@@ -189,10 +191,10 @@ def analizar_cientifico(generales: list[dict], objetivo_prima: float,
     # ---------- 5. CONCLUSIÓN ----------
     partes: list[str] = []
     if alcanzado:
-        partes.append(f"HIPÓTESIS CONFIRMADA: {mes} produjo Gs {neta:,.0f} netos, "
+        partes.append(f"HIPÓTESIS CONFIRMADA: {mes} produjo Gs {neta:,.0f} de {etiqueta_produccion}, "
                       f"{observacion['cumplimiento_pct']}% del objetivo.".replace(",", "."))
     else:
-        partes.append(f"HIPÓTESIS RECHAZADA: {mes} produjo Gs {neta:,.0f} netos, "
+        partes.append(f"HIPÓTESIS RECHAZADA: {mes} produjo Gs {neta:,.0f} de {etiqueta_produccion}, "
                       f"{observacion['cumplimiento_pct']}% del objetivo — brecha de "
                       f"Gs {abs(brecha):,.0f}.".replace(",", "."))
     causas = [v for v in verificaciones if v["veredicto"] == "causa"]
@@ -244,6 +246,41 @@ def analizar_cientifico(generales: list[dict], objetivo_prima: float,
         acciones.append("Documentar qué se hizo distinto este mes (bases, guion, dotación) para replicarlo.")
         acciones.append("Subir el objetivo gradualmente con el Simulador para validar la capacidad de crecimiento.")
 
+    # ---------- 7. ANÁLISIS ADICIONALES sugeridos (promueven la siguiente pregunta) ----------
+    claves_neg = {d["clave"] for d in negativos}
+    claves_causa = {c["clave"] for c in causas}
+    sugeridos: list[dict] = []
+    if "conversion" in claves_neg or "conversion_pct" in claves_causa:
+        sugeridos.append({"titulo": "Localizar la caída de conversión por operador",
+                          "detalle": "En el comparativo por operador, filtrar por conversión baja del último mes para ver en quiénes se concentra.",
+                          "ruta": "/televentas/comparativo"})
+        sugeridos.append({"titulo": "Voz del Cliente en Ventas (motivos de no-venta)",
+                          "detalle": "Revisar qué dice el cliente al rechazar en las gestiones CRM del período: precio, cobertura, momento.",
+                          "ruta": "/televentas/crm/reports"})
+    if "contestadas" in claves_neg or {"total_llamadas", "contactabilidad", "agentes_efectivos",
+                                       "llamadas_prom_asesor_dia", "dias_operativos"} & claves_causa:
+        sugeridos.append({"titulo": "Profundizar el volumen: reporte de llamadas del mes",
+                          "detalle": "Curva horaria, ritmo por asesor y días caídos — para separar problema de bases, de dotación o de marcación.",
+                          "ruta": "/televentas/llamadas/reports"})
+    if "ticket" in claves_neg:
+        sugeridos.append({"titulo": "Mix de productos del mes",
+                          "detalle": "En el reporte de producción, comparar el mix de tipos de póliza: un corrimiento a pólizas chicas explica el ticket.",
+                          "ruta": "/televentas/produccion/reports"})
+    if "retencion" in claves_neg or "anulacion_pct" in claves_causa:
+        sugeridos.append({"titulo": "Anulaciones del período",
+                          "detalle": "Revisar las pólizas anuladas del reporte de producción: concentración por operador o por producto.",
+                          "ruta": "/televentas/produccion/reports"})
+    if objetivo_excedido or not alcanzado:
+        sugeridos.append({"titulo": "Dimensionar la meta con el Simulador",
+                          "detalle": "Correr el modo 'Por meta de prima' con este objetivo para cuantificar dotación, ritmo y base necesarios.",
+                          "ruta": "/televentas/simulador"})
+    sugeridos.append({"titulo": "Repetir el análisis con otra referencia",
+                      "detalle": "Si algún mes de referencia fue atípico, volver a correr el analizador con otros meses seleccionados.",
+                      "ruta": None})
+    sugeridos.append({"titulo": "Profundizar con el Agente IA",
+                      "detalle": "El agente dispone de este mismo analizador y de todos los reportes: puede responder la siguiente pregunta en lenguaje natural.",
+                      "ruta": "/televentas/agente"})
+
     return {
         "disponible": True,
         "hipotesis": hipotesis,
@@ -253,6 +290,7 @@ def analizar_cientifico(generales: list[dict], objetivo_prima: float,
         "descomposicion": descomposicion,
         "conclusion": conclusion,
         "acciones": acciones,
+        "analisis_sugeridos": sugeridos,
         "metodo": ("Método: hipótesis (producción vs objetivo) → observación → verificación de cada eslabón del "
                    "funnel contra la referencia pooled de los meses previos → descomposición LMDI exacta de la "
                    "variación (volumen × conversión × ticket × retención) → conclusión y acciones."),

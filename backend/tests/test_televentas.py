@@ -306,6 +306,47 @@ def test_analizador_metodo_cientifico():
     assert "excede la capacidad demostrada" in irreal["conclusion"]
 
 
+def test_semanal_agrupacion_y_analisis():
+    """Semanas ISO desde series diarias: agregación (con CRM), evaluación inter-semanal
+    (mejoras/desmejoras/llamativos) y análisis científico con advertencia si es parcial."""
+    import datetime as dt
+    from app.services.analyzers.televentas_semanal import agrupar_semanas, analizar_semana, evaluar_semana
+
+    dias_ll, dias_pr, dias_crm = [], [], []
+    base = dt.date(2026, 7, 6)  # lunes ISO
+    for w in range(3):
+        conv = 0.055 if w < 2 else 0.030  # semana 3: cae la conversión
+        for d in range(5):
+            f = (base + dt.timedelta(days=w * 7 + d)).isoformat()
+            dias_ll.append({"fecha": f, "llamadas": 800, "contestadas": 420,
+                            "asesores_efectivos": 15, "promedio_por_asesor": 53, "tmo_seg": 130})
+            pol = round(420 * conv)
+            dias_pr.append({"fecha": f, "polizas": pol, "prima": pol * 600_000})
+            dias_crm.append({"fecha": f, "gestiones": 300, "contactos": 90, "aceptas": 6, "agendados": 20})
+
+    sem = agrupar_semanas(dias_ll, dias_pr, dias_crm)
+    assert len(sem) == 3 and all(s["completa"] for s in sem)
+    assert sem[-1]["gestiones_crm"] == 1500 and sem[-1]["tiene_crm"]
+
+    ev = evaluar_semana(sem, sem[-1]["semana"])
+    assert any(d["clave"] == "conversion_pct" for d in ev["desmejoras"])
+    assert any(l["tipo"] == "record_bajo" for l in ev["llamativos"])
+
+    r = analizar_semana(sem, sem[-1]["semana"], 70_000_000, "¿Feriado?")
+    assert r["disponible"] and not r["observacion"]["alcanzado"]
+    assert r["descomposicion"][0]["clave"] == "conversion"
+    assert r["evaluacion"]["desmejoras"] and r["semanas_referencia"]
+
+    # semana parcial (1 día) → advertencia en la conclusión
+    f = (base + dt.timedelta(days=21)).isoformat()
+    dias_ll.append({"fecha": f, "llamadas": 700, "contestadas": 380,
+                    "asesores_efectivos": 14, "promedio_por_asesor": 50, "tmo_seg": 125})
+    dias_pr.append({"fecha": f, "polizas": 12, "prima": 7_200_000})
+    sem2 = agrupar_semanas(dias_ll, dias_pr, dias_crm)
+    rp = analizar_semana(sem2, sem2[-1]["semana"], 70_000_000)
+    assert not sem2[-1]["completa"] and "ADVERTENCIA" in rp["conclusion"]
+
+
 def test_regresion_origen_recupera_pendiente():
     """La regresión OLS por el origen recupera la tasa real dentro del IC 95%."""
     import random

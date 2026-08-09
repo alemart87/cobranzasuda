@@ -30,7 +30,8 @@ class TeleventasAnalisis(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
 
-    meses: Mapped[str] = mapped_column(String(64), nullable=False)          # "2026-05,2026-07"
+    tipo: Mapped[str] = mapped_column(String(16), default="mensual", nullable=False, index=True)  # mensual | semanal
+    meses: Mapped[str] = mapped_column(String(64), nullable=False)          # "2026-05,2026-07" o "2026-W30,2026-W32"
     objetivo_prima: Mapped[float] = mapped_column(Numeric(18, 0), nullable=False)
     consulta: Mapped[Optional[str]] = mapped_column(Text, nullable=True)    # pregunta del usuario (parte de la hipótesis)
 

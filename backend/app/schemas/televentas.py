@@ -159,3 +159,23 @@ class AnalizadorRequest(BaseModel):
     meses: list[str]                      # 2-3 meses YYYY-MM (los del comparativo)
     objetivo_prima: float                 # objetivo de prima NETA del mes analizado (Gs)
     consulta: Optional[str] = None        # pregunta del usuario — se incorpora a la hipótesis
+
+
+class SemanalAnalizadorRequest(BaseModel):
+    """Analizador SEMANAL: misma hipótesis producción-vs-objetivo, período semana ISO."""
+    semana: str                           # "2026-W32"
+    objetivo_prima: float                 # objetivo de prima EMITIDA de la semana (Gs)
+    consulta: Optional[str] = None
+
+
+class CompromisoCreate(BaseModel):
+    """Compromiso de la reunión semanal (viernes) — lo cargan ambas partes."""
+    semana: str                           # "2026-W32"
+    descripcion: str
+    responsable: str                      # "Voicenter" | "Sudameris"
+
+
+class CompromisoUpdate(BaseModel):
+    estado: Optional[str] = None          # pendiente | en_proceso | cumplido
+    nota: Optional[str] = None
+    descripcion: Optional[str] = None
