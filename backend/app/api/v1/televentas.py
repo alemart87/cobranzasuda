@@ -22,6 +22,7 @@ from ...core.database import get_db
 from ...jobs.televentas_queue import signal_televentas_queue
 from ...models.televentas_analisis import TeleventasAnalisis
 from ...models.televentas_compromiso import TeleventasCompromiso
+from ...models.televentas_alerta import TeleventasAlerta
 from ...models.televentas_eficiencia import TeleventasEficiencia, TeleventasEficienciaNota
 from ...models.televentas_crm_report import TeleventasCrmReport
 from ...models.televentas_crm_upload import TeleventasCrmUpload
@@ -32,7 +33,7 @@ from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_upload import TeleventasProduccionUpload
 from ...schemas.televentas import (
     AnalizadorRequest, CompromisoCreate, CompromisoUpdate, SemanalAnalizadorRequest,
-    EficienciaRequest, EficienciaNotaRequest,
+    EficienciaRequest, EficienciaNotaRequest, AlertaAccionRequest,
     PublishRequest,
     TeleventasCrmReportDetail, TeleventasCrmReportList, TeleventasCrmReportSummary,
     TeleventasCrmUploadList, TeleventasCrmUploadRead,
@@ -45,7 +46,7 @@ from ...services.analyzers import (
     combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
 )
 from ...services.analyzers.televentas_analizador import analizar_cientifico
-from ...services.analyzers.televentas_eficiencia import analizar_eficiencia, indices_del_mes
+from ...services.analyzers.televentas_eficiencia import ESTADOS as ESTADOS_EF, analizar_eficiencia, indices_del_mes
 from ...services.analyzers.televentas_llamadas import por_dia_llamadas
 from ...services.analyzers.televentas_semanal import agrupar_semanas, analizar_semana, evaluar_semana
 from ...services.analyzers.televentas_simulador import regresion_diaria
@@ -705,7 +706,11 @@ async def televentas_analizador_resumen(
         select(TeleventasCompromiso).where(TeleventasCompromiso.estado != "cumplido")
         .order_by(TeleventasCompromiso.created_at.desc())
     )).scalars().all()
+    alertas_abiertas = (await db.execute(
+        select(TeleventasAlerta).where(TeleventasAlerta.estado.in_(_ALERTA_ABIERTAS))
+    )).scalars().all()
     return {
+        "alertas_abiertas": len(alertas_abiertas),
         "ultimos_analisis": [{
             "id": a.id, "tipo": getattr(a, "tipo", "mensual") or "mensual",
             "created_at": a.created_at.isoformat() if a.created_at else None,
@@ -975,10 +980,12 @@ async def eficiencia_run(
                                created_by=user.id, data=resultado)
     db.add(reg)
     await db.commit()
+    alertas = await _generar_alertas_eficiencia(db, reg, resultado, user)
     await record_action(db, user_id=user.id, action="run_televentas_eficiencia",
                         resource_type="televentas_eficiencia", resource_id=reg.id,
-                        ip=client_ip(request), extra={"mes": mes, "objetivo": payload.objetivo_prima})
-    return {**resultado, "analisis_id": reg.id}
+                        ip=client_ip(request),
+                        extra={"mes": mes, "objetivo": payload.objetivo_prima, "alertas": len(alertas)})
+    return {**resultado, "analisis_id": reg.id, "alertas": alertas}
 
 
 def _eficiencia_resumen_out(a: TeleventasEficiencia, n_notas: int = 0) -> dict:
@@ -1045,6 +1052,148 @@ async def eficiencia_nota_add(
                         resource_type="televentas_eficiencia", resource_id=analisis_id, ip=client_ip(request))
     return {"id": n.id, "texto": n.texto, "autor": n.created_by_nombre or n.created_by,
             "created_at": n.created_at.isoformat() if n.created_at else None}
+
+
+# ---- Alertas de eficiencia (control de costos con flujo de estados) ----
+_ALERTA_ESTADOS_OPERADOR = {"critico": "media", "baja": "alta", "nuevo_critico": "media"}
+_ALERTA_TRANSICIONES = {
+    "mitigar": {"desde": {"activa"}, "hacia": "en_mitigacion"},
+    "resolver": {"desde": {"en_mitigacion", "activa"}, "hacia": "mitigada"},
+    "apagar": {"desde": {"activa", "en_mitigacion", "mitigada"}, "hacia": "apagada"},
+    "reactivar": {"desde": {"mitigada", "apagada"}, "hacia": "activa"},
+}
+_ALERTA_ABIERTAS = ("activa", "en_mitigacion")
+
+
+def _seguimiento_entry(autor: str, accion: str, estado: str, comentario: str) -> dict:
+    return {"fecha": datetime.utcnow().isoformat(), "autor": autor,
+            "accion": accion, "estado": estado, "comentario": comentario}
+
+
+async def _generar_alertas_eficiencia(db: AsyncSession, reg: TeleventasEficiencia,
+                                      resultado: dict, user: CurrentUser) -> list[dict]:
+    """Crea (o actualiza) una alerta por cada operador FUERA DE OBJETIVO del análisis.
+    Una alerta ABIERTA del mismo operador+mes no se duplica: se actualiza con el
+    nuevo análisis y queda constancia en el seguimiento."""
+    fuera = [o for o in resultado.get("operadores", []) if o.get("estado") in _ALERTA_ESTADOS_OPERADOR]
+    abiertas = {(a.operador, a.mes): a for a in (await db.execute(
+        select(TeleventasAlerta).where(TeleventasAlerta.mes == reg.mes,
+                                       TeleventasAlerta.estado.in_(_ALERTA_ABIERTAS))
+    )).scalars().all()}
+    autor = user.full_name or user.id
+    equipo = resultado.get("equipo", {})
+    out = []
+    for o in fuera:
+        detalle = {
+            "mes": reg.mes, "objetivo_prima": resultado.get("objetivo_prima"),
+            "estado_operador": o["estado"], "indice": o.get("indice"), "indice_prev": o.get("indice_prev"),
+            "prima": o.get("prima"), "prima_dia": o.get("prima_dia"),
+            "conversion_pct": o.get("conversion_pct"), "llamadas_dia": o.get("llamadas_dia"),
+            "dias_activos": o.get("dias_activos"), "antiguedad_dias": o.get("antiguedad_dias"),
+            "motivo": o.get("motivo"), "medias_equipo": equipo.get("medias"),
+            "cuota_por_operador": equipo.get("cuota_por_operador"),
+        }
+        titulo = f"{o['vendedor']}: {ESTADOS_EF.get(o['estado'], o['estado'])} — índice {o.get('indice')}"
+        existente = abiertas.get((o["vendedor"], reg.mes))
+        if existente:
+            existente.analisis_id = reg.id
+            existente.estado_operador = o["estado"]
+            existente.severidad = _ALERTA_ESTADOS_OPERADOR[o["estado"]]
+            existente.titulo = titulo
+            existente.detalle = detalle
+            existente.seguimiento = list(existente.seguimiento or []) + [_seguimiento_entry(
+                autor, "actualizada", existente.estado,
+                f"Alerta actualizada por nuevo análisis de eficiencia de {reg.mes}.")]
+            out.append(_alerta_out(existente))
+        else:
+            a = TeleventasAlerta(
+                analisis_id=reg.id, mes=reg.mes, operador=o["vendedor"],
+                estado_operador=o["estado"], severidad=_ALERTA_ESTADOS_OPERADOR[o["estado"]],
+                titulo=titulo, detalle=detalle, created_by=user.id,
+                seguimiento=[_seguimiento_entry(autor, "creada", "activa",
+                                                "Alerta generada automáticamente por el análisis de eficiencia.")],
+            )
+            db.add(a)
+            await db.flush()
+            out.append(_alerta_out(a))
+    await db.commit()
+    return out
+
+
+def _alerta_out(a: TeleventasAlerta) -> dict:
+    return {"id": a.id, "analisis_id": a.analisis_id, "mes": a.mes, "operador": a.operador,
+            "estado_operador": a.estado_operador, "severidad": a.severidad, "titulo": a.titulo,
+            "estado": a.estado, "detalle": a.detalle, "seguimiento": a.seguimiento or [],
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+            "updated_at": a.updated_at.isoformat() if a.updated_at else None}
+
+
+@router.get("/eficiencia/alertas")
+async def eficiencia_alertas_list(
+    estado: Optional[str] = Query(None, description="Filtro: abiertas | activa | en_mitigacion | mitigada | apagada"),
+    mes: Optional[str] = Query(None),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    q = select(TeleventasAlerta).order_by(TeleventasAlerta.created_at.desc())
+    if estado == "abiertas":
+        q = q.where(TeleventasAlerta.estado.in_(_ALERTA_ABIERTAS))
+    elif estado:
+        q = q.where(TeleventasAlerta.estado == estado)
+    if mes:
+        q = q.where(TeleventasAlerta.mes == mes.strip()[:7])
+    rows = (await db.execute(q.limit(200))).scalars().all()
+    return {"alertas": [_alerta_out(a) for a in rows]}
+
+
+@router.get("/eficiencia/alertas/{alerta_id}")
+async def eficiencia_alerta_get(
+    alerta_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    a = await db.get(TeleventasAlerta, alerta_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Alerta no encontrada")
+    return _alerta_out(a)
+
+
+@router.post("/eficiencia/alertas/{alerta_id}/accion")
+async def eficiencia_alerta_accion(
+    alerta_id: str, payload: AlertaAccionRequest, request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Acción del flujo de la alerta. Toda acción exige comentario y queda en el
+    seguimiento: mitigar (activa→en mitigación), resolver (→mitigada),
+    apagar (→apagada, con justificación), reactivar (→activa), comentar."""
+    a = await db.get(TeleventasAlerta, alerta_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Alerta no encontrada")
+    accion = payload.accion.strip().lower()
+    comentario = payload.comentario.strip()
+    if not comentario:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Toda acción sobre una alerta exige un comentario (queda en el seguimiento).")
+    if accion == "comentar":
+        nuevo_estado = a.estado
+    else:
+        t = _ALERTA_TRANSICIONES.get(accion)
+        if not t:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                "Acción inválida: mitigar, resolver, apagar, reactivar o comentar.")
+        if a.estado not in t["desde"]:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                f"No se puede '{accion}' una alerta en estado '{a.estado}'.")
+        nuevo_estado = t["hacia"]
+    a.seguimiento = list(a.seguimiento or []) + [_seguimiento_entry(
+        user.full_name or user.id, accion, nuevo_estado, comentario)]
+    a.estado = nuevo_estado
+    await db.commit()
+    await record_action(db, user_id=user.id, action=f"alerta_eficiencia_{accion}",
+                        resource_type="televentas_alerta", resource_id=alerta_id,
+                        ip=client_ip(request), extra={"estado": nuevo_estado, "operador": a.operador})
+    return _alerta_out(a)
 
 
 @router.get("/analizador/logs/{log_id}")

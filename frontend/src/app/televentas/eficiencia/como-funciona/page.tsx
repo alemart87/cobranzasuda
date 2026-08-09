@@ -166,7 +166,32 @@ export default function ComoFuncionaScoringPage() {
           </div>
         </S>
 
-        <S n="5" title="Nuestro compromiso">
+        <S n="5" title="Las alertas: los costos no se controlan solos">
+          <p>
+            Cuando se genera un análisis de eficiencia, cada operador fuera de objetivo (Crítico, Se recomienda
+            baja o Nuevo crítico) <b>genera automáticamente una alerta con su informe específico</b>: índice,
+            producción vs la media, motivo y evolución. Una alerta abierta es costo por hora sin retorno —
+            por eso no desaparece sola: alguien tiene que atenderla.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="px-3 py-1.5 rounded-md text-sm font-bold bg-brand-primary text-white">Activa</span>
+            <span className="text-brand-mist font-bold">→</span>
+            <span className="px-3 py-1.5 rounded-md text-sm font-bold bg-brand-orange text-white">En mitigación</span>
+            <span className="text-brand-mist font-bold">→</span>
+            <span className="px-3 py-1.5 rounded-md text-sm font-bold bg-emerald-100 text-emerald-700">Mitigada</span>
+            <span className="text-brand-mist mx-1">|</span>
+            <span className="px-3 py-1.5 rounded-md text-sm font-bold bg-brand-ink text-white">Apagada</span>
+          </div>
+          <ul className="list-disc pl-5 space-y-1.5 text-[13px]">
+            <li><b>Mitigar</b>: alguien toma la alerta con un plan concreto (coaching, cambio de base, revisión).</li>
+            <li><b>Mitigada</b>: el plan se ejecutó y el riesgo quedó controlado.</li>
+            <li><b>Apagada</b>: se cierra con justificación — baja ejecutada, caso resuelto por otra vía.</li>
+            <li>Toda acción <b>exige un comentario</b> y queda en el seguimiento con autor y fecha: meses después
+              se puede auditar quién atendió cada alerta y qué se decidió.</li>
+          </ul>
+        </S>
+
+        <S n="6" title="Nuestro compromiso">
           <p>
             Medimos con reglas públicas, decidimos rápido y dejamos registro. Ser exigentes con los resultados
             y justos con las personas no son cosas opuestas: son exactamente el mismo sistema. Eso es lo que

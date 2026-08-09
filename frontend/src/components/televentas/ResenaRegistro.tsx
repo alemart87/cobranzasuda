@@ -39,18 +39,26 @@ export function ResenaRegistro() {
             </Link>
           );
         })}
-        {data.compromisos_pendientes > 0 && (
-          <Link href="/televentas/semanal"
-            className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-brand-primary hover:underline">
-            <span className="inline-block h-2 w-2 rounded-full bg-brand-primary animate-pulse" />
-            {data.compromisos_pendientes} compromiso(s) de reunión pendiente(s) →
-          </Link>
-        )}
-        {data.compromisos_pendientes === 0 && (
-          <Link href="/televentas/semanal" className="ml-auto text-xs font-semibold text-brand-graphite hover:text-brand-primary">
-            Reporte semanal →
-          </Link>
-        )}
+        <span className="ml-auto flex flex-wrap items-center gap-3">
+          {(data.alertas_abiertas ?? 0) > 0 && (
+            <Link href="/televentas/eficiencia"
+              className="flex items-center gap-1.5 text-xs font-semibold text-brand-primary hover:underline">
+              <span className="inline-block h-2 w-2 rounded-full bg-brand-primary animate-pulse" />
+              {data.alertas_abiertas} alerta(s) de eficiencia abierta(s) →
+            </Link>
+          )}
+          {data.compromisos_pendientes > 0 ? (
+            <Link href="/televentas/semanal"
+              className="flex items-center gap-1.5 text-xs font-semibold text-brand-primary hover:underline">
+              <span className="inline-block h-2 w-2 rounded-full bg-brand-orange animate-pulse" />
+              {data.compromisos_pendientes} compromiso(s) pendiente(s) →
+            </Link>
+          ) : (
+            <Link href="/televentas/semanal" className="text-xs font-semibold text-brand-graphite hover:text-brand-primary">
+              Reporte semanal →
+            </Link>
+          )}
+        </span>
       </div>
     </section>
   );
