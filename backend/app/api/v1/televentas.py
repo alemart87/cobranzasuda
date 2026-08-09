@@ -758,15 +758,18 @@ async def _series_diarias(db: AsyncSession) -> tuple[list[dict], list[dict], lis
 
 @router.get("/semanal")
 async def televentas_semanal(
+    inicio: int = Query(4, ge=0, le=6, description="Día de inicio de la semana operativa (0=lunes … 6=domingo). 4 = viernes→jueves (reunión de los viernes)."),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Reporte SEMANAL: métricas por semana ISO (llamadas + producción + CRM) y
-    evaluación inter-semanal (mejoras/desmejoras/datos llamativos) de cada semana."""
+    """Reporte SEMANAL: métricas por semana operativa (llamadas + producción + CRM) y
+    evaluación inter-semanal (mejoras/desmejoras/datos llamativos) de cada semana.
+    La clave de cada semana es su FECHA DE INICIO — cambia el corte, cambian las claves,
+    los números de cortes distintos nunca se mezclan."""
     dias_ll, dias_pr, dias_crm = await _series_diarias(db)
-    semanas = agrupar_semanas(dias_ll, dias_pr, dias_crm)
+    semanas = agrupar_semanas(dias_ll, dias_pr, dias_crm, inicio_dow=inicio)
     evaluaciones = {s["semana"]: evaluar_semana(semanas, s["semana"]) for s in semanas}
-    return {"semanas": semanas, "evaluaciones": evaluaciones}
+    return {"semanas": semanas, "evaluaciones": evaluaciones, "inicio": inicio}
 
 
 @router.post("/semanal/analizador")
@@ -776,13 +779,16 @@ async def televentas_semanal_analizador(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Analizador SEMANAL (mismo método científico): objetivo de la semana vs
-    producción, referencia = semanas completas previas. Deja registro (log)."""
+    producción, referencia = semanas completas previas. Deja registro (log).
+    `inicio` define el corte (4 = viernes→jueves) y debe coincidir con el usado
+    para obtener la clave de semana."""
     dias_ll, dias_pr, dias_crm = await _series_diarias(db)
-    semanas = agrupar_semanas(dias_ll, dias_pr, dias_crm)
+    semanas = agrupar_semanas(dias_ll, dias_pr, dias_crm, inicio_dow=payload.inicio)
     resultado = analizar_semana(semanas, payload.semana.strip(), payload.objetivo_prima, payload.consulta)
     if not resultado.get("disponible"):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, resultado.get("mensaje", "Análisis no disponible."))
 
+    resultado["inicio_semana"] = payload.inicio  # corte usado, queda en el registro
     periodos = resultado.get("semanas_referencia", []) + [payload.semana.strip()]
     log = TeleventasAnalisis(
         created_by=user.id, tipo="semanal",

@@ -1,9 +1,14 @@
-"""Reporte SEMANAL de Televentas — agregación por semana ISO y análisis inter-semanal.
+"""Reporte SEMANAL de Televentas — agregación semanal configurable y análisis inter-semanal.
 
-Las semanas (lunes a domingo, clave "YYYY-Www") se construyen desde las series
-DIARIAS de los reportes publicados: llamadas (por_dia con asesores efectivos y
-TMO), producción (pólizas/prima emitida por día) y gestiones CRM. Una semana
-puede cruzar dos meses: se arma cruzando todos los reportes publicados.
+El día de INICIO de la semana operativa es configurable (`inicio_dow`, 0=lunes …
+6=domingo). Para la reunión de los viernes con Sudameris el corte es VIERNES →
+JUEVES cerrado (inicio_dow=4). La CLAVE de cada semana es SIEMPRE su fecha de
+inicio ("YYYY-MM-DD") — un único formato para todos los cortes, así los números
+de distintas configuraciones nunca se mezclan.
+
+Las semanas se construyen desde las series DIARIAS de los reportes publicados:
+llamadas (por_dia con asesores efectivos y TMO), producción (pólizas/prima
+emitida por día) y gestiones CRM. Una semana puede cruzar dos meses.
 
 Producción semanal = prima EMITIDA (la anulación no tiene fecha diaria y se
 gestiona en el análisis mensual). Conversión = pólizas ÷ contestadas de la semana.
@@ -18,18 +23,31 @@ Incluye:
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Optional
 
 from .televentas_analizador import analizar_cientifico
 
+# Día de inicio por defecto de la semana operativa: VIERNES (reunión de los viernes
+# → se analiza del viernes anterior al jueves cerrado).
+INICIO_DOW_DEFAULT = 4  # 0=lunes … 6=domingo
 
-def _semana_key(fecha_iso: str) -> Optional[str]:
+
+def _semana_key(fecha_iso: str, inicio_dow: int) -> Optional[str]:
+    """Clave de la semana que contiene la fecha: SU FECHA DE INICIO (YYYY-MM-DD)."""
     try:
-        y, w, _ = date.fromisoformat(fecha_iso).isocalendar()
-        return f"{y}-W{w:02d}"
+        d = date.fromisoformat(fecha_iso)
     except Exception:
         return None
+    start = d - timedelta(days=(d.weekday() - inicio_dow) % 7)
+    return start.isoformat()
+
+
+def rango_semana(key: str) -> str:
+    """Rango legible de una semana por clave de inicio: 'del 31/07 al 06/08'."""
+    start = date.fromisoformat(key)
+    end = start + timedelta(days=6)
+    return f"del {start.strftime('%d/%m')} al {end.strftime('%d/%m')}"
 
 
 def _pct(part: float, whole: float) -> float:
@@ -37,8 +55,10 @@ def _pct(part: float, whole: float) -> float:
 
 
 def agrupar_semanas(dias_llamadas: list[dict], dias_prod: list[dict],
-                    dias_crm: list[dict]) -> list[dict]:
-    """Agrega las series diarias en semanas ISO (ascendente)."""
+                    dias_crm: list[dict], inicio_dow: int = INICIO_DOW_DEFAULT) -> list[dict]:
+    """Agrega las series diarias en semanas operativas (ascendente).
+    `inicio_dow`: día de inicio de la semana (0=lunes … 6=domingo)."""
+    inicio_dow = int(inicio_dow) % 7
     sem: dict[str, dict] = {}
 
     def slot(k: str) -> dict:
@@ -51,7 +71,7 @@ def agrupar_semanas(dias_llamadas: list[dict], dias_prod: list[dict],
         })
 
     for d in dias_llamadas:
-        k = _semana_key(d.get("fecha", ""))
+        k = _semana_key(d.get("fecha", ""), inicio_dow)
         if not k:
             continue
         s = slot(k)
@@ -67,7 +87,7 @@ def agrupar_semanas(dias_llamadas: list[dict], dias_prod: list[dict],
             s["tmo_dias"].append(d["tmo_seg"])
 
     for d in dias_prod:
-        k = _semana_key(d.get("fecha", ""))
+        k = _semana_key(d.get("fecha", ""), inicio_dow)
         if not k:
             continue
         s = slot(k)
@@ -76,7 +96,7 @@ def agrupar_semanas(dias_llamadas: list[dict], dias_prod: list[dict],
         s["prima"] += float(d.get("prima", 0) or 0)
 
     for d in dias_crm:
-        k = _semana_key(d.get("fecha", ""))
+        k = _semana_key(d.get("fecha", ""), inicio_dow)
         if not k:
             continue
         s = slot(k)
@@ -225,6 +245,12 @@ def analizar_semana(semanas: list[dict], semana_key: str, objetivo_prima: float,
                                     unidad="semana")
     if not resultado.get("disponible"):
         return resultado
+
+    # La clave interna es la fecha de inicio: en los textos se muestra el rango
+    # legible para que no se confunda con una fecha puntual.
+    legible = f"la semana {rango_semana(semana_key)}"
+    resultado["hipotesis"] = resultado["hipotesis"].replace(f"de {semana_key} ", f"de {legible} ")
+    resultado["conclusion"] = resultado["conclusion"].replace(f"{semana_key} produjo", f"{legible} produjo")
 
     resultado["evaluacion"] = evaluar_semana(semanas, semana_key)
     resultado["semana"] = {k: actual.get(k) for k in

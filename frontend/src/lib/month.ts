@@ -33,21 +33,32 @@ function isoWeekMonday(year: number, week: number): Date {
   return monday;
 }
 
-/** "2026-W32" -> "Semana 32 (03/08–09/08)". Si no es semana, delega a monthLabel. */
+const dd = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+
+/** Etiqueta de semana. Acepta la clave canónica (fecha de INICIO "YYYY-MM-DD",
+ *  cualquier corte configurado) → "Semana del 31/07 al 06/08"; y el formato
+ *  legado ISO "YYYY-Www". Si no es semana, delega a monthLabel. */
 export function weekLabel(wk: string): string {
+  const f = /^(\d{4})-(\d{2})-(\d{2})$/.exec(wk || "");
+  if (f) {
+    const ini = new Date(Date.UTC(Number(f[1]), Number(f[2]) - 1, Number(f[3])));
+    const fin = new Date(ini);
+    fin.setUTCDate(ini.getUTCDate() + 6);
+    return `Semana del ${dd(ini)} al ${dd(fin)}`;
+  }
   const m = /^(\d{4})-W(\d{2})$/.exec(wk || "");
   if (!m) return monthLabel(wk);
   const [_, y, w] = m;
   const ini = isoWeekMonday(Number(y), Number(w));
   const fin = new Date(ini);
   fin.setUTCDate(ini.getUTCDate() + 6);
-  const dd = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
   return `Semana ${Number(w)} (${dd(ini)}–${dd(fin)})`;
 }
 
-/** Etiqueta genérica de período: detecta semana ISO o mes. */
+/** Etiqueta genérica de período: semana (clave-fecha o ISO) o mes. */
 export function periodLabel(p: string): string {
-  return /^\d{4}-W\d{2}$/.test(p || "") ? weekLabel(p) : monthLabel(p);
+  return /^\d{4}-W\d{2}$/.test(p || "") || /^\d{4}-\d{2}-\d{2}$/.test(p || "")
+    ? weekLabel(p) : monthLabel(p);
 }
 
 /** Mes preferido por el usuario, recordado entre vistas (continuidad de navegación). */

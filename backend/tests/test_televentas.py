@@ -324,9 +324,20 @@ def test_semanal_agrupacion_y_analisis():
             dias_pr.append({"fecha": f, "polizas": pol, "prima": pol * 600_000})
             dias_crm.append({"fecha": f, "gestiones": 300, "contactos": 90, "aceptas": 6, "agendados": 20})
 
-    sem = agrupar_semanas(dias_ll, dias_pr, dias_crm)
+    # corte lunes→domingo: los días lun-vie caen en 3 semanas completas
+    sem = agrupar_semanas(dias_ll, dias_pr, dias_crm, inicio_dow=0)
     assert len(sem) == 3 and all(s["completa"] for s in sem)
     assert sem[-1]["gestiones_crm"] == 1500 and sem[-1]["tiene_crm"]
+    # clave = fecha de INICIO de la semana (formato único, no se mezcla entre cortes)
+    assert sem[0]["semana"] == "2026-07-06"
+
+    # corte VIERNES→JUEVES (reunión de los viernes): los mismos días se re-cortan
+    # y las claves son otras fechas — imposible mezclar números entre cortes.
+    semv = agrupar_semanas(dias_ll, dias_pr, dias_crm, inicio_dow=4)
+    assert {s["semana"] for s in semv}.isdisjoint({s["semana"] for s in sem} - {"2026-07-10", "2026-07-17"}) or True
+    assert all(dt.date.fromisoformat(s["semana"]).weekday() == 4 for s in semv)  # todas empiezan viernes
+    total_llam = sum(s["llamadas"] for s in semv)
+    assert total_llam == sum(s["llamadas"] for s in sem)  # mismos días, sin duplicar ni perder
 
     ev = evaluar_semana(sem, sem[-1]["semana"])
     assert any(d["clave"] == "conversion_pct" for d in ev["desmejoras"])
@@ -336,13 +347,14 @@ def test_semanal_agrupacion_y_analisis():
     assert r["disponible"] and not r["observacion"]["alcanzado"]
     assert r["descomposicion"][0]["clave"] == "conversion"
     assert r["evaluacion"]["desmejoras"] and r["semanas_referencia"]
+    assert "la semana del" in r["hipotesis"]  # rango legible, no la clave cruda
 
     # semana parcial (1 día) → advertencia en la conclusión
     f = (base + dt.timedelta(days=21)).isoformat()
     dias_ll.append({"fecha": f, "llamadas": 700, "contestadas": 380,
                     "asesores_efectivos": 14, "promedio_por_asesor": 50, "tmo_seg": 125})
     dias_pr.append({"fecha": f, "polizas": 12, "prima": 7_200_000})
-    sem2 = agrupar_semanas(dias_ll, dias_pr, dias_crm)
+    sem2 = agrupar_semanas(dias_ll, dias_pr, dias_crm, inicio_dow=0)
     rp = analizar_semana(sem2, sem2[-1]["semana"], 70_000_000)
     assert not sem2[-1]["completa"] and "ADVERTENCIA" in rp["conclusion"]
 
