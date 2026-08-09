@@ -65,6 +65,7 @@ const NAV_VENTAS_REPORTS = [
   { href: "/televentas/crm/reports", label: "Gestiones CRM" },
   { href: "/televentas/comparativo", label: "Comparativo" },
   { href: "/televentas/semanal", label: "Semanal" },
+  { href: "/televentas/eficiencia", label: "Eficiencia" },
   { href: "/televentas/simulador", label: "Simulador" },
 ];
 const NAV_VENTAS_UPLOADS = [
