@@ -21,10 +21,15 @@ const FMT: Record<string, (v: number) => string> = {
   gs: formatGs, pct: (v) => formatPct(v), int: formatInt,
 };
 
+const DIAS = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"];
+const INICIO_KEY = "vc_semana_inicio";
+
 export default function SemanalPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [semanaSel, setSemanaSel] = useState<string | null>(null);
+  // Corte de la semana operativa: 4 = viernes → jueves (reunión de los viernes).
+  const [inicio, setInicio] = useState(4);
 
   // Analizador semanal
   const [objetivo, setObjetivo] = useState("70000000");
@@ -40,12 +45,23 @@ export default function SemanalPage() {
   const [nuevoResp, setNuevoResp] = useState<"Voicenter" | "Sudameris">("Voicenter");
 
   useEffect(() => {
-    apiFetch<any>("/api/v1/televentas/semanal").then((d) => {
+    const saved = Number(localStorage.getItem(INICIO_KEY));
+    if (!Number.isNaN(saved) && saved >= 0 && saved <= 6 && saved !== 4) setInicio(saved);
+  }, []);
+
+  useEffect(() => {
+    setLoading(true); setData(null); setSemanaSel(null); setRes(null); setExpandido(false);
+    apiFetch<any>(`/api/v1/televentas/semanal?inicio=${inicio}`).then((d) => {
       setData(d);
       const sems = d?.semanas ?? [];
       if (sems.length) setSemanaSel(sems[sems.length - 1].semana);
     }).finally(() => setLoading(false));
-  }, []);
+  }, [inicio]);
+
+  const cambiarInicio = (v: number) => {
+    localStorage.setItem(INICIO_KEY, String(v));
+    setInicio(v);
+  };
 
   const cargarCompromisos = (sem: string) =>
     apiFetch<any>(`/api/v1/televentas/semanal/compromisos?semana=${sem}`)
@@ -66,7 +82,7 @@ export default function SemanalPage() {
     try {
       const d = await apiFetch<any>("/api/v1/televentas/semanal/analizador", {
         method: "POST",
-        body: JSON.stringify({ semana: semanaSel, objetivo_prima: Number(objetivo), consulta: consulta.trim() || null }),
+        body: JSON.stringify({ semana: semanaSel, objetivo_prima: Number(objetivo), consulta: consulta.trim() || null, inicio }),
       });
       setRes(d);
     } catch (e: any) { setError(e.message); } finally { setRunning(false); }
@@ -100,7 +116,7 @@ export default function SemanalPage() {
     <AppShell>
       <PrintCover
         titulo={`Informe de Reunión Semanal${semanaSel ? ` — ${weekLabel(semanaSel)}` : ""}`}
-        periodo={semana ? `Período: ${semana.fecha_inicio} al ${semana.fecha_fin} · Reunión de seguimiento Voicenter · Sudameris Seguros` : undefined}
+        periodo={semana ? `Período: ${semana.fecha_inicio} al ${semana.fecha_fin} (corte ${DIAS[inicio]} a ${DIAS[(inicio + 6) % 7]}) · Reunión de seguimiento Voicenter · Sudameris Seguros` : undefined}
       />
       <PrintHeader
         titulo={`Reporte Semanal · ${semanaSel ? weekLabel(semanaSel) : ""}`}
@@ -134,8 +150,21 @@ export default function SemanalPage() {
 
       {!loading && semanas.length > 0 && (
         <>
-          {/* Selector de semana */}
+          {/* Selector de corte y de semana */}
           <section className="card p-4 mb-6 no-print">
+            <div className="flex flex-wrap items-center gap-3 mb-3 pb-3 border-b border-brand-border">
+              <label className="text-sm font-medium text-brand-ink">La semana operativa va de</label>
+              <select value={inicio} onChange={(e) => cambiarInicio(Number(e.target.value))}
+                className="text-sm border border-brand-border rounded px-3 py-1.5 bg-white font-semibold">
+                {DIAS.map((d, i) => (
+                  <option key={i} value={i}>{d} a {DIAS[(i + 6) % 7]}{i === 4 ? " (reunión de los viernes)" : ""}</option>
+                ))}
+              </select>
+              <span className="text-[11px] text-brand-slate">
+                Todas las semanas de esta vista usan este corte — al cambiarlo se recalcula todo, los números
+                de cortes distintos no se mezclan.
+              </span>
+            </div>
             <label className="label">Semana analizada</label>
             <div className="flex flex-wrap gap-1.5">
               {semanas.slice(-12).map((s) => (

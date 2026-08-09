@@ -162,10 +162,11 @@ class AnalizadorRequest(BaseModel):
 
 
 class SemanalAnalizadorRequest(BaseModel):
-    """Analizador SEMANAL: misma hipótesis producción-vs-objetivo, período semana ISO."""
-    semana: str                           # "2026-W32"
+    """Analizador SEMANAL: misma hipótesis producción-vs-objetivo, semana operativa."""
+    semana: str                           # clave = fecha de INICIO de la semana ("YYYY-MM-DD")
     objetivo_prima: float                 # objetivo de prima EMITIDA de la semana (Gs)
     consulta: Optional[str] = None
+    inicio: int = 4                       # día de inicio de la semana (0=lunes … 6=domingo); 4 = viernes→jueves
 
 
 class CompromisoCreate(BaseModel):
