@@ -27,6 +27,25 @@ function Caja({ peso, titulo, detalle, color }: { peso: string; titulo: string; 
   );
 }
 
+function Paso({ n, titulo, detalle, color }: { n: string; titulo: string; detalle: string; color: string }) {
+  return (
+    <div className="flex-1 min-w-[130px] rounded-md border-t-4 bg-white border border-brand-border px-3 py-2.5" style={{ borderTopColor: color }}>
+      <div className="text-[10px] font-bold uppercase tracking-wider2" style={{ color }}>{n}</div>
+      <div className="text-sm font-semibold text-brand-ink leading-tight">{titulo}</div>
+      <div className="text-[11px] text-brand-slate leading-snug mt-0.5">{detalle}</div>
+    </div>
+  );
+}
+
+function Beneficio({ titulo, detalle, color }: { titulo: string; detalle: string; color: string }) {
+  return (
+    <div className="rounded-md border border-brand-border bg-brand-bg-soft p-3 border-l-4" style={{ borderLeftColor: color }}>
+      <div className="text-sm font-bold text-brand-ink">{titulo}</div>
+      <p className="text-[12px] text-brand-graphite leading-snug mt-0.5">{detalle}</p>
+    </div>
+  );
+}
+
 function Escala({ rango, estado, decision, color, texto = "#fff" }: { rango: string; estado: string; decision: string; color: string; texto?: string }) {
   return (
     <div className="flex items-stretch gap-2">
@@ -119,19 +138,32 @@ export default function ComoFuncionaScoringPage() {
         </S>
 
         <S n="4" title="Por qué esto hace más eficiente el negocio">
-          <ul className="list-disc pl-5 space-y-2">
-            <li><b>Cada guaraní pagado por hora rinde más:</b> la improductividad se detecta el mismo mes, no
-              cuando ya costó un trimestre.</li>
-            <li><b>Decisión inmediata, instantánea y online:</b> el análisis se genera con un click sobre los
-              datos publicados, en el momento — no hay que esperar un informe manual a fin de mes. Se decide
-              con el dato fresco y la decisión queda registrada.</li>
-            <li><b>Conversaciones honestas:</b> nadie discute percepciones — se conversa sobre un índice, sus
-              componentes y su evolución. Eso baja el conflicto y sube la mejora.</li>
-            <li><b>El talento se ve rápido:</b> un nuevo sobresaliente se identifica en semanas y se retiene;
-              un crítico recibe ayuda antes de fracasar solo.</li>
-            <li><b>Trazabilidad total:</b> cada análisis queda registrado con sus reglas, sus números y las
-              notas de lo decidido. Meses después se puede auditar por qué se tomó cada decisión.</li>
-          </ul>
+          <p className="text-xs text-brand-slate uppercase tracking-wider2 font-bold">El ciclo, de punta a punta</p>
+          <div className="flex flex-wrap items-stretch gap-1.5">
+            <Paso n="1" titulo="Datos del mes" detalle="Llamadas, producción y CRM publicados." color="#0EA5E9" />
+            <div className="self-center text-brand-mist font-bold">→</div>
+            <Paso n="2" titulo="Análisis online" detalle="Un click: índice y estado por operador, al instante." color="#662483" />
+            <div className="self-center text-brand-mist font-bold">→</div>
+            <Paso n="3" titulo="Decisión inmediata" detalle="Sostener, coaching, plan de recuperación o baja." color="#E6332A" />
+            <div className="self-center text-brand-mist font-bold">→</div>
+            <Paso n="4" titulo="Registro" detalle="Informe PDF, notas y reglas quedan archivados." color="#F39200" />
+            <div className="self-center text-brand-mist font-bold">→</div>
+            <Paso n="5" titulo="Mes siguiente" detalle="Se mide el efecto: el ciclo vuelve a empezar." color="#10B981" />
+          </div>
+          <div className="grid md:grid-cols-2 gap-2.5 mt-1">
+            <Beneficio color="#E6332A" titulo="Cada guaraní pagado por hora rinde más"
+              detalle="La improductividad se detecta el mismo mes, no cuando ya costó un trimestre." />
+            <Beneficio color="#662483" titulo="Decisión inmediata, instantánea y online"
+              detalle="Sin esperar informes manuales a fin de mes: se decide con el dato fresco y queda registrado." />
+            <Beneficio color="#0EA5E9" titulo="Conversaciones honestas"
+              detalle="Nadie discute percepciones: se conversa sobre un índice, sus componentes y su evolución." />
+            <Beneficio color="#00B2BF" titulo="El talento se ve rápido"
+              detalle="Un nuevo sobresaliente se identifica en semanas y se retiene; un crítico recibe ayuda antes de fracasar solo." />
+            <Beneficio color="#F39200" titulo="Trazabilidad total"
+              detalle="Cada análisis conserva sus reglas, sus números y las notas de lo decidido: auditable meses después." />
+            <Beneficio color="#10B981" titulo="El equipo mejora todos los meses"
+              detalle="La media del equipo sube cuando la improductividad sale y el talento se replica — el estándar se corre solo." />
+          </div>
         </S>
 
         <S n="5" title="Nuestro compromiso">
