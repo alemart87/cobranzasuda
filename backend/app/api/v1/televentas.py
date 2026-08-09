@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.config import settings
 from ...core.database import get_db
 from ...jobs.televentas_queue import signal_televentas_queue
+from ...models.televentas_analisis import TeleventasAnalisis
 from ...models.televentas_crm_report import TeleventasCrmReport
 from ...models.televentas_crm_upload import TeleventasCrmUpload
 from ...models.televentas_llamadas_report import TeleventasLlamadasReport
@@ -28,6 +29,7 @@ from ...models.televentas_produccion_item import TeleventasProduccionItem
 from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_upload import TeleventasProduccionUpload
 from ...schemas.televentas import (
+    AnalizadorRequest,
     PublishRequest,
     TeleventasCrmReportDetail, TeleventasCrmReportList, TeleventasCrmReportSummary,
     TeleventasCrmUploadList, TeleventasCrmUploadRead,
@@ -39,6 +41,7 @@ from ...schemas.televentas import (
 from ...services.analyzers import (
     combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
 )
+from ...services.analyzers.televentas_analizador import analizar_cientifico
 from ...services.analyzers.televentas_llamadas import por_dia_llamadas
 from ...services.analyzers.televentas_simulador import regresion_diaria
 from ...services.parsers import parse_televentas_llamadas
@@ -610,6 +613,95 @@ async def televentas_comparar(
     return {"meses": sel, "generales": generales, "por_operador": filas,
             "insights": comp["insights"], "extremos": {"desde": primero, "hasta": ultimo},
             "available_months": sorted(disponibles, reverse=True)}
+
+
+# ============================ ANALIZADOR (método científico) ============================
+async def _ejecutar_analizador(db: AsyncSession, meses: list[str], objetivo_prima: float,
+                               consulta: Optional[str], created_by: str) -> dict:
+    """Corre el análisis científico sobre los meses del comparativo, persiste el log
+    (hipótesis + datos + conclusión) y devuelve el resultado con el id del registro."""
+    sel = sorted({m.strip() for m in meses if m and m.strip()})
+    if not 2 <= len(sel) <= 3:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Seleccioná 2 o 3 meses (YYYY-MM).")
+    generales = [await _metricas_del_mes(db, m) for m in sel]
+    sin_datos = [g["mes"] for g in generales if not g.get("tiene_llamadas") or not g.get("tiene_produccion")]
+    if sin_datos:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Meses sin llamadas y producción publicadas: {', '.join(sin_datos)}")
+    resultado = analizar_cientifico(generales, objetivo_prima, consulta)
+    if not resultado.get("disponible"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, resultado.get("mensaje", "Análisis no disponible."))
+
+    log = TeleventasAnalisis(
+        created_by=created_by,
+        meses=",".join(sel),
+        objetivo_prima=float(objetivo_prima),
+        consulta=resultado.get("consulta"),
+        hipotesis=resultado["hipotesis"],
+        alcanzado=resultado["observacion"]["alcanzado"],
+        brecha_pct=resultado["observacion"]["brecha_pct"],
+        conclusion=resultado["conclusion"],
+        data={**resultado, "generales": generales},
+    )
+    db.add(log)
+    await db.commit()
+    return {**resultado, "log_id": log.id, "meses": sel, "generales": generales}
+
+
+@router.post("/analizador")
+async def televentas_analizador_run(
+    payload: AnalizadorRequest, request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Ejecuta el ANALIZADOR sobre los meses seleccionados del comparativo.
+    Hipótesis fija: producción (prima neta del mes más reciente) vs objetivo; la
+    `consulta` del usuario se incorpora a la hipótesis. Deja registro (log)."""
+    out = await _ejecutar_analizador(db, payload.meses, payload.objetivo_prima,
+                                     payload.consulta, created_by=user.id)
+    await record_action(db, user_id=user.id, action="run_televentas_analizador",
+                        resource_type="televentas_analisis", resource_id=out["log_id"],
+                        ip=client_ip(request),
+                        extra={"meses": out["meses"], "objetivo": payload.objetivo_prima})
+    return out
+
+
+@router.get("/analizador/logs")
+async def televentas_analizador_logs(
+    limit: int = Query(20, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Historial de hipótesis analizadas (para análisis posterior)."""
+    rows = (await db.execute(
+        select(TeleventasAnalisis).order_by(TeleventasAnalisis.created_at.desc()).limit(limit)
+    )).scalars().all()
+    return {"logs": [{
+        "id": a.id, "created_at": a.created_at.isoformat() if a.created_at else None,
+        "created_by": a.created_by, "meses": a.meses,
+        "objetivo_prima": float(a.objetivo_prima or 0), "consulta": a.consulta,
+        "hipotesis": a.hipotesis, "alcanzado": a.alcanzado,
+        "brecha_pct": float(a.brecha_pct) if a.brecha_pct is not None else None,
+        "conclusion": a.conclusion,
+    } for a in rows]}
+
+
+@router.get("/analizador/logs/{log_id}")
+async def televentas_analizador_log(
+    log_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Detalle completo de un análisis registrado (datos con los que se corrió)."""
+    a = await db.get(TeleventasAnalisis, log_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Análisis no encontrado")
+    return {"id": a.id, "created_at": a.created_at.isoformat() if a.created_at else None,
+            "created_by": a.created_by, "meses": a.meses,
+            "objetivo_prima": float(a.objetivo_prima or 0), "consulta": a.consulta,
+            "hipotesis": a.hipotesis, "alcanzado": a.alcanzado,
+            "brecha_pct": float(a.brecha_pct) if a.brecha_pct is not None else None,
+            "conclusion": a.conclusion, "data": a.data}
 
 
 async def _parametros_simulador(db: AsyncSession, meses_sel: Optional[list[str]] = None) -> dict:

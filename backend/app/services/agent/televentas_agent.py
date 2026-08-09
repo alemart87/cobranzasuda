@@ -12,10 +12,10 @@ from ...core.config import settings
 from . import core
 from .core import AgentNotConfigured
 from .televentas_tools import (
-    tv_buscar_polizas_impl, tv_caidas_vendedores_impl, tv_comparar_meses_impl, tv_focus_impl,
-    tv_gestiones_crm_impl, tv_listar_periodos_impl, tv_llamadas_impl, tv_overview_impl,
-    tv_produccion_impl, tv_proyeccion_impl, tv_ranking_vendedores_impl, tv_simulador_impl,
-    tv_tendencias_impl,
+    tv_analizador_impl, tv_buscar_polizas_impl, tv_caidas_vendedores_impl, tv_comparar_meses_impl,
+    tv_focus_impl, tv_gestiones_crm_impl, tv_listar_periodos_impl, tv_llamadas_impl,
+    tv_overview_impl, tv_produccion_impl, tv_proyeccion_impl, tv_ranking_vendedores_impl,
+    tv_simulador_impl, tv_tendencias_impl,
 )
 from .tools import AgentContext
 
@@ -67,6 +67,13 @@ motivos de NO-VENTA con ejemplos textuales. Citá ejemplos reales al explicar mo
 con N asesores" o "tengo una base de N registros, ¿qué capacidad de producción me da?" (pasá \
 `registros`). Usa las tasas reales; presentá la cadena completa (prima → pólizas → contactos → \
 llamadas → asesores → registros de base), los escenarios y aclarar los supuestos del modelo.
+13. ANALIZADOR (`tv_analizador`): para "¿por qué no llegamos al objetivo?" o cualquier diagnóstico \
+producción-vs-objetivo. Método científico: hipótesis (la producción del mes alcanza el objetivo, \
+más la consulta del usuario), verificación de cada eslabón del funnel contra los meses previos, \
+descomposición EXACTA de la variación (volumen × conversión × ticket × retención) y acciones. \
+Pasá `meses` (2-3, YYYY-MM: los previos son la referencia y el último es el analizado), \
+`objetivo_prima` (Gs netos) y la `consulta` textual del usuario. Presentá: hipótesis → resultado \
+(confirmada/rechazada) → causas por peso en Gs → acciones. El análisis queda registrado en el log.
 
 FOCO del usuario: llamá `tv_focus` PRIMERO. Si seleccionó reportes, centrá el análisis en ellos.
 
@@ -169,6 +176,17 @@ def _build_televentas_agent():
         return await tv_simulador_impl(meta_prima, asesores, registros, overrides, meses)
 
     @function_tool(strict_mode=False)
+    async def tv_analizador(ctx: RunContextWrapper[AgentContext], meses: list[str],
+                            objetivo_prima: float, consulta: Optional[str] = None) -> dict:
+        """ANALIZADOR con MÉTODO CIENTÍFICO: diagnostica por qué la producción alcanzó o no el
+        OBJETIVO. Hipótesis fija: la prima neta del mes más reciente de `meses` alcanza
+        `objetivo_prima` (Gs netos); `consulta` del usuario se suma a la hipótesis. Verifica cada
+        eslabón del funnel vs los meses previos (referencia pooled), descompone la variación en
+        aportes EXACTOS en Gs (volumen de contactos × conversión × ticket × retención, LMDI) y
+        devuelve conclusión y acciones. El análisis queda registrado en el log de hipótesis."""
+        return await tv_analizador_impl(meses, objetivo_prima, consulta)
+
+    @function_tool(strict_mode=False)
     async def tv_gestiones_crm(ctx: RunContextWrapper[AgentContext], mes: Optional[str] = None) -> dict:
         """GESTIONES CRM del mes: funnel de gestión comercial (no contesta / no acepta / agendado /
         acepta), tasa de contacto y de aceptación, productividad por operador (gestiones/día), por
@@ -205,7 +223,7 @@ def _build_televentas_agent():
 
     tools = [tv_focus, tv_listar_periodos, tv_overview, tv_ranking_vendedores, tv_produccion,
              tv_llamadas, tv_gestiones_crm, tv_buscar_polizas, tv_proyeccion, tv_comparar_meses,
-             tv_tendencias, tv_caidas_vendedores, tv_simulador, emit_canvas]
+             tv_tendencias, tv_caidas_vendedores, tv_simulador, tv_analizador, emit_canvas]
 
     model_settings = None
     try:

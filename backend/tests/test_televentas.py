@@ -276,6 +276,36 @@ def test_simulador_meta_y_dotacion():
     assert r4["asesores_para_trabajarla_redondeo"] == 5
 
 
+def test_analizador_metodo_cientifico():
+    """Hipótesis producción-vs-objetivo: la descomposición LMDI debe ser exacta y
+    el factor dominante correcto; un objetivo irreal sin caída operativa se detecta."""
+    from app.services.analyzers.televentas_analizador import analizar_cientifico
+
+    def mes(m, llam, cont, pol, emit, neta):
+        return {"mes": m, "total_llamadas": llam, "contestadas": cont, "polizas_emitidas": pol,
+                "prima_emitida": emit, "prima_neta": neta, "contactabilidad": round(cont / llam * 100, 1),
+                "conversion_pct": round(pol / cont * 100, 1), "ticket_promedio": round(emit / pol),
+                "agentes_efectivos": 15, "llamadas_prom_asesor_dia": 45, "dias_operativos": 21,
+                "tiene_crm": False, "tiene_llamadas": True, "tiene_produccion": True}
+
+    prev = mes("2026-05", 17000, 9000, 510, 320_000_000, 300_000_000)
+    caida = mes("2026-07", 16500, 8800, 380, 240_000_000, 215_000_000)
+
+    r = analizar_cientifico([prev, caida], 300_000_000, "¿El problema son las bases?")
+    assert r["disponible"] and not r["observacion"]["alcanzado"]
+    assert "consulta incorporada" in r["hipotesis"].lower()
+    # LMDI exacta: los aportes suman la variación real de prima neta
+    assert abs(sum(d["aporte_gs"] for d in r["descomposicion"]) - (215_000_000 - 300_000_000)) <= 2
+    assert r["descomposicion"][0]["clave"] == "conversion"  # factor dominante correcto
+    assert r["acciones"]
+
+    ok = analizar_cientifico([prev, mes("2026-07", 18000, 9600, 560, 350_000_000, 330_000_000)], 300_000_000)
+    assert ok["observacion"]["alcanzado"] and "CONFIRMADA" in ok["conclusion"]
+
+    irreal = analizar_cientifico([prev, mes("2026-07", 17200, 9100, 515, 322_000_000, 302_000_000)], 500_000_000)
+    assert "excede la capacidad demostrada" in irreal["conclusion"]
+
+
 def test_regresion_origen_recupera_pendiente():
     """La regresión OLS por el origen recupera la tasa real dentro del IC 95%."""
     import random

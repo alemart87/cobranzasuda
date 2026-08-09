@@ -289,6 +289,22 @@ async def tv_simulador_impl(meta_prima: Optional[float] = None, asesores: Option
     return out
 
 
+async def tv_analizador_impl(meses: list[str], objetivo_prima: float,
+                             consulta: Optional[str] = None) -> dict[str, Any]:
+    """ANALIZADOR (método científico): hipótesis = la producción del mes más reciente
+    alcanza el objetivo. Verifica cada eslabón del funnel contra los meses previos,
+    descompone la variación (LMDI: volumen × conversión × ticket × retención) y
+    devuelve conclusión y acciones. Queda registrado en el log de análisis."""
+    from ...api.v1.televentas import _ejecutar_analizador
+    try:
+        async with session_scope() as db:
+            return await _ejecutar_analizador(db, meses, objetivo_prima, consulta,
+                                              created_by="agente-ia")
+    except Exception as exc:  # HTTPException del validador → mensaje legible para el agente
+        detail = getattr(exc, "detail", None) or str(exc)
+        return {"error": detail}
+
+
 async def tv_focus_impl(focus_refs: Optional[list[str]]) -> dict[str, Any]:
     """Reportes que el usuario seleccionó como foco (por id o mes YYYY-MM)."""
     refs = focus_refs or []
