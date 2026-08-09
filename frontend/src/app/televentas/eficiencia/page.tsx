@@ -105,7 +105,7 @@ export default function EficienciaPage() {
             de cada operador contra la media del equipo. El servicio se paga por hora — la improductividad se
             detecta y se resuelve rápido, con reglas públicas y auditables.{" "}
             <Link href="/televentas/eficiencia/como-funciona" className="text-brand-primary font-semibold hover:underline no-print">
-              ¿Cómo funciona el scoring? →
+              Modelo de Eficiencia Predictivo Voicenter →
             </Link>
           </p>
         </div>
@@ -134,7 +134,7 @@ export default function EficienciaPage() {
           )}
           <button onClick={() => setVerAlgoritmo(!verAlgoritmo)}
             className="text-sm text-brand-graphite border border-brand-border rounded px-3 py-2 hover:border-brand-primary">
-            {verAlgoritmo ? "Ocultar algoritmo" : "Cómo clasifica el algoritmo"}
+            {verAlgoritmo ? "Ocultar modelo" : "Cómo clasifica el modelo"}
           </button>
           {historial.length > 0 && (
             <label className="text-sm ml-auto">
@@ -157,7 +157,7 @@ export default function EficienciaPage() {
       {/* Explicación del algoritmo y compromiso — visible a demanda y SIEMPRE en el PDF */}
       {(verAlgoritmo || res) && (
         <section className={`card p-5 mb-6 ${verAlgoritmo ? "" : "print-only"}`}>
-          <h2 className="font-display text-xl text-brand-ink uppercase mb-2">Nuestro algoritmo y compromiso con la eficiencia</h2>
+          <h2 className="font-display text-xl text-brand-ink uppercase mb-2">Modelo de Eficiencia Predictivo Voicenter — compromiso con la eficiencia</h2>
           <div className="text-sm text-brand-graphite leading-relaxed space-y-3">
             <p>
               <b>Compromiso:</b> Sudameris Seguros paga este servicio por hora. Nuestro compromiso es que cada hora
