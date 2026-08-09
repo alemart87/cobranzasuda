@@ -5,6 +5,7 @@ import React, { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ComposedChart, LabelList, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { InformeAnalisis } from "@/components/televentas/InformeAnalisis";
+import { ResenaRegistro } from "@/components/televentas/ResenaRegistro";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
@@ -73,6 +74,8 @@ export default function TeleventasTendenciasPage() {
         <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Comparativo y tendencias</h1>
         <p className="text-sm text-brand-slate mt-1">Evolución de varios meses: conversión, llamadas (total y promedio), agentes activos, contactabilidad y producción.</p>
       </div>
+
+      <ResenaRegistro />
 
       <div className="flex items-center gap-1 mb-6 border-b border-brand-border no-print">
         {([["tendencias", "Tendencias"], ["comparar", "Comparar meses"], ["informes", "Informes del Analizador"]] as const).map(([id, label]) => (

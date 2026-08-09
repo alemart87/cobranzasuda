@@ -62,6 +62,8 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("gestion_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),
     ("gestion_reports", "published_by", "VARCHAR(36)"),
     ("gestion_reports", "title", "VARCHAR(255)"),
+    # analizador de televentas (por si la tabla ya existía sin la columna tipo)
+    ("televentas_analisis", "tipo", "VARCHAR(16) NOT NULL DEFAULT 'mensual'"),
     # bases adicionales (créase via create_all, pero por si la tabla ya existía)
     ("base_adicional_reports", "is_published", "BOOLEAN NOT NULL DEFAULT false"),
     ("base_adicional_reports", "published_at", "TIMESTAMP WITH TIME ZONE"),

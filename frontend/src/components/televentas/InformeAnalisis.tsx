@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatGs, formatInt } from "@/lib/format";
-import { monthLabel } from "@/lib/month";
+import { periodLabel } from "@/lib/month";
 import { Lectura } from "@/components/televentas/Lectura";
 
 const VEREDICTO: Record<string, { label: string; cls: string }> = {
@@ -23,7 +23,7 @@ function fmtVal(v: number, formato: string) {
 export function InformeAnalisis({ res, meses }: { res: any; meses: string[] }) {
   const obs = res?.observacion;
   if (!res || !obs) return null;
-  const serieMeses = (res.series?.meses ?? []).map((m: any) => ({ ...m, label: monthLabel(m.mes) }));
+  const serieMeses = (res.series?.meses ?? []).map((m: any) => ({ ...m, label: periodLabel(m.mes) }));
   const descomp = (res.descomposicion ?? []).map((d: any) => ({ ...d, abs: Math.abs(d.aporte_gs) }));
   const mesAnalizado = meses[meses.length - 1];
 
@@ -105,7 +105,7 @@ export function InformeAnalisis({ res, meses }: { res: any; meses: string[] }) {
                 <tr>
                   <th className="px-3 py-1.5 text-left">Eslabón</th>
                   <th className="px-3 py-1.5 text-right">Referencia</th>
-                  <th className="px-3 py-1.5 text-right">{monthLabel(mesAnalizado)}</th>
+                  <th className="px-3 py-1.5 text-right">{periodLabel(mesAnalizado)}</th>
                   <th className="px-3 py-1.5 text-right">Δ%</th>
                   <th className="px-3 py-1.5 text-center">Veredicto</th>
                 </tr>

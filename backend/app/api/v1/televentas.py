@@ -21,6 +21,7 @@ from ...core.config import settings
 from ...core.database import get_db
 from ...jobs.televentas_queue import signal_televentas_queue
 from ...models.televentas_analisis import TeleventasAnalisis
+from ...models.televentas_compromiso import TeleventasCompromiso
 from ...models.televentas_crm_report import TeleventasCrmReport
 from ...models.televentas_crm_upload import TeleventasCrmUpload
 from ...models.televentas_llamadas_report import TeleventasLlamadasReport
@@ -29,7 +30,7 @@ from ...models.televentas_produccion_item import TeleventasProduccionItem
 from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_upload import TeleventasProduccionUpload
 from ...schemas.televentas import (
-    AnalizadorRequest,
+    AnalizadorRequest, CompromisoCreate, CompromisoUpdate, SemanalAnalizadorRequest,
     PublishRequest,
     TeleventasCrmReportDetail, TeleventasCrmReportList, TeleventasCrmReportSummary,
     TeleventasCrmUploadList, TeleventasCrmUploadRead,
@@ -43,6 +44,7 @@ from ...services.analyzers import (
 )
 from ...services.analyzers.televentas_analizador import analizar_cientifico
 from ...services.analyzers.televentas_llamadas import por_dia_llamadas
+from ...services.analyzers.televentas_semanal import agrupar_semanas, analizar_semana, evaluar_semana
 from ...services.analyzers.televentas_simulador import regresion_diaria
 from ...services.parsers import parse_televentas_llamadas
 from ...services.audit_service import record_action
@@ -678,12 +680,210 @@ async def televentas_analizador_logs(
     )).scalars().all()
     return {"logs": [{
         "id": a.id, "created_at": a.created_at.isoformat() if a.created_at else None,
-        "created_by": a.created_by, "meses": a.meses,
+        "created_by": a.created_by, "tipo": getattr(a, "tipo", "mensual") or "mensual", "meses": a.meses,
         "objetivo_prima": float(a.objetivo_prima or 0), "consulta": a.consulta,
         "hipotesis": a.hipotesis, "alcanzado": a.alcanzado,
         "brecha_pct": float(a.brecha_pct) if a.brecha_pct is not None else None,
         "conclusion": a.conclusion,
     } for a in rows]}
+
+
+@router.get("/analizador/resumen")
+async def televentas_analizador_resumen(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Breve reseña SIEMPRE visible al entrar al comparativo/semanal: últimos
+    análisis registrados + compromisos de reunión pendientes."""
+    rows = (await db.execute(
+        select(TeleventasAnalisis).order_by(TeleventasAnalisis.created_at.desc()).limit(3)
+    )).scalars().all()
+    pendientes = (await db.execute(
+        select(TeleventasCompromiso).where(TeleventasCompromiso.estado != "cumplido")
+        .order_by(TeleventasCompromiso.created_at.desc())
+    )).scalars().all()
+    return {
+        "ultimos_analisis": [{
+            "id": a.id, "tipo": getattr(a, "tipo", "mensual") or "mensual",
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+            "meses": a.meses, "alcanzado": a.alcanzado,
+            "objetivo_prima": float(a.objetivo_prima or 0),
+            "cumplimiento_pct": ((a.data or {}).get("observacion") or {}).get("cumplimiento_pct"),
+        } for a in rows],
+        "compromisos_pendientes": len(pendientes),
+        "compromisos_recientes": [{
+            "id": c.id, "semana": c.semana, "descripcion": c.descripcion,
+            "responsable": c.responsable, "estado": c.estado,
+        } for c in pendientes[:5]],
+    }
+
+
+# ============================ REPORTE SEMANAL ============================
+async def _series_diarias(db: AsyncSession) -> tuple[list[dict], list[dict], list[dict]]:
+    """Series DIARIAS completas (todos los meses publicados): llamadas (sanadas),
+    producción y gestiones CRM — insumo de la agregación semanal."""
+    months: set[str] = set()
+    for Model in (TeleventasLlamadasReport, TeleventasProduccionReport, TeleventasCrmReport):
+        for (pm,) in (await db.execute(
+            select(Model.period_month).where(Model.period_month.isnot(None), Model.is_published == True)  # noqa: E712
+        )).all():
+            if pm:
+                months.add(pm.strftime("%Y-%m"))
+
+    dias_ll: list[dict] = []
+    dias_pr: list[dict] = []
+    dias_crm: list[dict] = []
+    for m in sorted(months):
+        start, end = _month_bounds(m)
+
+        async def _latest(Model):
+            return (await db.execute(
+                select(Model).where(Model.period_month >= start, Model.period_month < end,
+                                    Model.is_published == True)  # noqa: E712
+                .order_by(Model.generated_at.desc()).limit(1)
+            )).scalars().first()
+
+        ll = await _latest(TeleventasLlamadasReport)
+        if ll:
+            await _heal_llamadas_diario(db, ll)
+            dias_ll.extend((ll.data or {}).get("por_dia") or [])
+        pr = await _latest(TeleventasProduccionReport)
+        if pr:
+            dias_pr.extend((pr.data or {}).get("por_dia") or [])
+        crm = await _latest(TeleventasCrmReport)
+        if crm:
+            dias_crm.extend((crm.data or {}).get("por_dia") or [])
+    return dias_ll, dias_pr, dias_crm
+
+
+@router.get("/semanal")
+async def televentas_semanal(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Reporte SEMANAL: métricas por semana ISO (llamadas + producción + CRM) y
+    evaluación inter-semanal (mejoras/desmejoras/datos llamativos) de cada semana."""
+    dias_ll, dias_pr, dias_crm = await _series_diarias(db)
+    semanas = agrupar_semanas(dias_ll, dias_pr, dias_crm)
+    evaluaciones = {s["semana"]: evaluar_semana(semanas, s["semana"]) for s in semanas}
+    return {"semanas": semanas, "evaluaciones": evaluaciones}
+
+
+@router.post("/semanal/analizador")
+async def televentas_semanal_analizador(
+    payload: SemanalAnalizadorRequest, request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Analizador SEMANAL (mismo método científico): objetivo de la semana vs
+    producción, referencia = semanas completas previas. Deja registro (log)."""
+    dias_ll, dias_pr, dias_crm = await _series_diarias(db)
+    semanas = agrupar_semanas(dias_ll, dias_pr, dias_crm)
+    resultado = analizar_semana(semanas, payload.semana.strip(), payload.objetivo_prima, payload.consulta)
+    if not resultado.get("disponible"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, resultado.get("mensaje", "Análisis no disponible."))
+
+    periodos = resultado.get("semanas_referencia", []) + [payload.semana.strip()]
+    log = TeleventasAnalisis(
+        created_by=user.id, tipo="semanal",
+        meses=",".join(periodos)[:64],
+        objetivo_prima=float(payload.objetivo_prima),
+        consulta=resultado.get("consulta"),
+        hipotesis=resultado["hipotesis"],
+        alcanzado=resultado["observacion"]["alcanzado"],
+        brecha_pct=resultado["observacion"]["brecha_pct"],
+        conclusion=resultado["conclusion"],
+        data=resultado,
+    )
+    db.add(log)
+    await db.commit()
+    await record_action(db, user_id=user.id, action="run_televentas_analizador_semanal",
+                        resource_type="televentas_analisis", resource_id=log.id,
+                        ip=client_ip(request), extra={"semana": payload.semana, "objetivo": payload.objetivo_prima})
+    return {**resultado, "log_id": log.id, "periodos": periodos}
+
+
+# ---- Compromisos de la reunión semanal (Voicenter ↔ Sudameris) ----
+def _compromiso_out(c: TeleventasCompromiso) -> dict:
+    return {"id": c.id, "semana": c.semana, "descripcion": c.descripcion,
+            "responsable": c.responsable, "estado": c.estado, "nota": c.nota,
+            "created_by": c.created_by,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "updated_at": c.updated_at.isoformat() if c.updated_at else None}
+
+
+@router.get("/semanal/compromisos")
+async def listar_compromisos(
+    semana: Optional[str] = Query(None, description="Filtrar por semana YYYY-Www"),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    q = select(TeleventasCompromiso).order_by(TeleventasCompromiso.semana.desc(),
+                                              TeleventasCompromiso.created_at.asc())
+    if semana:
+        q = q.where(TeleventasCompromiso.semana == semana.strip())
+    rows = (await db.execute(q)).scalars().all()
+    return {"compromisos": [_compromiso_out(c) for c in rows]}
+
+
+@router.post("/semanal/compromisos", status_code=status.HTTP_201_CREATED)
+async def crear_compromiso(
+    payload: CompromisoCreate, request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    if payload.responsable not in ("Voicenter", "Sudameris"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Responsable debe ser Voicenter o Sudameris.")
+    if not payload.descripcion.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El compromiso necesita una descripción.")
+    c = TeleventasCompromiso(semana=payload.semana.strip(), descripcion=payload.descripcion.strip(),
+                             responsable=payload.responsable, created_by=user.id)
+    db.add(c)
+    await db.commit()
+    await record_action(db, user_id=user.id, action="create_televentas_compromiso",
+                        resource_type="televentas_compromiso", resource_id=c.id,
+                        ip=client_ip(request), extra={"semana": c.semana, "responsable": c.responsable})
+    return _compromiso_out(c)
+
+
+@router.patch("/semanal/compromisos/{compromiso_id}")
+async def actualizar_compromiso(
+    compromiso_id: str, payload: CompromisoUpdate, request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    c = await db.get(TeleventasCompromiso, compromiso_id)
+    if not c:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compromiso no encontrado")
+    if payload.estado is not None:
+        if payload.estado not in ("pendiente", "en_proceso", "cumplido"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Estado inválido.")
+        c.estado = payload.estado
+    if payload.nota is not None:
+        c.nota = payload.nota.strip() or None
+    if payload.descripcion is not None and payload.descripcion.strip():
+        c.descripcion = payload.descripcion.strip()
+    await db.commit()
+    await record_action(db, user_id=user.id, action="update_televentas_compromiso",
+                        resource_type="televentas_compromiso", resource_id=c.id,
+                        ip=client_ip(request), extra={"estado": c.estado})
+    return _compromiso_out(c)
+
+
+@router.delete("/semanal/compromisos/{compromiso_id}")
+async def borrar_compromiso(
+    compromiso_id: str, request: Request,
+    user: CurrentUser = Depends(require_analyst_or_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    c = await db.get(TeleventasCompromiso, compromiso_id)
+    if not c:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Compromiso no encontrado")
+    await db.delete(c)
+    await db.commit()
+    await record_action(db, user_id=user.id, action="delete_televentas_compromiso",
+                        resource_type="televentas_compromiso", resource_id=compromiso_id, ip=client_ip(request))
+    return {"status": "deleted", "id": compromiso_id}
 
 
 @router.get("/analizador/logs/{log_id}")

@@ -82,24 +82,26 @@ _ACCIONES_POR_FACTOR = {
 
 
 def analizar_cientifico(generales: list[dict], objetivo_prima: float,
-                        consulta: Optional[str] = None) -> dict[str, Any]:
-    """`generales`: métricas por mes (ordenadas cronológicamente, 2-3 meses del
-    comparativo). El mes ANALIZADO es el último; los previos son la referencia.
-    `objetivo_prima`: objetivo de prima NETA (Gs) del mes analizado.
+                        consulta: Optional[str] = None,
+                        etiqueta_produccion: str = "prima neta",
+                        unidad: str = "mes") -> dict[str, Any]:
+    """`generales`: métricas por período (ordenadas cronológicamente; meses del
+    comparativo o semanas del reporte semanal). El período ANALIZADO es el último;
+    los previos son la referencia. `objetivo_prima`: objetivo de producción (Gs).
     `consulta`: pregunta del usuario, incorporada a la hipótesis."""
     if len(generales) < 2:
         return {"disponible": False,
-                "mensaje": "El analizador necesita al menos 2 meses seleccionados en el comparativo."}
+                "mensaje": f"El analizador necesita al menos 2 {unidad}es con datos."}
     objetivo = float(objetivo_prima or 0)
     if objetivo <= 0:
-        return {"disponible": False, "mensaje": "Cargá un objetivo de prima neta (Gs) mayor a cero."}
+        return {"disponible": False, "mensaje": "Cargá un objetivo de producción (Gs) mayor a cero."}
 
     gs = sorted(generales, key=lambda g: g.get("mes", ""))
     actual, previos = gs[-1], gs[:-1]
     mes = actual.get("mes", "")
 
     # ---------- 1. HIPÓTESIS ----------
-    hipotesis = (f"La producción de {mes} (prima neta) alcanza el objetivo de "
+    hipotesis = (f"La producción de {mes} ({etiqueta_produccion}) alcanza el objetivo de "
                  f"Gs {objetivo:,.0f}.".replace(",", "."))
     if consulta and consulta.strip():
         hipotesis += f' Consulta incorporada del usuario: "{consulta.strip()}"'
@@ -189,10 +191,10 @@ def analizar_cientifico(generales: list[dict], objetivo_prima: float,
     # ---------- 5. CONCLUSIÓN ----------
     partes: list[str] = []
     if alcanzado:
-        partes.append(f"HIPÓTESIS CONFIRMADA: {mes} produjo Gs {neta:,.0f} netos, "
+        partes.append(f"HIPÓTESIS CONFIRMADA: {mes} produjo Gs {neta:,.0f} de {etiqueta_produccion}, "
                       f"{observacion['cumplimiento_pct']}% del objetivo.".replace(",", "."))
     else:
-        partes.append(f"HIPÓTESIS RECHAZADA: {mes} produjo Gs {neta:,.0f} netos, "
+        partes.append(f"HIPÓTESIS RECHAZADA: {mes} produjo Gs {neta:,.0f} de {etiqueta_produccion}, "
                       f"{observacion['cumplimiento_pct']}% del objetivo — brecha de "
                       f"Gs {abs(brecha):,.0f}.".replace(",", "."))
     causas = [v for v in verificaciones if v["veredicto"] == "causa"]

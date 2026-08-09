@@ -8,7 +8,7 @@ import { PrintButton, PrintCover, PrintHeader } from "@/components/PrintButton";
 import { InformeAnalisis } from "@/components/televentas/InformeAnalisis";
 import { apiFetch } from "@/lib/api";
 import { formatGs } from "@/lib/format";
-import { monthLabel } from "@/lib/month";
+import { periodLabel } from "@/lib/month";
 
 /** Informe completo de un análisis registrado — versión imprimible (PDF corporativo). */
 export default function InformeAnalizadorPage() {
@@ -31,11 +31,11 @@ export default function InformeAnalizadorPage() {
   return (
     <AppShell>
       <PrintCover
-        titulo={`Informe del Analizador — ${monthLabel(mesAnalizado)}`}
-        periodo={`Hipótesis: producción vs objetivo de ${formatGs(log.objetivo_prima)} · Meses base: ${meses.map((m) => monthLabel(m)).join(", ")}`}
+        titulo={`Informe del Analizador — ${periodLabel(mesAnalizado)}`}
+        periodo={`Hipótesis: producción vs objetivo de ${formatGs(log.objetivo_prima)} · Meses base: ${meses.map((m) => periodLabel(m)).join(", ")}`}
       />
       <PrintHeader
-        titulo={`Informe del Analizador · ${monthLabel(mesAnalizado)}`}
+        titulo={`Informe del Analizador · ${periodLabel(mesAnalizado)}`}
         subtitulo={`Generado: ${fecha} · Registro #${String(log.id).slice(0, 8)}`}
       />
 
@@ -53,7 +53,7 @@ export default function InformeAnalizadorPage() {
             Informe del Analizador
           </h1>
           <p className="text-sm text-brand-slate mt-1">
-            {monthLabel(mesAnalizado)} vs referencia {meses.slice(0, -1).map((m) => monthLabel(m)).join(" + ")} ·
+            {periodLabel(mesAnalizado)} vs referencia {meses.slice(0, -1).map((m) => periodLabel(m)).join(" + ")} ·
             objetivo {formatGs(log.objetivo_prima)} · generado {fecha}
             {log.consulta ? <> · consulta: <i>"{log.consulta}"</i></> : null}
           </p>

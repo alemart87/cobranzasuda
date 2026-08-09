@@ -24,6 +24,32 @@ export function toMonth(value: string | null | undefined): string | null {
   return value ? value.slice(0, 7) : null;
 }
 
+/** Lunes de una semana ISO "YYYY-Www". */
+function isoWeekMonday(year: number, week: number): Date {
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const day = jan4.getUTCDay() || 7; // 1=lun … 7=dom
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - day + 1 + (week - 1) * 7);
+  return monday;
+}
+
+/** "2026-W32" -> "Semana 32 (03/08–09/08)". Si no es semana, delega a monthLabel. */
+export function weekLabel(wk: string): string {
+  const m = /^(\d{4})-W(\d{2})$/.exec(wk || "");
+  if (!m) return monthLabel(wk);
+  const [_, y, w] = m;
+  const ini = isoWeekMonday(Number(y), Number(w));
+  const fin = new Date(ini);
+  fin.setUTCDate(ini.getUTCDate() + 6);
+  const dd = (d: Date) => `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+  return `Semana ${Number(w)} (${dd(ini)}–${dd(fin)})`;
+}
+
+/** Etiqueta genérica de período: detecta semana ISO o mes. */
+export function periodLabel(p: string): string {
+  return /^\d{4}-W\d{2}$/.test(p || "") ? weekLabel(p) : monthLabel(p);
+}
+
 /** Mes preferido por el usuario, recordado entre vistas (continuidad de navegación). */
 export function getPreferredMonth(): string | null {
   if (typeof window === "undefined") return null;
