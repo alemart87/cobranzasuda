@@ -44,19 +44,19 @@ function Escala({ rango, estado, decision, color, texto = "#fff" }: { rango: str
 export default function ComoFuncionaScoringPage() {
   return (
     <AppShell>
-      <PrintHeader titulo="Cómo funciona el scoring de eficiencia" subtitulo="Eficiencia del Negocio · Televentas — explicado para la toma de decisiones" />
+      <PrintHeader titulo="Modelo de Eficiencia Predictivo Voicenter" subtitulo="Eficiencia del Negocio · Televentas — explicado para la toma de decisiones" />
       <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/televentas" className="hover:text-brand-primary">Televentas</Link>
         <span className="mx-2">/</span>
         <Link href="/televentas/eficiencia" className="hover:text-brand-primary">Eficiencia</Link>
         <span className="mx-2">/</span>
-        <span className="text-brand-ink font-semibold">Cómo funciona</span>
+        <span className="text-brand-ink font-semibold">Modelo Predictivo</span>
       </div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Cómo funciona el scoring</h1>
+          <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Modelo de Eficiencia Predictivo Voicenter</h1>
           <p className="text-sm text-brand-slate mt-1 max-w-2xl">
-            El sistema que convierte los datos del mes en decisiones de dotación: qué mide, cómo decide
+            El modelo que convierte los datos del mes en decisiones de dotación: qué mide, cómo decide
             y por qué hace más eficiente el negocio.
           </p>
         </div>
@@ -68,7 +68,7 @@ export default function ComoFuncionaScoringPage() {
           <p>
             Sudameris paga este servicio <b>por hora</b>. Detrás de cada hora hay una persona con un teléfono —
             y la pregunta correcta no es "¿quién vende más?", sino <b>"¿qué produce cada hora que pagamos?"</b>.
-            El scoring responde eso comparando a cada operador <b>con la media real de su propio equipo</b>,
+            El Modelo de Eficiencia Predictivo Voicenter responde eso comparando a cada operador <b>con la media real de su propio equipo</b>,
             en el mismo mes, con las mismas bases y el mismo mercado. Nadie se mide contra una vara arbitraria:
             se mide contra lo que sus compañeros demostraron que es posible.
           </p>
@@ -138,7 +138,7 @@ export default function ComoFuncionaScoringPage() {
           <p>
             Medimos con reglas públicas, decidimos rápido y dejamos registro. Ser exigentes con los resultados
             y justos con las personas no son cosas opuestas: son exactamente el mismo sistema. Eso es lo que
-            Sudameris compra cuando paga cada hora — y lo que este scoring garantiza, todos los meses.
+            Sudameris compra cuando paga cada hora — y lo que este modelo garantiza, todos los meses.
           </p>
         </S>
 
