@@ -878,6 +878,7 @@ async def actualizar_compromiso(
     if payload.descripcion is not None and payload.descripcion.strip():
         c.descripcion = payload.descripcion.strip()
     await db.commit()
+    await db.refresh(c)  # updated_at es server-side: sin refresh queda expirado (500 en async)
     await record_action(db, user_id=user.id, action="update_televentas_compromiso",
                         resource_type="televentas_compromiso", resource_id=c.id,
                         ip=client_ip(request), extra={"estado": c.estado})
@@ -1082,7 +1083,7 @@ async def _generar_alertas_eficiencia(db: AsyncSession, reg: TeleventasEficienci
     )).scalars().all()}
     autor = user.full_name or user.id
     equipo = resultado.get("equipo", {})
-    out = []
+    tocadas: list[TeleventasAlerta] = []
     for o in fuera:
         detalle = {
             "mes": reg.mes, "objetivo_prima": resultado.get("objetivo_prima"),
@@ -1104,7 +1105,7 @@ async def _generar_alertas_eficiencia(db: AsyncSession, reg: TeleventasEficienci
             existente.seguimiento = list(existente.seguimiento or []) + [_seguimiento_entry(
                 autor, "actualizada", existente.estado,
                 f"Alerta actualizada por nuevo análisis de eficiencia de {reg.mes}.")]
-            out.append(_alerta_out(existente))
+            tocadas.append(existente)
         else:
             a = TeleventasAlerta(
                 analisis_id=reg.id, mes=reg.mes, operador=o["vendedor"],
@@ -1114,9 +1115,12 @@ async def _generar_alertas_eficiencia(db: AsyncSession, reg: TeleventasEficienci
                                                 "Alerta generada automáticamente por el análisis de eficiencia.")],
             )
             db.add(a)
-            await db.flush()
-            out.append(_alerta_out(a))
+            tocadas.append(a)
     await db.commit()
+    out = []
+    for a in tocadas:  # refresh: created_at/updated_at son server-side
+        await db.refresh(a)
+        out.append(_alerta_out(a))
     return out
 
 
@@ -1190,6 +1194,7 @@ async def eficiencia_alerta_accion(
         user.full_name or user.id, accion, nuevo_estado, comentario)]
     a.estado = nuevo_estado
     await db.commit()
+    await db.refresh(a)  # updated_at es server-side: sin refresh queda expirado (500 en async)
     await record_action(db, user_id=user.id, action=f"alerta_eficiencia_{accion}",
                         resource_type="televentas_alerta", resource_id=alerta_id,
                         ip=client_ip(request), extra={"estado": nuevo_estado, "operador": a.operador})
