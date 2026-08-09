@@ -152,3 +152,10 @@ class TeleventasCrmReportList(BaseModel):
 class PublishRequest(BaseModel):
     is_published: bool
     title: Optional[str] = None
+
+
+class AnalizadorRequest(BaseModel):
+    """Ejecución del Analizador (método científico) sobre los meses del comparativo."""
+    meses: list[str]                      # 2-3 meses YYYY-MM (los del comparativo)
+    objetivo_prima: float                 # objetivo de prima NETA del mes analizado (Gs)
+    consulta: Optional[str] = None        # pregunta del usuario — se incorpora a la hipótesis

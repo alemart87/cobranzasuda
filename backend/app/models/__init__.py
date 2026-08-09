@@ -26,6 +26,7 @@ from .televentas_produccion_item import TeleventasProduccionItem
 from .televentas_crm_upload import TeleventasCrmUpload
 from .televentas_crm_report import TeleventasCrmReport
 from .televentas_crm_item import TeleventasCrmItem
+from .televentas_analisis import TeleventasAnalisis
 
 __all__ = [
     "User", "Upload", "Report", "AuditLog",
@@ -40,5 +41,5 @@ __all__ = [
     "TeleventasLlamadasUpload", "TeleventasLlamadasReport",
     "TeleventasProduccionUpload", "TeleventasProduccionReport",
     "TeleventasProduccionItem",
-    "TeleventasCrmUpload", "TeleventasCrmReport", "TeleventasCrmItem",
+    "TeleventasCrmUpload", "TeleventasCrmReport", "TeleventasCrmItem", "TeleventasAnalisis",
 ]
