@@ -1,0 +1,151 @@
+"use client";
+
+import Link from "next/link";
+import { AppShell } from "@/components/AppShell";
+import { PrintButton, PrintHeader } from "@/components/PrintButton";
+
+function S({ n, title, children }: { n: string; title: string; children: React.ReactNode }) {
+  return (
+    <section className="card p-6 mb-5">
+      <h2 className="font-display text-xl text-brand-ink uppercase mb-3">
+        <span className="text-brand-primary mr-2">{n}</span>{title}
+      </h2>
+      <div className="text-sm text-brand-graphite leading-relaxed space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function Caja({ peso, titulo, detalle, color }: { peso: string; titulo: string; detalle: string; color: string }) {
+  return (
+    <div className="flex-1 min-w-[150px] rounded-md border border-brand-border overflow-hidden">
+      <div className="px-3 py-1.5 text-white text-sm font-bold" style={{ background: color }}>{peso}</div>
+      <div className="px-3 py-2">
+        <div className="text-sm font-semibold text-brand-ink">{titulo}</div>
+        <div className="text-[11px] text-brand-slate leading-snug">{detalle}</div>
+      </div>
+    </div>
+  );
+}
+
+function Escala({ rango, estado, decision, color, texto = "#fff" }: { rango: string; estado: string; decision: string; color: string; texto?: string }) {
+  return (
+    <div className="flex items-stretch gap-2">
+      <div className="w-24 shrink-0 rounded-md flex items-center justify-center text-sm font-bold" style={{ background: color, color: texto }}>
+        {rango}
+      </div>
+      <div className="flex-1 rounded-md bg-brand-bg-soft border border-brand-border px-3 py-2">
+        <span className="text-sm font-semibold text-brand-ink">{estado}</span>
+        <span className="text-xs text-brand-slate"> — {decision}</span>
+      </div>
+    </div>
+  );
+}
+
+export default function ComoFuncionaScoringPage() {
+  return (
+    <AppShell>
+      <PrintHeader titulo="Cómo funciona el scoring de eficiencia" subtitulo="Eficiencia del Negocio · Televentas — explicado para la toma de decisiones" />
+      <div className="mb-2 text-xs text-brand-slate no-print">
+        <Link href="/televentas" className="hover:text-brand-primary">Televentas</Link>
+        <span className="mx-2">/</span>
+        <Link href="/televentas/eficiencia" className="hover:text-brand-primary">Eficiencia</Link>
+        <span className="mx-2">/</span>
+        <span className="text-brand-ink font-semibold">Cómo funciona</span>
+      </div>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Cómo funciona el scoring</h1>
+          <p className="text-sm text-brand-slate mt-1 max-w-2xl">
+            El sistema que convierte los datos del mes en decisiones de dotación: qué mide, cómo decide
+            y por qué hace más eficiente el negocio.
+          </p>
+        </div>
+        <PrintButton />
+      </div>
+
+      <div className="max-w-3xl">
+        <S n="1" title="La idea, en humano">
+          <p>
+            Sudameris paga este servicio <b>por hora</b>. Detrás de cada hora hay una persona con un teléfono —
+            y la pregunta justa no es "¿quién vende más?", sino <b>"¿qué produce cada hora que pagamos?"</b>.
+            El scoring responde eso comparando a cada operador <b>con la media real de su propio equipo</b>,
+            en el mismo mes, con las mismas bases y el mismo mercado. Nadie se mide contra una vara inventada:
+            se mide contra lo que sus compañeros demostraron que es posible.
+          </p>
+        </S>
+
+        <S n="2" title="El esquema: un solo número por persona">
+          <p>
+            Cada operador recibe un <b>índice de eficiencia</b>. 100 significa "rinde como la media del equipo".
+            El índice mezcla tres cosas, con pesos que reflejan lo que le importa al negocio:
+          </p>
+          <div className="flex flex-wrap gap-2 items-stretch">
+            <Caja peso="60%" titulo="Producción por día trabajado" detalle="Prima emitida ÷ días activos. Es lo que la hora pagada produce." color="#E6332A" />
+            <Caja peso="25%" titulo="Conversión" detalle="Pólizas por cada 100 contactos. La calidad de la gestión." color="#F39200" />
+            <Caja peso="15%" titulo="Ritmo de marcación" detalle="Llamadas por día. El esfuerzo, aunque el día no acompañe." color="#0EA5E9" />
+          </div>
+          <div className="bg-brand-bg-soft rounded-md p-4 text-[13px]">
+            <b>Ejemplo:</b> si la media del equipo produce Gs 2.000.000 por día y un operador produce Gs 1.000.000,
+            su componente de producción vale 50. Si además convierte y marca como el promedio, su índice queda
+            cerca de <b>70</b> — la zona de "a mejorar". El número no opina: describe.
+          </div>
+          <p className="text-xs text-brand-slate">
+            Detalle que importa: la media se calcula solo con operadores establecidos — los nuevos no la
+            distorsionan ni son distorsionados por ella.
+          </p>
+        </S>
+
+        <S n="3" title="Cómo se toma la decisión">
+          <p>Con el índice, la decisión es una escala clara. Para operadores con más de 60 días:</p>
+          <div className="space-y-2">
+            <Escala rango="100+" estado="Óptimo" decision="sostener y aprender de lo que hace bien." color="#10B981" />
+            <Escala rango="70–99" estado="A mejorar" decision="coaching puntual; está cerca de la media." color="#F39200" />
+            <Escala rango="45–69" estado="Crítico" decision="plan de recuperación inmediato, con revisión al mes siguiente." color="#E6332A" />
+            <Escala rango="< 45" estado="Se recomienda baja" decision="la producción no justifica la hora pagada. También si pasa dos meses seguidos debajo de 60." color="#0F1116" />
+          </div>
+          <p>Y para los <b>nuevos asesores</b>, una regla de justicia primero: <b>con menos de 15 días nadie se
+            clasifica</b> — no hay datos suficientes para juzgar a una persona. Entre 15 y 60 días se los mira
+            con su propia curva de aprendizaje:</p>
+          <div className="space-y-2">
+            <Escala rango="90+" estado="Nuevo sobresaliente" decision="ya rinde casi como el equipo: talento a retener." color="#00B2BF" />
+            <Escala rango="55–89" estado="Nuevo en desarrollo" decision="despegando con curva normal: acompañar." color="#0EA5E9" />
+            <Escala rango="< 55" estado="Nuevo crítico" decision="muy por debajo aun con la curva a favor: reforzar ya o decidir temprano, antes de que cueste más." color="#F39200" />
+          </div>
+          <p>
+            Cada clasificación se muestra <b>con los números que la sustentan</b> — quien recibe la noticia puede
+            ver exactamente por qué. La regla de los dos meses evita bajas por un mes malo aislado; el umbral
+            duro evita sostener improductividad con excusas.
+          </p>
+        </S>
+
+        <S n="4" title="Por qué esto hace más eficiente el negocio">
+          <ul className="list-disc pl-5 space-y-2">
+            <li><b>Cada guaraní pagado por hora rinde más:</b> la improductividad se detecta el mismo mes, no
+              cuando ya costó un trimestre.</li>
+            <li><b>Decisión inmediata, instantánea y online:</b> el análisis se genera con un click sobre los
+              datos publicados, en el momento — no hay que esperar un informe manual a fin de mes. Se decide
+              con el dato fresco y la decisión queda registrada.</li>
+            <li><b>Conversaciones honestas:</b> nadie discute percepciones — se conversa sobre un índice, sus
+              componentes y su evolución. Eso baja el conflicto y sube la mejora.</li>
+            <li><b>El talento se ve rápido:</b> un nuevo sobresaliente se identifica en semanas y se retiene;
+              un crítico recibe ayuda antes de fracasar solo.</li>
+            <li><b>Trazabilidad total:</b> cada análisis queda registrado con sus reglas, sus números y las
+              notas de lo decidido. Meses después se puede auditar por qué se tomó cada decisión.</li>
+          </ul>
+        </S>
+
+        <S n="5" title="Nuestro compromiso">
+          <p>
+            Medimos con reglas públicas, decidimos rápido y dejamos registro. Ser exigentes con los resultados
+            y justos con las personas no son cosas opuestas: son exactamente el mismo sistema. Eso es lo que
+            Sudameris compra cuando paga cada hora — y lo que este scoring garantiza, todos los meses.
+          </p>
+        </S>
+
+        <div className="no-print">
+          <Link href="/televentas/eficiencia" className="btn-primary inline-flex items-center gap-2">← Volver a Eficiencia del Negocio</Link>
+        </div>
+      </div>
+    </AppShell>
+  );
+}

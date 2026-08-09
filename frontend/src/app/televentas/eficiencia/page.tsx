@@ -103,7 +103,10 @@ export default function EficienciaPage() {
           <p className="text-sm text-brand-slate mt-1 max-w-3xl">
             Análisis mensual para decisiones de dotación: comportamiento vs el objetivo del mes y clasificación
             de cada operador contra la media del equipo. El servicio se paga por hora — la improductividad se
-            detecta y se resuelve rápido, con reglas públicas y auditables.
+            detecta y se resuelve rápido, con reglas públicas y auditables.{" "}
+            <Link href="/televentas/eficiencia/como-funciona" className="text-brand-primary font-semibold hover:underline no-print">
+              ¿Cómo funciona el scoring? →
+            </Link>
           </p>
         </div>
         <PrintButton label="Exportar informe PDF" />
