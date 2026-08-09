@@ -64,12 +64,12 @@ export default function ComoFuncionaScoringPage() {
       </div>
 
       <div className="max-w-3xl">
-        <S n="1" title="La idea, en humano">
+        <S n="1" title="El principio del modelo">
           <p>
             Sudameris paga este servicio <b>por hora</b>. Detrás de cada hora hay una persona con un teléfono —
-            y la pregunta justa no es "¿quién vende más?", sino <b>"¿qué produce cada hora que pagamos?"</b>.
+            y la pregunta correcta no es "¿quién vende más?", sino <b>"¿qué produce cada hora que pagamos?"</b>.
             El scoring responde eso comparando a cada operador <b>con la media real de su propio equipo</b>,
-            en el mismo mes, con las mismas bases y el mismo mercado. Nadie se mide contra una vara inventada:
+            en el mismo mes, con las mismas bases y el mismo mercado. Nadie se mide contra una vara arbitraria:
             se mide contra lo que sus compañeros demostraron que es posible.
           </p>
         </S>
