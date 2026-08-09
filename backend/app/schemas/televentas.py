@@ -190,3 +190,11 @@ class EficienciaRequest(BaseModel):
 
 class EficienciaNotaRequest(BaseModel):
     texto: str                            # nota/registro sobre un análisis generado
+
+
+class AlertaAccionRequest(BaseModel):
+    """Acción sobre una alerta de eficiencia. Toda acción exige comentario.
+    Flujo: activa → (mitigar) → en_mitigacion → (resolver) → mitigada;
+    (apagar) desde cualquier estado; (reactivar) desde mitigada/apagada."""
+    accion: str                           # mitigar | resolver | apagar | reactivar | comentar
+    comentario: str

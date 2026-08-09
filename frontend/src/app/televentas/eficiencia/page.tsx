@@ -6,6 +6,7 @@ import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, Respons
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover, PrintHeader } from "@/components/PrintButton";
+import { AlertasEficiencia } from "@/components/televentas/AlertasEficiencia";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
@@ -34,6 +35,7 @@ export default function EficienciaPage() {
   const [notas, setNotas] = useState<any[]>([]);
   const [nuevaNota, setNuevaNota] = useState("");
   const [verAlgoritmo, setVerAlgoritmo] = useState(false);
+  const [alertasKey, setAlertasKey] = useState(0);
 
   const user = getUser();
   const puedeGenerar = user && user.role !== "client";
@@ -57,6 +59,7 @@ export default function EficienciaPage() {
         method: "POST", body: JSON.stringify({ mes, objetivo_prima: Number(objetivo) }),
       });
       setRes(d); setAnalisisId(d.analisis_id); setNotas([]);
+      setAlertasKey((k) => k + 1); // refresca el panel de alertas (se generan con el análisis)
       cargarHistorial();
     } catch (e: any) { setError(e.message); } finally { setRunning(false); }
   };
@@ -153,6 +156,8 @@ export default function EficienciaPage() {
         </div>
         {error && <p className="text-sm text-brand-primary mt-2">{error}</p>}
       </section>
+
+      <AlertasEficiencia refreshKey={alertasKey} />
 
       {/* Explicación del algoritmo y compromiso — visible a demanda y SIEMPRE en el PDF */}
       {(verAlgoritmo || res) && (
