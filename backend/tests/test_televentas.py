@@ -306,6 +306,52 @@ def test_analizador_metodo_cientifico():
     assert "excede la capacidad demostrada" in irreal["conclusion"]
 
 
+def test_eficiencia_estados_operadores():
+    """Eficiencia del negocio: 4 estados de establecidos + estados de nuevos +
+    regla de 15 días (observación) + baja por crítico persistente."""
+    from app.services.analyzers.televentas_eficiencia import analizar_eficiencia
+
+    def lv(n, llam, cont, dias, primer):
+        return {"vendedor": n, "llamadas": llam, "contestadas": cont, "dias_activos": dias, "primer_dia": primer}
+
+    def pv(n, pol, prima):
+        return {"vendedor": n, "polizas": pol, "prima_emitida": prima}
+
+    ll = {"por_vendedor": [
+        lv("Ana Pérez", 1200, 640, 22, "2026-07-01"), lv("Beto Gómez", 1100, 580, 22, "2026-07-01"),
+        lv("Carla Ruiz", 1000, 520, 22, "2026-07-01"), lv("Diego Sosa", 500, 210, 20, "2026-07-01"),
+        lv("Elena Vera", 900, 500, 20, "2026-07-02"), lv("Fabio Rojas", 700, 300, 18, "2026-07-03"),
+        lv("Gema Núñez", 250, 120, 6, "2026-07-24"),
+    ]}
+    pr = {"kpis": {"prima_emitida": 231_500_000},
+          "por_dia": [{"fecha": f"2026-07-{d:02d}", "prima": 7_000_000} for d in range(1, 23)],
+          "por_vendedor": [
+              pv("PEREZ, ANA", 40, 80_000_000), pv("GOMEZ, BETO", 30, 60_000_000),
+              pv("RUIZ, CARLA", 18, 36_000_000), pv("SOSA, DIEGO", 3, 4_500_000),
+              pv("VERA, ELENA", 25, 48_000_000), pv("ROJAS, FABIO", 2, 3_000_000)]}
+    historia = {"Ana Pérez": "2025-11-01", "Beto Gómez": "2025-11-01", "Carla Ruiz": "2026-01-15",
+                "Diego Sosa": "2026-02-01", "Elena Vera": "2026-06-20", "Fabio Rojas": "2026-06-25",
+                "Gema Núñez": "2026-07-24"}
+
+    r = analizar_eficiencia(ll, pr, historia, "2026-07", 300_000_000)
+    est = {o["vendedor"]: o["estado"] for o in r["operadores"]}
+    assert est["Ana Pérez"] == "optimo"
+    assert est["Carla Ruiz"] == "a_mejorar"
+    assert est["Diego Sosa"] == "baja"                       # bajo el umbral → baja directa
+    assert est["Elena Vera"] == "nuevo_sobresaliente"        # nueva (42 días) rindiendo sobre la media
+    assert est["Fabio Rojas"] == "nuevo_critico"             # nuevo muy por debajo
+    assert r["en_observacion"][0]["vendedor"] == "Gema Núñez"  # < 15 días: no se clasifica
+    assert r["equipo"]["cumplimiento_pct"] == 77.2
+    assert r["serie_acumulada"][-1]["acumulado"] == 154_000_000
+    assert r["reglas"]["min_dias_analisis"] == 15
+
+    # crítico persistente: índice < 60 dos meses seguidos → baja
+    prev = {"Diego Sosa": 58.0}
+    r2 = analizar_eficiencia(ll, pr, historia, "2026-07", 300_000_000, indices_prev=prev)
+    diego = next(o for o in r2["operadores"] if o["vendedor"] == "Diego Sosa")
+    assert diego["estado"] == "baja"
+
+
 def test_semanal_agrupacion_y_analisis():
     """Semanas ISO desde series diarias: agregación (con CRM), evaluación inter-semanal
     (mejoras/desmejoras/llamativos) y análisis científico con advertencia si es parcial."""

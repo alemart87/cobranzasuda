@@ -180,3 +180,13 @@ class CompromisoUpdate(BaseModel):
     estado: Optional[str] = None          # pendiente | en_proceso | cumplido
     nota: Optional[str] = None
     descripcion: Optional[str] = None
+
+
+class EficienciaRequest(BaseModel):
+    """Eficiencia del Negocio: análisis mensual de operadores vs objetivo."""
+    mes: str                              # "YYYY-MM"
+    objetivo_prima: float                 # objetivo de prima EMITIDA del mes (Gs)
+
+
+class EficienciaNotaRequest(BaseModel):
+    texto: str                            # nota/registro sobre un análisis generado

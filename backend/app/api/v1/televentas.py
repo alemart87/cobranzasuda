@@ -22,6 +22,7 @@ from ...core.database import get_db
 from ...jobs.televentas_queue import signal_televentas_queue
 from ...models.televentas_analisis import TeleventasAnalisis
 from ...models.televentas_compromiso import TeleventasCompromiso
+from ...models.televentas_eficiencia import TeleventasEficiencia, TeleventasEficienciaNota
 from ...models.televentas_crm_report import TeleventasCrmReport
 from ...models.televentas_crm_upload import TeleventasCrmUpload
 from ...models.televentas_llamadas_report import TeleventasLlamadasReport
@@ -31,6 +32,7 @@ from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_upload import TeleventasProduccionUpload
 from ...schemas.televentas import (
     AnalizadorRequest, CompromisoCreate, CompromisoUpdate, SemanalAnalizadorRequest,
+    EficienciaRequest, EficienciaNotaRequest,
     PublishRequest,
     TeleventasCrmReportDetail, TeleventasCrmReportList, TeleventasCrmReportSummary,
     TeleventasCrmUploadList, TeleventasCrmUploadRead,
@@ -43,6 +45,7 @@ from ...services.analyzers import (
     combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
 )
 from ...services.analyzers.televentas_analizador import analizar_cientifico
+from ...services.analyzers.televentas_eficiencia import analizar_eficiencia, indices_del_mes
 from ...services.analyzers.televentas_llamadas import por_dia_llamadas
 from ...services.analyzers.televentas_semanal import agrupar_semanas, analizar_semana, evaluar_semana
 from ...services.analyzers.televentas_simulador import regresion_diaria
@@ -890,6 +893,158 @@ async def borrar_compromiso(
     await record_action(db, user_id=user.id, action="delete_televentas_compromiso",
                         resource_type="televentas_compromiso", resource_id=compromiso_id, ip=client_ip(request))
     return {"status": "deleted", "id": compromiso_id}
+
+
+# ============================ EFICIENCIA DEL NEGOCIO ============================
+async def _reportes_del_mes(db: AsyncSession, month: str):
+    start, end = _month_bounds(month)
+
+    async def _latest(Model):
+        return (await db.execute(
+            select(Model).where(Model.period_month >= start, Model.period_month < end,
+                                Model.is_published == True)  # noqa: E712
+            .order_by(Model.generated_at.desc()).limit(1)
+        )).scalars().first()
+
+    return await _latest(TeleventasLlamadasReport), await _latest(TeleventasProduccionReport)
+
+
+async def _historia_primer_dia(db: AsyncSession) -> dict[str, str]:
+    """Primer día HISTÓRICO de cada operador en las llamadas publicadas (antigüedad)."""
+    historia: dict[str, str] = {}
+    rows = (await db.execute(
+        select(TeleventasLlamadasReport).where(TeleventasLlamadasReport.is_published == True)  # noqa: E712
+    )).scalars().all()
+    for rep in rows:
+        for v in ((rep.data or {}).get("por_vendedor") or []):
+            nombre, primero = v.get("vendedor"), v.get("primer_dia")
+            if nombre and primero and (nombre not in historia or primero < historia[nombre]):
+                historia[nombre] = primero
+    return historia
+
+
+def _mes_anterior(mes: str) -> str:
+    y, m = int(mes[:4]), int(mes[5:7])
+    return f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
+
+
+@router.get("/eficiencia/meses")
+async def eficiencia_meses(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Meses con llamadas + producción publicadas (elegibles para el análisis)."""
+    meses: set[str] = set()
+    for (pm,) in (await db.execute(
+        select(TeleventasLlamadasReport.period_month)
+        .where(TeleventasLlamadasReport.period_month.isnot(None),
+               TeleventasLlamadasReport.is_published == True)  # noqa: E712
+    )).all():
+        if pm:
+            meses.add(pm.strftime("%Y-%m"))
+    return {"meses": sorted(meses, reverse=True)}
+
+
+@router.post("/eficiencia")
+async def eficiencia_run(
+    payload: EficienciaRequest, request: Request,
+    user: CurrentUser = Depends(require_analyst_or_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Genera el análisis de EFICIENCIA DEL NEGOCIO del mes (clasificación de
+    operadores vs la media + comportamiento vs objetivo) y lo deja registrado."""
+    mes = payload.mes.strip()[:7]
+    ll, pr = await _reportes_del_mes(db, mes)
+    if not ll:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"El mes {mes} no tiene reporte de llamadas publicado.")
+    historia = await _historia_primer_dia(db)
+
+    # Índices del mes anterior (regla de baja por crítico persistente).
+    indices_prev = None
+    ll_prev, pr_prev = await _reportes_del_mes(db, _mes_anterior(mes))
+    if ll_prev:
+        indices_prev = indices_del_mes(ll_prev.data or {}, (pr_prev.data if pr_prev else {}) or {},
+                                       historia, _mes_anterior(mes))
+
+    resultado = analizar_eficiencia((ll.data or {}), ((pr.data if pr else {}) or {}), historia,
+                                    mes, payload.objetivo_prima, indices_prev)
+    if not resultado.get("disponible"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, resultado.get("mensaje", "Análisis no disponible."))
+
+    reg = TeleventasEficiencia(mes=mes, objetivo_prima=float(payload.objetivo_prima),
+                               created_by=user.id, data=resultado)
+    db.add(reg)
+    await db.commit()
+    await record_action(db, user_id=user.id, action="run_televentas_eficiencia",
+                        resource_type="televentas_eficiencia", resource_id=reg.id,
+                        ip=client_ip(request), extra={"mes": mes, "objetivo": payload.objetivo_prima})
+    return {**resultado, "analisis_id": reg.id}
+
+
+def _eficiencia_resumen_out(a: TeleventasEficiencia, n_notas: int = 0) -> dict:
+    d = a.data or {}
+    return {"id": a.id, "mes": a.mes, "objetivo_prima": float(a.objetivo_prima or 0),
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+            "created_by": a.created_by,
+            "cumplimiento_pct": (d.get("equipo") or {}).get("cumplimiento_pct"),
+            "resumen": d.get("resumen"), "notas": n_notas}
+
+
+@router.get("/eficiencia/analisis")
+async def eficiencia_analisis_list(
+    limit: int = Query(24, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    rows = (await db.execute(
+        select(TeleventasEficiencia).order_by(TeleventasEficiencia.created_at.desc()).limit(limit)
+    )).scalars().all()
+    notas = (await db.execute(select(TeleventasEficienciaNota.analisis_id))).all()
+    conteo: dict[str, int] = {}
+    for (aid,) in notas:
+        conteo[aid] = conteo.get(aid, 0) + 1
+    return {"analisis": [_eficiencia_resumen_out(a, conteo.get(a.id, 0)) for a in rows]}
+
+
+@router.get("/eficiencia/analisis/{analisis_id}")
+async def eficiencia_analisis_get(
+    analisis_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    a = await db.get(TeleventasEficiencia, analisis_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Análisis no encontrado")
+    notas = (await db.execute(
+        select(TeleventasEficienciaNota).where(TeleventasEficienciaNota.analisis_id == analisis_id)
+        .order_by(TeleventasEficienciaNota.created_at.asc())
+    )).scalars().all()
+    return {**_eficiencia_resumen_out(a, len(notas)), "data": a.data,
+            "notas_detalle": [{"id": n.id, "texto": n.texto, "autor": n.created_by_nombre or n.created_by,
+                               "created_at": n.created_at.isoformat() if n.created_at else None} for n in notas]}
+
+
+@router.post("/eficiencia/analisis/{analisis_id}/notas", status_code=status.HTTP_201_CREATED)
+async def eficiencia_nota_add(
+    analisis_id: str, payload: EficienciaNotaRequest, request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Nota/registro sobre un análisis generado (queda con autor y fecha)."""
+    a = await db.get(TeleventasEficiencia, analisis_id)
+    if not a:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Análisis no encontrado")
+    if not payload.texto.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La nota necesita texto.")
+    n = TeleventasEficienciaNota(analisis_id=analisis_id, texto=payload.texto.strip(),
+                                 created_by=user.id, created_by_nombre=user.full_name)
+    db.add(n)
+    await db.commit()
+    await db.refresh(n)
+    await record_action(db, user_id=user.id, action="add_televentas_eficiencia_nota",
+                        resource_type="televentas_eficiencia", resource_id=analisis_id, ip=client_ip(request))
+    return {"id": n.id, "texto": n.texto, "autor": n.created_by_nombre or n.created_by,
+            "created_at": n.created_at.isoformat() if n.created_at else None}
 
 
 @router.get("/analizador/logs/{log_id}")
