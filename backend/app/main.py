@@ -192,11 +192,25 @@ async def lifespan(app: FastAPI):
     logger.info(f"Boot: re-queued {count} jobs")
 
     # Workers de cola (Postgres + disco, concurrencia limitada, parseo aislado).
+    # Supervisor: si un worker muere por CUALQUIER excepción, se loguea y se
+    # relanza solo (autorecuperación) — nunca queda la cola muerta en silencio.
     import asyncio
-    worker_task = asyncio.create_task(atencion_worker())
-    facturacion_task = asyncio.create_task(facturacion_worker())
-    televentas_task = asyncio.create_task(televentas_worker())
-    logger.info("Boot: atencion + facturacion + televentas queue workers started")
+
+    async def _supervisar(nombre, factory):
+        while True:
+            try:
+                await factory()
+                logger.error(f"[supervisor] worker {nombre} terminó inesperadamente; relanzando en 10s")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.exception(f"[supervisor] worker {nombre} murió ({exc}); relanzando en 10s")
+            await asyncio.sleep(10)
+
+    worker_task = asyncio.create_task(_supervisar("atencion", atencion_worker))
+    facturacion_task = asyncio.create_task(_supervisar("facturacion", facturacion_worker))
+    televentas_task = asyncio.create_task(_supervisar("televentas", televentas_worker))
+    logger.info("Boot: atencion + facturacion + televentas queue workers started (supervisados)")
 
     yield
 

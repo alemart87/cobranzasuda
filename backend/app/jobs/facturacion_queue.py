@@ -89,20 +89,30 @@ async def _run(upload_id: str) -> None:
 async def facturacion_worker() -> None:
     concurrency = _concurrency()
     logger.info(f"[facturacion-queue] worker iniciado (concurrencia={concurrency})")
-    await _reset_stale_processing()
+    try:
+        await _reset_stale_processing()
+    except Exception as exc:
+        logger.exception(f"[facturacion-queue] fail-safe de boot falló (sigo igual): {exc}")
 
     running: set[asyncio.Task] = set()
     while True:
-        while len(running) < concurrency:
-            uid = await _claim_next()
-            if uid is None:
-                break
-            task = asyncio.create_task(_run(uid))
-            running.add(task)
-            task.add_done_callback(running.discard)
-
-        _wakeup.clear()
         try:
-            await asyncio.wait_for(_wakeup.wait(), timeout=_POLL_SECONDS)
-        except asyncio.TimeoutError:
-            pass
+            while len(running) < concurrency:
+                uid = await _claim_next()
+                if uid is None:
+                    break
+                task = asyncio.create_task(_run(uid))
+                running.add(task)
+                task.add_done_callback(running.discard)
+
+            _wakeup.clear()
+            try:
+                await asyncio.wait_for(_wakeup.wait(), timeout=_POLL_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # NUNCA morir en silencio: un corte transitorio se loguea y se reintenta.
+            logger.exception(f"[facturacion-queue] error transitorio en el loop (reintento en 5s): {exc}")
+            await asyncio.sleep(5)

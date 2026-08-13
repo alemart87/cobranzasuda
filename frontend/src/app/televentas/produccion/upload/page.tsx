@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
+import { EstadoCola } from "@/components/televentas/EstadoCola";
 import { apiFetch, getToken } from "@/lib/api";
 
 export default function TeleventasProduccionUploadPage() {
@@ -115,6 +116,7 @@ export default function TeleventasProduccionUploadPage() {
           {submitting ? "Subiendo…" : "Procesar archivo"}
         </button>
       </form>
+      <EstadoCola />
     </AppShell>
   );
 }
