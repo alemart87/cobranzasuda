@@ -123,22 +123,32 @@ async def _run(kind: str, upload_id: str) -> None:
 async def atencion_worker() -> None:
     concurrency = _concurrency()
     logger.info(f"[atencion-queue] worker iniciado (concurrencia={concurrency})")
-    await _reset_stale_processing()
+    try:
+        await _reset_stale_processing()
+    except Exception as exc:
+        logger.exception(f"[atencion-queue] fail-safe de boot falló (sigo igual): {exc}")
 
     running: set[asyncio.Task] = set()
     while True:
-        # Llenar slots libres reclamando pendientes.
-        while len(running) < concurrency:
-            job = await _claim_next()
-            if job is None:
-                break
-            task = asyncio.create_task(_run(*job))
-            running.add(task)
-            task.add_done_callback(running.discard)
-
-        # Esperar wakeup (upload nuevo / slot liberado) o el poll de seguridad.
-        _wakeup.clear()
         try:
-            await asyncio.wait_for(_wakeup.wait(), timeout=_POLL_SECONDS)
-        except asyncio.TimeoutError:
-            pass
+            # Llenar slots libres reclamando pendientes.
+            while len(running) < concurrency:
+                job = await _claim_next()
+                if job is None:
+                    break
+                task = asyncio.create_task(_run(*job))
+                running.add(task)
+                task.add_done_callback(running.discard)
+
+            # Esperar wakeup (upload nuevo / slot liberado) o el poll de seguridad.
+            _wakeup.clear()
+            try:
+                await asyncio.wait_for(_wakeup.wait(), timeout=_POLL_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # NUNCA morir en silencio: un corte transitorio se loguea y se reintenta.
+            logger.exception(f"[atencion-queue] error transitorio en el loop (reintento en 5s): {exc}")
+            await asyncio.sleep(5)

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import settings
 from ...core.database import get_db
-from ...jobs.televentas_queue import signal_televentas_queue
+from ...jobs.televentas_queue import estado_cola, signal_televentas_queue
 from ...models.televentas_analisis import TeleventasAnalisis
 from ...models.televentas_compromiso import TeleventasCompromiso
 from ...models.televentas_alerta import TeleventasAlerta
@@ -56,6 +56,13 @@ from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_
 
 
 router = APIRouter(prefix="/televentas", tags=["televentas"])
+
+
+@router.get("/cola")
+async def televentas_estado_cola(user: CurrentUser = Depends(get_current_user)) -> dict:
+    """Visibilidad de la cola de procesamiento: salud del worker (heartbeat),
+    pendientes/procesando/fallidos por tipo y detalle de lo que corre ahora."""
+    return await estado_cola()
 
 
 def _parse_period(period_month: Optional[str]):
