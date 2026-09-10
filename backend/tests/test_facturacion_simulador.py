@@ -105,3 +105,13 @@ def test_sin_bonos_con_escalon_siguiente_no_rompe():
     # y con bonos activos el mismo escenario sí informa el escalón
     con = simular_facturacion({"ventas": 1700, "objetivo_co": 1700, "pct_estado_a": 100})
     assert con["derivados"]["monto_bono_productividad"] == 95000
+
+
+def test_remuneracion_promedio_del_vendedor():
+    r = simular_facturacion({"ventas": 1900, "objetivo_co": 1750})
+    c = r["costos"]; v = c["vendedor"]
+    assert v["salario_fijo"] == c["salario_operador_mes"]
+    assert v["comision_promedio"] == round(c["rrhh"]["operadores_comisiones"] / 95)
+    assert v["comision_por_venta"] == round(c["rrhh"]["operadores_comisiones"] / 1900)
+    assert v["ingreso_promedio"] == round(c["salario_operador_mes"] + c["rrhh"]["operadores_comisiones"] / 95)
+    assert v["ventas_promedio"] == 20.0

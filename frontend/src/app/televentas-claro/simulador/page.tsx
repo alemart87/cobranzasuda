@@ -406,6 +406,33 @@ export default function SimuladorFacturacionPage() {
                         </div>
                       ))}
                     </div>
+                    {res.costos.vendedor && (
+                      <div className="mt-4 rounded-md border border-brand-border bg-brand-bg-soft p-4">
+                        <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Remuneración promedio del vendedor</div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          <div>
+                            <div className="text-[10px] text-brand-slate">Salario fijo (mes)</div>
+                            <div className="font-display text-xl text-brand-ink">{formatGs(res.costos.vendedor.salario_fijo)}</div>
+                            <div className="text-[10px] text-brand-slate">{formatGs(p.costos.salario_hora)} × {p.costos.horas_dia} h × {p.costos.dias_mes} días</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-brand-slate">Comisión promedio (mes)</div>
+                            <div className="font-display text-xl text-brand-primary">{formatGs(res.costos.vendedor.comision_promedio)}</div>
+                            <div className="text-[10px] text-brand-slate">{p.costos.comision_vendedores_pct}% sobre {formatGs(res.costos.vendedor.base_comision)} ÷ {res.costos.headcount.vendedores} vendedores</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-brand-slate">Comisión por venta promedio</div>
+                            <div className="font-display text-xl text-brand-ink">{formatGs(res.costos.vendedor.comision_por_venta)}</div>
+                            <div className="text-[10px] text-brand-slate">{p.costos.comision_vendedores_pct}% de {formatGs(res.costos.vendedor.base_por_venta)} facturados por venta</div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] text-brand-slate">Ingreso total promedio (mes)</div>
+                            <div className="font-display text-xl text-brand-ink">{formatGs(res.costos.vendedor.ingreso_promedio)}</div>
+                            <div className="text-[10px] text-brand-slate">fijo + comisión · {res.costos.vendedor.pct_comision_sobre_ingreso}% variable · {res.costos.vendedor.ventas_promedio} ventas/vendedor</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <p className="text-[11px] text-brand-slate mt-3">
                       Costo total de la estructura {formatGs(res.costos.total)} / mes · {formatGs(res.costos.costo_por_venta)} por venta ·
                       {" "}{formatGs(Math.round(res.costos.total / Math.max(res.costos.headcount.total, 1)))} por persona · operador {formatGs(res.costos.salario_operador_mes)}/mes
