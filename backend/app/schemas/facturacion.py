@@ -62,6 +62,11 @@ class CompareRequest(BaseModel):
     report_ids: List[str] = Field(min_length=2, max_length=24)
 
 
+class SimuladorRequest(BaseModel):
+    """Simulador de facturación: cualquier variable de negocio puede sobreescribirse."""
+    parametros: dict[str, Any] = Field(default_factory=dict)
+
+
 class CompareResponse(BaseModel):
     columnas: list[dict[str, Any]]
     conceptos: list[dict[str, Any]]
