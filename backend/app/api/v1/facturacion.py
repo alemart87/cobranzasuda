@@ -23,10 +23,10 @@ from ...models.facturacion_upload import FacturacionUpload
 from ...schemas.facturacion import (
     CompareRequest, CompareResponse, FacturacionReportDetail, FacturacionReportList,
     FacturacionReportSummary, FacturacionUploadList, FacturacionUploadRead, PublishRequest,
-    SimuladorRequest,
+    SimuladorAnualRequest, SimuladorRequest,
 )
 from ...services.analyzers.facturacion_compare import compare_facturacion
-from ...services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, simular_facturacion
+from ...services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, simular_anual, simular_facturacion
 from ...services.audit_service import record_action
 from ..deps import (
     CurrentUser, client_ip, require_facturacion_access, require_facturacion_manage,
@@ -211,6 +211,18 @@ async def simulador_run(payload: SimuladorRequest,
     (zafra) y el peso de los bonos sobre la facturación neta."""
     try:
         return simular_facturacion(payload.parametros)
+    except (TypeError, ValueError, KeyError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
+
+
+@router.post("/simulador/anual")
+async def simulador_anual_run(payload: SimuladorAnualRequest,
+                              user: CurrentUser = Depends(require_facturacion_access)) -> dict:
+    """Simulación ANUAL (independiente): el mes 1 fija estructura y objetivo; los
+    meses 2..12 solo cambian las ventas. Balance mensual con los ajustes de todas
+    las cohortes, EERR anual y cola pendiente después del mes 12."""
+    try:
+        return simular_anual(payload.parametros, payload.ventas_por_mes)
     except (TypeError, ValueError, KeyError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 

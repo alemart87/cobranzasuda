@@ -251,7 +251,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <div className={mobileGroupLabel}>Televentas Claro · Facturación</div>
                   <Link href="/televentas-claro" className={mobilePill(pathname === "/televentas-claro")}>Inicio</Link>
                   <Link href="/televentas-claro/compare" className={mobilePill(isActive("/televentas-claro/compare"))}>Comparar</Link>
-                  <Link href="/televentas-claro/simulador" className={mobilePill(isActive("/televentas-claro/simulador"))}>Simulador</Link>
+                  <Link href="/televentas-claro/simulador" className={mobilePill(pathname === "/televentas-claro/simulador")}>Simulador</Link>
+                  <Link href="/televentas-claro/simulador-anual" className={mobilePill(isActive("/televentas-claro/simulador-anual"))}>Simulador anual</Link>
                   <Link href="/televentas-claro/agente" className={mobilePill(isActive("/televentas-claro/agente"))}>Agente IA</Link>
                   {canManageFacturacion && (
                     <Link href="/televentas-claro/upload" className={mobilePill(isActive("/televentas-claro/upload"))}>Subir liquidación</Link>
@@ -562,8 +563,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link href="/televentas-claro/compare" className={pill(isActive("/televentas-claro/compare"))}>
                 Comparar
               </Link>
-              <Link href="/televentas-claro/simulador" className={pill(isActive("/televentas-claro/simulador"))}>
+              <Link href="/televentas-claro/simulador" className={pill(pathname === "/televentas-claro/simulador")}>
                 Simulador
+              </Link>
+              <Link href="/televentas-claro/simulador-anual" className={pill(isActive("/televentas-claro/simulador-anual"))}>
+                Simulador anual
               </Link>
               <Link href="/televentas-claro/agente" className={`${pill(inFacturacionAgent)} inline-flex items-center gap-1.5 ring-1 ring-[#a06cc4]/40`}>
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
