@@ -93,3 +93,15 @@ def test_simulacion_sin_bonos():
     assert sin["meses"][6]["recalculo_productividad"] == 0  # sin bono no hay recálculo
     assert "SIN BONOS" in sin["conclusion"] and "ALERTA" not in sin["conclusion"]
     assert sin["margen"]["meses6"] < con["margen"]["meses6"]
+
+
+def test_sin_bonos_con_escalon_siguiente_no_rompe():
+    # Escenario real del usuario: 1.700 ventas, objetivo 1.700, 100% en estado A, bonos desactivados
+    # → cumplimiento 100% tiene un escalón siguiente (105%) pero no hay escalón activo: no debe fallar.
+    r = simular_facturacion({"ventas": 1700, "objetivo_co": 1700, "pct_estado_a": 100, "bonos_activos": False})
+    assert r["derivados"]["monto_bono_productividad"] == 0
+    assert "SIN BONOS" in r["conclusion"]
+    assert not any("escalón" in x["titulo"] for x in r["recomendaciones"])
+    # y con bonos activos el mismo escenario sí informa el escalón
+    con = simular_facturacion({"ventas": 1700, "objetivo_co": 1700, "pct_estado_a": 100})
+    assert con["derivados"]["monto_bono_productividad"] == 95000
