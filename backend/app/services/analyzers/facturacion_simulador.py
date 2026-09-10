@@ -375,6 +375,18 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
         "costo_por_venta": round(total / act) if act else 0,
         "facturacion_por_venta": round(bruto_mes0 / act) if act else 0,
         "neto_6_por_venta": round(neto_6 / act) if act else 0,
+        # Remuneración del vendedor: qué se paga en comisión, en promedio, por vendedor y por venta.
+        "vendedor": {
+            "salario_fijo": round(salario_operador),
+            "comision_promedio": round(rrhh["operadores_comisiones"] / vendedores) if vendedores else 0,
+            "comision_por_venta": round(rrhh["operadores_comisiones"] / act) if act else 0,
+            "ingreso_promedio": round(salario_operador + (rrhh["operadores_comisiones"] / vendedores if vendedores else 0)),
+            "ventas_promedio": round(act / vendedores, 1) if vendedores else 0,
+            "base_comision": round(base_comision), "base_por_venta": round(base_comision / act) if act else 0,
+            "pct_comision_sobre_ingreso": round(
+                (rrhh["operadores_comisiones"] / vendedores) / (salario_operador + rrhh["operadores_comisiones"] / vendedores) * 100, 1
+            ) if vendedores and (salario_operador + rrhh["operadores_comisiones"] / vendedores) else 0.0,
+        },
     }
     margen = {
         "mes0": round(bruto_mes0 - total), "pct_mes0": round((bruto_mes0 - total) / bruto_mes0 * 100, 1) if bruto_mes0 else 0.0,
