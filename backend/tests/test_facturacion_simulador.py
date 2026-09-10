@@ -54,3 +54,32 @@ def test_variables_editables_cambian_el_resultado():
     # el mix de planes cambia la cuota 1 ponderada
     solo30 = simular_facturacion({"planes": [{**PARAMETROS_DEFAULT["planes"][1], "mix_pct": 100}]})
     assert solo30["derivados"]["cuota1_ponderada"] == 245455
+
+
+def test_costos_estructura_y_margen():
+    """Costos: ventas por vendedor genera la dotación; supervisores, backoffice, IPS,
+    aguinaldo, logística y operativos; margen contra mes 0 y contra lo que queda a 6 meses."""
+    r = simular_facturacion({"ventas": 1900, "objetivo_co": 1750})
+    c, m = r["costos"], r["margen"]
+    assert c["headcount"] == {"vendedores": 95, "supervisores": 7, "backoffice": 11,
+                              "coordinadores": 1, "controllers": 2, "total": 116}
+    assert c["salario_operador_mes"] == round(14635 * 7 * 23)
+    assert c["rrhh"]["operadores_salario"] == round(95 * 14635 * 7 * 23)
+    assert c["rrhh"]["operadores_comisiones"] == round(r["bruto_mes0"] * 0.25)
+    assert c["rrhh"]["supervisores"] == 7 * (4180000 + 1500000)
+    assert c["rrhh"]["controllers"] == 2 * (3600000 + 750000)
+    assert c["ips"] == round(c["rrhh_base"] * 0.165)
+    assert c["aguinaldo"] == round((c["rrhh_base"] + c["rrhh_base"] * 0.165) / 12)
+    assert c["logistica_entregas"] == round(1900 * (0.6 * 80000 + 0.4 * 55000))
+    assert c["operativos"] == 1900 * 12500
+    assert c["total"] == c["rrhh_base"] + c["ips"] + c["aguinaldo"] + c["logistica_entregas"] + c["logistica_premios"] + c["operativos"]
+    assert m["mes0"] == r["bruto_mes0"] - c["total"]
+    assert m["meses6"] == r["neto_6"] - c["total"]
+    # con la estructura por defecto el negocio no cierra a 6 meses → alerta y sin punto de equilibrio
+    assert m["meses6"] < 0 and m.get("breakeven_ventas_6") is None
+    assert r["recomendaciones"][0]["severidad"] == "alert"
+    # variables editables: más ventas por vendedor y comisión sin bonos mejoran el margen
+    mejor = simular_facturacion({"ventas": 1900, "objetivo_co": 1750,
+                                 "costos": {"ventas_por_vendedor": 30, "comision_incluye_bonos": False}})
+    assert mejor["costos"]["headcount"]["vendedores"] == 64
+    assert mejor["margen"]["meses6"] > m["meses6"]

@@ -78,6 +78,7 @@ export default function SimuladorFacturacionPage() {
   const set = (k: string, v: any) => setP((prev: any) => ({ ...prev, [k]: v }));
   const setPlan = (i: number, k: string, v: any) => setP((prev: any) => ({ ...prev, planes: prev.planes.map((pl: any, j: number) => (j === i ? { ...pl, [k]: v } : pl)) }));
   const setEscala = (key: string, i: number, k: string, v: number) => setP((prev: any) => ({ ...prev, [key]: prev[key].map((e: any, j: number) => (j === i ? { ...e, [k]: v } : e)) }));
+  const setC = (k: string, v: any) => setP((prev: any) => ({ ...prev, costos: { ...prev.costos, [k]: v } }));
   const setZafra = (i: number, v: number) => setP((prev: any) => ({ ...prev, zafra_pct: prev.zafra_pct.map((z: number, j: number) => (j === i ? v : z)) }));
 
   const d = res?.derivados;
@@ -89,7 +90,7 @@ export default function SimuladorFacturacionPage() {
   return (
     <AppShell>
       <PrintCover titulo={`Simulación de Facturación${res ? ` — ${formatInt(p.ventas)} ventas` : ""}`}
-        periodo={res ? `Facturación del mes ${formatGs(res.bruto_mes0)} · queda a 6 meses ${formatGs(res.neto_6)} (${res.pct_retenido_6}%) · Televentas Claro` : undefined} />
+        periodo={res ? `Facturación del mes ${formatGs(res.bruto_mes0)} · queda a 6 meses ${formatGs(res.neto_6)} (${res.pct_retenido_6}%) · margen a 6 meses ${formatGs(res.margen?.meses6 ?? 0)} · Televentas Claro` : undefined} />
 
       <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/televentas-claro" className="hover:text-brand-primary">Televentas Claro</Link>
@@ -100,7 +101,7 @@ export default function SimuladorFacturacionPage() {
           <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Simulador de Facturación</h1>
           <p className="text-sm text-brand-slate mt-1 max-w-3xl">
             Cargá la cantidad de ventas efectivas del mes y el simulador genera la facturación del mes, cuánto queda realmente
-            a los 6 meses (chargeback) y a los 12 (residual), y el peso de los bonos sobre la facturación neta.
+            a los 6 meses (chargeback) y a los 12 (residual), el peso de los bonos y el margen contra el costo de la estructura.
             Todas las variables de negocio y componentes de facturación son editables.
           </p>
         </div>
@@ -203,6 +204,42 @@ export default function SimuladorFacturacionPage() {
                 La suspensión penalizable descuenta cuota 1 + un residual (214.431)
               </label>
             </Grupo>
+
+            <Grupo titulo="Costos de la estructura" hint="indicador principal: ventas por vendedor" abierto>
+              <Campo label="Ventas por vendedor" hint="define la dotación (1.900 ventas ÷ 20 = 95 vendedores)" value={p.costos.ventas_por_vendedor} onChange={(v) => setC("ventas_por_vendedor", v)} />
+              <Campo label="Vendedores por supervisor" hint="1 supervisor cada N vendedores" value={p.costos.supervisor_cada_vendedores} onChange={(v) => setC("supervisor_cada_vendedores", v)} />
+              <Campo label="Ventas por backoffice" hint="1 backoffice cada N ventas" value={p.costos.backoffice_cada_ventas} onChange={(v) => setC("backoffice_cada_ventas", v)} step={10} />
+              <Campo label="Coordinadores" value={p.costos.coordinadores} onChange={(v) => setC("coordinadores", v)} />
+              <Campo label="Controllers" value={p.costos.controllers} onChange={(v) => setC("controllers", v)} />
+              <div className="border-t border-brand-border pt-2 text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Operador (por hora)</div>
+              <Campo label="Salario por hora" value={p.costos.salario_hora} onChange={(v) => setC("salario_hora", v)} step={100} />
+              <Campo label="Horas por día" value={p.costos.horas_dia} onChange={(v) => setC("horas_dia", v)} step={0.5} />
+              <Campo label="Días por mes" value={p.costos.dias_mes} onChange={(v) => setC("dias_mes", v)} />
+              <Campo label="Comisión de vendedores" hint="% sobre las comisiones facturadas" value={p.costos.comision_vendedores_pct} onChange={(v) => setC("comision_vendedores_pct", v)} step={1} suffix="%" />
+              <label className="flex items-center gap-2 text-sm text-brand-ink">
+                <input type="checkbox" checked={!!p.costos.comision_incluye_bonos} onChange={(e) => setC("comision_incluye_bonos", e.target.checked)} className="accent-brand-primary" />
+                La base de la comisión incluye los bonos
+              </label>
+              <div className="border-t border-brand-border pt-2 text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Salarios mensuales</div>
+              <Campo label="Supervisor" hint="salario" value={p.costos.supervisor_salario} onChange={(v) => setC("supervisor_salario", v)} step={10000} />
+              <Campo label="Supervisor — premio" value={p.costos.supervisor_premio} onChange={(v) => setC("supervisor_premio", v)} step={10000} />
+              <Campo label="Coordinador" hint="salario" value={p.costos.coordinador_salario} onChange={(v) => setC("coordinador_salario", v)} step={10000} />
+              <Campo label="Coordinador — premio" value={p.costos.coordinador_premio} onChange={(v) => setC("coordinador_premio", v)} step={10000} />
+              <Campo label="Backoffice" value={p.costos.backoffice_salario} onChange={(v) => setC("backoffice_salario", v)} step={10000} />
+              <Campo label="Controller" hint="salario" value={p.costos.controller_salario} onChange={(v) => setC("controller_salario", v)} step={10000} />
+              <Campo label="Controller — premio" value={p.costos.controller_premio} onChange={(v) => setC("controller_premio", v)} step={10000} />
+              <Campo label="IPS" hint="sobre todos los costos de RRHH" value={p.costos.ips_pct} onChange={(v) => setC("ips_pct", v)} step={0.5} suffix="%" />
+              <label className="flex items-center gap-2 text-sm text-brand-ink">
+                <input type="checkbox" checked={!!p.costos.aguinaldo} onChange={(e) => setC("aguinaldo", e.target.checked)} className="accent-brand-primary" />
+                Previsión de aguinaldo: (RRHH + IPS) ÷ 12
+              </label>
+              <div className="border-t border-brand-border pt-2 text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Logística y operativos</div>
+              <Campo label="Entrega en Central" hint="Gs por venta" value={p.costos.logistica_central} onChange={(v) => setC("logistica_central", v)} step={1000} />
+              <Campo label="Entrega en Interior" hint="Gs por venta" value={p.costos.logistica_interior} onChange={(v) => setC("logistica_interior", v)} step={1000} />
+              <Campo label="Entregas en Interior" hint="el resto es Central" value={p.costos.logistica_interior_pct} onChange={(v) => setC("logistica_interior_pct", v)} step={5} suffix="%" />
+              <Campo label="Premios a logística" hint="fijo mensual" value={p.costos.logistica_premios} onChange={(v) => setC("logistica_premios", v)} step={1000000} />
+              <Campo label="Costo operativo por venta" value={p.costos.operativo_por_venta} onChange={(v) => setC("operativo_por_venta", v)} step={500} />
+            </Grupo>
           </section>
 
           {/* ===== Resultados ===== */}
@@ -230,6 +267,14 @@ export default function SimuladorFacturacionPage() {
                   <KpiCard label="Queda a 12 meses" value={formatGs(res.neto_12)} hint={`${res.pct_retenido_12}% con residual completo`} accent="cyan" />
                   <KpiCard label="Peso de los bonos" value={`${b.peso_mes0_pct}%`} hint={`del mes · ${b.peso_neto_6_pct}% del neto a 6 meses`} accent="purple" />
                 </div>
+                {res.costos && res.margen && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <KpiCard label="Costo de la estructura" value={formatGs(res.costos.total)} hint={`${res.costos.headcount.total} personas · ${formatGs(res.costos.costo_por_venta)} por venta`} accent="neutral" />
+                    <KpiCard label="Margen del mes" value={formatGs(res.margen.mes0)} hint={`${res.margen.pct_mes0}% de lo facturado`} accent={res.margen.mes0 >= 0 ? "cyan" : "primary"} />
+                    <KpiCard label="Margen a 6 meses" value={formatGs(res.margen.meses6)} hint={`${res.margen.pct_6}% de lo que queda · la cifra que decide`} accent={res.margen.meses6 >= 0 ? "cyan" : "primary"} />
+                    <KpiCard label="Punto de equilibrio (6 m)" value={res.margen.breakeven_ventas_6 ? `${formatInt(res.margen.breakeven_ventas_6)} ventas` : "no cierra"} hint={res.margen.breakeven_ventas_6 ? "ventas para margen cero a 6 meses" : "con esta estructura no hay volumen que lo cierre"} accent={res.margen.breakeven_ventas_6 ? "orange" : "primary"} />
+                  </div>
+                )}
 
                 <div className="grid xl:grid-cols-2 gap-6 print:block">
                   <section className="card p-5 print:mb-5">
@@ -318,6 +363,81 @@ export default function SimuladorFacturacionPage() {
                   </table>
                 </section>
 
+                {/* Margen del negocio */}
+                {res.costos && res.margen && (
+                  <section className="card p-5">
+                    <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Margen del negocio: facturación vs costos</h2>
+                    <p className="text-xs text-brand-slate mb-3">
+                      La estructura de un mes produce la cohorte: su costo se compara con lo facturado (mes 0) y con lo que realmente queda a 6 y 12 meses.
+                    </p>
+                    <div className="grid xl:grid-cols-2 gap-5 print:block">
+                      <div>
+                        <ResponsiveContainer width="100%" height={220}>
+                          <BarChart data={[
+                            { etapa: "Mes 0", facturacion: res.bruto_mes0, costos: res.costos.total, margen: res.margen.mes0 },
+                            { etapa: "A 6 meses", facturacion: res.neto_6, costos: res.costos.total, margen: res.margen.meses6 },
+                            { etapa: "A 12 meses", facturacion: res.neto_12, costos: res.costos.total, margen: res.margen.meses12 },
+                          ]} margin={{ top: 8, right: 12 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="etapa" fontSize={11} />
+                            <YAxis fontSize={10} tickFormatter={M} />
+                            <Tooltip formatter={(v: any) => formatGs(Number(v))} />
+                            <Legend wrapperStyle={{ fontSize: 11 }} />
+                            <ReferenceLine y={0} stroke="#0F1116" />
+                            <Bar dataKey="facturacion" name="Facturación que queda" fill="#0EA5E9" radius={[3, 3, 0, 0]} />
+                            <Bar dataKey="costos" name="Costo de la estructura" fill="#F39200" radius={[3, 3, 0, 0]} />
+                            <Bar dataKey="margen" name="Margen" radius={[3, 3, 0, 0]}>
+                              {[res.margen.mes0, res.margen.meses6, res.margen.meses12].map((v: number, i: number) => <Cell key={i} fill={v >= 0 ? "#10B981" : "#E6332A"} />)}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                        <Lectura>
+                          Tres cortes de la misma cohorte: lo facturado en el mes, lo que queda tras el chargeback (6 meses) y con el
+                          residual completo (12). La barra naranja es el costo de la estructura que produjo esas ventas; la verde/roja,
+                          el margen. El corte que decide el negocio es el de 6 meses: ahí ya no hay devoluciones pendientes.
+                        </Lectura>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-brand-bg text-[10px] uppercase tracking-wider2 text-brand-slate">
+                            <tr><th className="px-2 py-1.5 text-left">Costo mensual</th><th className="px-2 py-1.5 text-right">Cantidad</th><th className="px-2 py-1.5 text-right">Gs</th></tr>
+                          </thead>
+                          <tbody>
+                            {([
+                              ["Operadores — salario por hora", `${res.costos.headcount.vendedores} × ${formatGs(res.costos.salario_operador_mes)}`, res.costos.rrhh.operadores_salario],
+                              ["Operadores — comisiones", `${p.costos.comision_vendedores_pct}%`, res.costos.rrhh.operadores_comisiones],
+                              ["Supervisores", `${res.costos.headcount.supervisores}`, res.costos.rrhh.supervisores],
+                              ["Coordinadores", `${res.costos.headcount.coordinadores}`, res.costos.rrhh.coordinadores],
+                              ["Backoffice", `${res.costos.headcount.backoffice}`, res.costos.rrhh.backoffice],
+                              ["Controllers", `${res.costos.headcount.controllers}`, res.costos.rrhh.controllers],
+                              [`IPS ${p.costos.ips_pct}%`, "", res.costos.ips],
+                              ["Previsión de aguinaldo", "÷ 12", res.costos.aguinaldo],
+                              ["Logística — entregas", `${formatInt(d.activaciones)} ventas`, res.costos.logistica_entregas],
+                              ["Logística — premios", "fijo", res.costos.logistica_premios],
+                              ["Costos operativos", `${formatGs(p.costos.operativo_por_venta)} × venta`, res.costos.operativos],
+                            ] as Array<[string, string, number]>).map(([k, q, v]) => (
+                              <tr key={k} className="border-t border-brand-border">
+                                <td className="px-2 py-1 text-brand-ink">{k}</td>
+                                <td className="px-2 py-1 text-right text-brand-slate">{q}</td>
+                                <td className="px-2 py-1 text-right font-mono">{formatGs(v)}</td>
+                              </tr>
+                            ))}
+                            <tr className="border-t-2 border-brand-ink bg-brand-bg-soft font-bold">
+                              <td className="px-2 py-1.5 text-brand-ink">Total estructura</td>
+                              <td className="px-2 py-1.5 text-right text-brand-slate">{res.costos.headcount.total} personas</td>
+                              <td className="px-2 py-1.5 text-right font-mono">{formatGs(res.costos.total)}</td>
+                            </tr>
+                            <tr className="border-t border-brand-border">
+                              <td className="px-2 py-1 text-brand-ink" colSpan={2}>Por venta: costo / facturado / queda a 6 meses</td>
+                              <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{formatGs(res.costos.costo_por_venta)} / {formatGs(res.costos.facturacion_por_venta)} / {formatGs(res.costos.neto_6_por_venta)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </section>
+                )}
+
                 {/* Peso de los bonos */}
                 <section className="card p-5">
                   <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Peso de los bonos sobre la facturación neta</h2>
@@ -395,6 +515,7 @@ export default function SimuladorFacturacionPage() {
                     <p><b>Bono efectividad (1891)</b>: por venta entregada (activación cuota 1) según la efectividad de entregas; escala por tramos (bajo el mínimo, 0). Se descuenta en las líneas penalizadas.</p>
                     <p><b>Cuota 2</b>: al mes +3, líneas activas al día 90 (zafra M3); legajo incompleto cobra el 50%; legajo no presentado descuenta la cuota 1.</p>
                     <p><b>Residual</b>: {p.residual_pct}% del abono acreditado ({p.pct_abono_acreditado}% del abono del plan) por línea activa, durante {p.residual_meses} liquidaciones.</p>
+                    <p><b>Costos</b>: vendedores = ventas ÷ ventas por vendedor; 1 supervisor cada {p.costos.supervisor_cada_vendedores} vendedores; 1 backoffice cada {p.costos.backoffice_cada_ventas} ventas; operador {formatGs(p.costos.salario_hora)}/h × {p.costos.horas_dia} h × {p.costos.dias_mes} días; comisión {p.costos.comision_vendedores_pct}% de las comisiones facturadas; IPS {p.costos.ips_pct}% y aguinaldo (÷12) sobre todo RRHH; logística {formatGs(p.costos.logistica_central)} Central / {formatGs(p.costos.logistica_interior)} Interior ({p.costos.logistica_interior_pct}% Interior) + premios fijos; {formatGs(p.costos.operativo_por_venta)} operativos por venta. Margen = facturación que queda − costo de la estructura del mes.</p>
                     <p><b>Chargeback</b>: las líneas que caen dentro de los {p.chargeback_meses} meses (según la zafra) devuelven cuota 1{p.clawback_incluye_residual ? " + un residual" : ""}, el plus de portabilidad y el bono efectividad, neto del recupero por reconexión.</p>
                   </div>
                 </section>

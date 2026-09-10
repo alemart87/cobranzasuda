@@ -29,6 +29,7 @@ Criterios Claro (editables):
 from __future__ import annotations
 
 import copy
+import math
 from typing import Any
 
 # Zafra tipo del negocio (% líneas nuevas activas por mes de antigüedad),
@@ -74,6 +75,26 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "pct_caidas_penalizables": 100.0,   # caídas dentro del chargeback que Claro descuenta
     "recupero_pct": 25.0,               # parte de los descuentos que se recupera por reconexión
     "clawback_incluye_residual": True,  # suspensión penalizable = cuota 1 + 1 residual (214.431)
+    # ---- COSTOS de la estructura (el indicador principal: ventas por vendedor) ----
+    "costos": {
+        "ventas_por_vendedor": 20,          # 1.900 ventas → 95 vendedores
+        "supervisor_cada_vendedores": 14,   # 1 supervisor cada 14 vendedores
+        "backoffice_cada_ventas": 180,      # 1 backoffice cada 180 ventas
+        "coordinadores": 1,
+        "controllers": 2,
+        "salario_hora": 14635, "horas_dia": 7, "dias_mes": 23,   # operador: 14.635 × 7 h × 23 días
+        "comision_vendedores_pct": 25.0,    # % sobre las comisiones facturadas
+        "comision_incluye_bonos": True,     # base = facturación del mes (con bonos) o solo comisiones
+        "supervisor_salario": 4180000, "supervisor_premio": 1500000,
+        "coordinador_salario": 6000000, "coordinador_premio": 2500000,
+        "backoffice_salario": 3044000,
+        "controller_salario": 3600000, "controller_premio": 750000,
+        "ips_pct": 16.5,                    # sobre todos los costos de RRHH
+        "aguinaldo": True,                  # previsión: (RRHH + IPS) ÷ 12
+        "logistica_central": 55000, "logistica_interior": 80000, "logistica_interior_pct": 60.0,
+        "logistica_premios": 20000000,      # premios a logística (fijo mensual)
+        "operativo_por_venta": 12500,       # costos operativos adicionales por venta
+    },
 }
 
 
@@ -88,7 +109,14 @@ def _escala(escala: list[dict], valor_pct: float) -> tuple[float, dict | None]:
 def parametros_con_defaults(overrides: dict | None) -> dict:
     p = copy.deepcopy(PARAMETROS_DEFAULT)
     for k, v in (overrides or {}).items():
-        if v is not None and k in p:
+        if k == "_sin_breakeven":
+            p[k] = v
+            continue
+        if v is None or k not in p:
+            continue
+        if k == "costos" and isinstance(v, dict):
+            p["costos"] = {**p["costos"], **{ck: cv for ck, cv in v.items() if cv is not None}}
+        else:
             p[k] = v
     return p
 
@@ -194,6 +222,11 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     dist_prod = _distancias(p["escala_productividad"], cumplimiento, objetivo, "activaciones")
     dist_efect = _distancias(p["escala_efectividad"], efect, 0, "pts")  # se mide en puntos de efectividad
 
+    # ---- COSTOS de la estructura y MARGEN (evaluación del negocio, foco a 6 meses) ----
+    costos, margen = _costos_y_margen(p["costos"], act, mes0, bruto_mes0, neto_6, neto_12)
+    if not p.get("_sin_breakeven"):
+        margen["breakeven_ventas_6"] = _breakeven(p)
+
     # ---- conclusión ejecutiva ----
     def gs(v: float) -> str:
         return f"Gs {v:,.0f}".replace(",", ".")
@@ -206,6 +239,13 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         f"{bonos_netos_6 / neto_6 * 100 if neto_6 else 0:.0f}% de lo que queda a 6 meses: sin bonos el mes sería "
         f"{gs(sin_bonos_mes0)}.",
     ]
+    partes.append(
+        f"Costo de la estructura: {gs(costos['total'])} ({costos['headcount']['vendedores']} vendedores, "
+        f"{costos['headcount']['supervisores']} supervisores, {costos['headcount']['backoffice']} backoffice) — "
+        f"{gs(costos['costo_por_venta'])} por venta. Margen del mes {gs(margen['mes0'])} ({margen['pct_mes0']}%); "
+        f"a 6 meses, con las caídas descontadas, {gs(margen['meses6'])} ({margen['pct_6']}%)"
+        + (f"; punto de equilibrio a 6 meses: {margen['breakeven_ventas_6']:,.0f} ventas." if margen.get("breakeven_ventas_6") else ".")
+    )
     if esc_prod is None:
         partes.append(f"ALERTA: el cumplimiento del objetivo CO es {cumplimiento:.1f}% — por debajo de la escala mínima, "
                       "el bono productividad liquida 0.")
@@ -238,6 +278,14 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     recomendaciones.append({"severidad": "info", "titulo": f"Portabilidad: {gs(mes0['portabilidad'])} en el mes, {gs(exp_porta)} vuelven en chargeback",
                             "detalle": f"Con {porta * 100:.0f}% de portación, el plus de portabilidad es el componente con mayor exposición al chargeback: "
                                        f"se devuelve el de cada línea que cae antes del mes {chb}."})
+    if margen["meses6"] < 0:
+        recomendaciones.insert(0, {"severidad": "alert", "titulo": f"Margen negativo a 6 meses: {gs(margen['meses6'])}",
+                                   "detalle": f"Lo que queda de la facturación a 6 meses ({gs(neto_6)}) no cubre el costo de la estructura ({gs(costos['total'])}). "
+                                              + (f"Punto de equilibrio: {margen['breakeven_ventas_6']:,.0f} ventas con esta estructura. " if margen.get("breakeven_ventas_6") else "")
+                                              + "Palancas: ventas por vendedor, retención del mes 1 y los escalones de bonos."})
+    elif margen["pct_6"] < 15:
+        recomendaciones.insert(0, {"severidad": "warning", "titulo": f"Margen ajustado a 6 meses: {margen['pct_6']}%",
+                                   "detalle": f"Con {p['costos']['ventas_por_vendedor']} ventas por vendedor el costo por venta es {gs(costos['costo_por_venta'])} contra {gs(neto_6 / act if act else 0)} que quedan por venta a 6 meses. Subir 1 venta por vendedor ahorra {gs(_ahorro_por_venta_vendedor(p, act))} al mes."})
     recomendaciones.append({"severidad": "info", "titulo": f"Residual: {gs(sum(m['residual'] for m in meses))} en 12 meses",
                             "detalle": f"Cada línea activa deja {gs(residual_linea)}/mes durante {int(p['residual_meses'])} meses; subir la zafra del mes 6 un punto vale {gs(act * 0.01 * residual_linea * 6)} de residual futuro."})
 
@@ -268,6 +316,93 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
             "distancia_productividad": dist_prod,
             "distancia_efectividad": dist_efect,
         },
+        "costos": costos,
+        "margen": margen,
         "conclusion": conclusion,
         "recomendaciones": recomendaciones,
     }
+
+
+def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
+                     neto_6: float, neto_12: float) -> tuple[dict, dict]:
+    """Costos mensuales de la estructura para `act` ventas y margen contra lo facturado
+    (mes 0) y contra lo que realmente queda a 6 y 12 meses."""
+    vpv = max(float(c["ventas_por_vendedor"] or 0), 0.01)
+    vendedores = math.ceil(act / vpv) if act > 0 else 0
+    supervisores = math.ceil(vendedores / max(float(c["supervisor_cada_vendedores"] or 1), 1)) if vendedores else 0
+    backoffice = math.ceil(act / max(float(c["backoffice_cada_ventas"] or 1), 1)) if act > 0 else 0
+    coordinadores = int(c["coordinadores"] or 0)
+    controllers = int(c["controllers"] or 0)
+
+    salario_operador = float(c["salario_hora"]) * float(c["horas_dia"]) * float(c["dias_mes"])
+    base_comision = bruto_mes0 if c.get("comision_incluye_bonos", True) else (mes0["activaciones_cuota1"] + mes0["portabilidad"])
+    rrhh = {
+        "operadores_salario": vendedores * salario_operador,
+        "operadores_comisiones": base_comision * float(c["comision_vendedores_pct"]) / 100.0,
+        "supervisores": supervisores * (float(c["supervisor_salario"]) + float(c["supervisor_premio"])),
+        "coordinadores": coordinadores * (float(c["coordinador_salario"]) + float(c["coordinador_premio"])),
+        "backoffice": backoffice * float(c["backoffice_salario"]),
+        "controllers": controllers * (float(c["controller_salario"]) + float(c["controller_premio"])),
+    }
+    rrhh_base = sum(rrhh.values())
+    ips = rrhh_base * float(c["ips_pct"]) / 100.0
+    aguinaldo = (rrhh_base + ips) / 12.0 if c.get("aguinaldo", True) else 0.0
+    interior = min(max(float(c["logistica_interior_pct"]), 0), 100) / 100.0
+    logistica_entregas = act * (interior * float(c["logistica_interior"]) + (1 - interior) * float(c["logistica_central"]))
+    logistica_premios = float(c["logistica_premios"])
+    operativos = act * float(c["operativo_por_venta"])
+    # Total sobre componentes redondeados: la tabla de costos debe ser aditiva al guaraní.
+    rrhh_base, ips, aguinaldo = round(rrhh_base), round(ips), round(aguinaldo)
+    logistica_entregas, logistica_premios, operativos = round(logistica_entregas), round(logistica_premios), round(operativos)
+    total = rrhh_base + ips + aguinaldo + logistica_entregas + logistica_premios + operativos
+
+    costos = {
+        "headcount": {"vendedores": vendedores, "supervisores": supervisores, "backoffice": backoffice,
+                      "coordinadores": coordinadores, "controllers": controllers,
+                      "total": vendedores + supervisores + backoffice + coordinadores + controllers},
+        "salario_operador_mes": round(salario_operador),
+        "rrhh": {k: round(v) for k, v in rrhh.items()},
+        "rrhh_base": round(rrhh_base), "ips": round(ips), "aguinaldo": round(aguinaldo),
+        "rrhh_total": round(rrhh_base + ips + aguinaldo),
+        "logistica_entregas": round(logistica_entregas), "logistica_premios": round(logistica_premios),
+        "operativos": round(operativos),
+        "total": round(total),
+        "costo_por_venta": round(total / act) if act else 0,
+        "facturacion_por_venta": round(bruto_mes0 / act) if act else 0,
+        "neto_6_por_venta": round(neto_6 / act) if act else 0,
+    }
+    margen = {
+        "mes0": round(bruto_mes0 - total), "pct_mes0": round((bruto_mes0 - total) / bruto_mes0 * 100, 1) if bruto_mes0 else 0.0,
+        "meses6": round(neto_6 - total), "pct_6": round((neto_6 - total) / neto_6 * 100, 1) if neto_6 else 0.0,
+        "meses12": round(neto_12 - total), "pct_12": round((neto_12 - total) / neto_12 * 100, 1) if neto_12 else 0.0,
+    }
+    return costos, margen
+
+
+def _margen6_para(p: dict, ventas: float) -> float:
+    r = simular_facturacion({**p, "ventas": ventas, "_sin_breakeven": True})
+    return float(r["margen"]["meses6"])
+
+
+def _breakeven(p: dict) -> float | None:
+    """Ventas mínimas para margen cero a 6 meses con esta estructura (bisección)."""
+    lo, hi = 1.0, max(float(p["ventas"] or 0) * 4, 200.0)
+    if _margen6_para(p, hi) < 0:
+        return None  # ni cuadruplicando las ventas cierra: la estructura no es viable
+    if _margen6_para(p, lo) >= 0:
+        return lo
+    for _ in range(40):
+        mid = (lo + hi) / 2
+        if _margen6_para(p, mid) >= 0:
+            hi = mid
+        else:
+            lo = mid
+    return round(hi)
+
+
+def _ahorro_por_venta_vendedor(p: dict, act: float) -> float:
+    c = p["costos"]
+    vpv = float(c["ventas_por_vendedor"] or 1)
+    sal = float(c["salario_hora"]) * float(c["horas_dia"]) * float(c["dias_mes"])
+    carga = (1 + float(c["ips_pct"]) / 100.0) * (13 / 12 if c.get("aguinaldo", True) else 1)
+    return max(0.0, (math.ceil(act / vpv) - math.ceil(act / (vpv + 1))) * sal * carga)
