@@ -70,7 +70,8 @@ class SimuladorRequest(BaseModel):
 class SimuladorAnualRequest(BaseModel):
     """Simulación anual: parámetros del mes 1 (fijan estructura y objetivo) + ventas de cada mes."""
     parametros: dict[str, Any] = Field(default_factory=dict)
-    ventas_por_mes: List[float] = Field(min_length=1, max_length=12)
+    ventas_por_mes: List[float] = Field(min_length=1, max_length=18)
+    horizonte: int = 12                   # 12 o 18 meses
 
 
 class CompareResponse(BaseModel):
