@@ -115,3 +115,28 @@ def test_remuneracion_promedio_del_vendedor():
     assert v["comision_por_venta"] == round(c["rrhh"]["operadores_comisiones"] / 1900)
     assert v["ingreso_promedio"] == round(c["salario_operador_mes"] + c["rrhh"]["operadores_comisiones"] / 95)
     assert v["ventas_promedio"] == 20.0
+
+
+def test_simulacion_anual_estructura_fija():
+    from app.services.analyzers.facturacion_simulador import simular_anual
+    ventas = [1900, 1700, 1800, 2000, 1900, 1600, 1900, 2100, 1900, 1900, 1750, 1900]
+    r = simular_anual({"objetivo_co": 1750}, ventas)
+    assert len(r["meses"]) == 12 and r["headcount"]["vendedores"] == 95  # fijado por el mes 1 (1.900 ÷ 20)
+    m1, m2 = r["meses"][0], r["meses"][1]
+    # mes 1: sin cohortes previas → sin ajustes; mes 2: ya recibe ajustes de la cohorte 1
+    assert m1["ajustes"] == 0 and m2["ajustes"] != 0
+    assert m2["clawbacks"] < 0 and m2["residual"] > 0
+    # la estructura fija no cambia con las ventas: mismos salarios en todos los meses
+    assert all(f["costos"]["rrhh"]["operadores_salario"] == m1["costos"]["rrhh"]["operadores_salario"] for f in r["meses"])
+    assert all(f["costos"]["headcount"]["vendedores"] == 95 for f in r["meses"])
+    # lo variable sí cambia: comisiones y logística del mes 2 (1.700 ventas) < mes 1 (1.900)
+    assert m2["costos"]["rrhh"]["operadores_comisiones"] < m1["costos"]["rrhh"]["operadores_comisiones"]
+    assert m2["costos"]["logistica_entregas"] < m1["costos"]["logistica_entregas"]
+    # mes 6 (1.600 ventas = 91% del objetivo) baja de escalón; mes 8 (2.100 = 119%) llega al máximo
+    assert r["meses"][5]["escalon_productividad"] == 90 and r["meses"][7]["escalon_productividad"] == 110
+    # consistencia anual
+    a = r["anual"]
+    assert a["ventas"] == sum(ventas)
+    assert a["resultado"] == sum(f["resultado"] for f in r["meses"])
+    assert r["meses"][-1]["acumulado"] == a["resultado"]
+    assert a["cola_post_12"]["total"] != 0

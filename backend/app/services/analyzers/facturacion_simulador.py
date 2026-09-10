@@ -329,15 +329,21 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
 
 
 def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
-                     neto_6: float, neto_12: float) -> tuple[dict, dict]:
+                     neto_6: float, neto_12: float, headcount: dict | None = None) -> tuple[dict, dict]:
     """Costos mensuales de la estructura para `act` ventas y margen contra lo facturado
-    (mes 0) y contra lo que realmente queda a 6 y 12 meses."""
-    vpv = max(float(c["ventas_por_vendedor"] or 0), 0.01)
-    vendedores = math.ceil(act / vpv) if act > 0 else 0
-    supervisores = math.ceil(vendedores / max(float(c["supervisor_cada_vendedores"] or 1), 1)) if vendedores else 0
-    backoffice = math.ceil(act / max(float(c["backoffice_cada_ventas"] or 1), 1)) if act > 0 else 0
-    coordinadores = int(c["coordinadores"] or 0)
-    controllers = int(c["controllers"] or 0)
+    (mes 0) y contra lo que realmente queda a 6 y 12 meses. Con `headcount` la
+    estructura queda FIJA (simulación anual: se setea en el mes 1) y solo varían
+    comisiones, logística de entregas y operativos con las ventas del mes."""
+    if headcount:
+        vendedores, supervisores, backoffice = headcount["vendedores"], headcount["supervisores"], headcount["backoffice"]
+        coordinadores, controllers = headcount["coordinadores"], headcount["controllers"]
+    else:
+        vpv = max(float(c["ventas_por_vendedor"] or 0), 0.01)
+        vendedores = math.ceil(act / vpv) if act > 0 else 0
+        supervisores = math.ceil(vendedores / max(float(c["supervisor_cada_vendedores"] or 1), 1)) if vendedores else 0
+        backoffice = math.ceil(act / max(float(c["backoffice_cada_ventas"] or 1), 1)) if act > 0 else 0
+        coordinadores = int(c["coordinadores"] or 0)
+        controllers = int(c["controllers"] or 0)
 
     salario_operador = float(c["salario_hora"]) * float(c["horas_dia"]) * float(c["dias_mes"])
     base_comision = bruto_mes0 if c.get("comision_incluye_bonos", True) else (mes0["activaciones_cuota1"] + mes0["portabilidad"])
@@ -423,3 +429,125 @@ def _ahorro_por_venta_vendedor(p: dict, act: float) -> float:
     sal = float(c["salario_hora"]) * float(c["horas_dia"]) * float(c["dias_mes"])
     carga = (1 + float(c["ips_pct"]) / 100.0) * (13 / 12 if c.get("aguinaldo", True) else 1)
     return max(0.0, (math.ceil(act / vpv) - math.ceil(act / (vpv + 1))) * sal * carga)
+
+
+# =============================== SIMULACIÓN ANUAL ===============================
+_FLUJOS = ("residual", "cuota2", "legajos", "clawbacks", "clawback_bonos", "recalculo_productividad")
+
+
+def simular_anual(params: dict | None, ventas_por_mes: list[float]) -> dict[str, Any]:
+    """Balance de 12 meses con estructura FIJA seteada en el mes 1.
+
+    - El mes 1 define objetivo CO, tarifas, zafra, escalas y la estructura
+      (vendedores, supervisores, backoffice, coordinación, controllers).
+    - Los meses 2..12 solo cambian las ventas: con ellas varían los bonos (vs el
+      mismo objetivo), las comisiones de vendedores, la logística de entregas y
+      los operativos. Los costos fijos del mes 1 se mantienen todo el año.
+    - Cada mes calendario liquida la facturación de su cohorte (mes 0) más los
+      ajustes de las cohortes anteriores según su antigüedad (residual, cuota 2,
+      legajos, chargebacks, devolución de bonos): así funciona la liquidación real.
+    """
+    base = parametros_con_defaults(params)
+    ventas = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:12]
+    while len(ventas) < 12:
+        ventas.append(ventas[-1] if ventas else float(base["ventas"]))
+    base["ventas"] = ventas[0]
+
+    # Estructura del mes 1 (queda fija).
+    m1 = simular_facturacion({**base, "_sin_breakeven": True})
+    headcount = m1["costos"]["headcount"]
+
+    cohortes = [simular_facturacion({**base, "ventas": v, "_sin_breakeven": True}) for v in ventas]
+
+    meses: list[dict] = []
+    acumulado = 0.0
+    for t in range(12):
+        c = cohortes[t]
+        fila: dict[str, Any] = {
+            "mes": t + 1, "ventas": round(ventas[t]),
+            "activaciones_cuota1": c["mes0"]["activaciones_cuota1"], "portabilidad": c["mes0"]["portabilidad"],
+            "bono_productividad": c["mes0"]["bono_productividad"], "bono_efectividad": c["mes0"]["bono_efectividad"],
+            "facturacion_bruta": c["bruto_mes0"],
+            "cumplimiento_pct": c["derivados"]["cumplimiento_pct"],
+            "escalon_productividad": (c["derivados"]["escalon_productividad"] or {}).get("desde_pct"),
+            "monto_bono_productividad": c["derivados"]["monto_bono_productividad"],
+        }
+        for k in _FLUJOS:
+            fila[k] = 0.0
+        for m in range(t):  # cohortes anteriores, edad t-m
+            edad = t - m
+            for k in _FLUJOS:
+                fila[k] += cohortes[m]["meses"][edad][k]
+        fila["ajustes"] = sum(fila[k] for k in _FLUJOS)
+        fila["ingreso_neto"] = fila["facturacion_bruta"] + fila["ajustes"]
+        # Costos del mes: estructura fija del mes 1 + variables de las ventas del mes.
+        costos_t, _ = _costos_y_margen(base["costos"], ventas[t], c["mes0"], c["bruto_mes0"],
+                                       c["neto_6"], c["neto_12"], headcount=headcount)
+        fila["costos"] = costos_t
+        fila["costo_total"] = costos_t["total"]
+        fila["resultado"] = round(fila["ingreso_neto"] - costos_t["total"])
+        fila["margen_pct"] = round(fila["resultado"] / fila["ingreso_neto"] * 100, 1) if fila["ingreso_neto"] else 0.0
+        acumulado += fila["resultado"]
+        fila["acumulado"] = round(acumulado)
+        fila["ventas_por_vendedor"] = round(ventas[t] / headcount["vendedores"], 1) if headcount["vendedores"] else 0
+        fila["lineas_activas"] = round(sum(cohortes[m]["meses"][t - m]["lineas_activas"] for m in range(t + 1)))
+        for k in ("facturacion_bruta", "ajustes", "ingreso_neto", *_FLUJOS):
+            fila[k] = round(fila[k])
+        meses.append(fila)
+
+    # Cola después del mes 12: flujos de las cohortes que caen fuera del horizonte.
+    cola = {k: 0.0 for k in _FLUJOS}
+    for m in range(12):
+        for edad in range(12 - m, 13):
+            if edad <= 0:
+                continue
+            for k in _FLUJOS:
+                cola[k] += cohortes[m]["meses"][edad][k]
+    cola_total = sum(cola.values())
+
+    def tot(k: str) -> float:
+        return sum(float(f[k]) for f in meses)
+    anual = {
+        "ventas": round(tot("ventas")),
+        "facturacion_bruta": round(tot("facturacion_bruta")),
+        "ajustes": round(tot("ajustes")),
+        "ingreso_neto": round(tot("ingreso_neto")),
+        "costos": round(tot("costo_total")),
+        "resultado": round(tot("resultado")),
+        "margen_pct": round(tot("resultado") / tot("ingreso_neto") * 100, 1) if tot("ingreso_neto") else 0.0,
+        "bonos": round(tot("bono_productividad") + tot("bono_efectividad")),
+        "devolucion_bonos": round(tot("clawback_bonos") + tot("recalculo_productividad")),
+        "costos_fijos_mes": round(sum(m1["costos"]["rrhh"][k] for k in ("operadores_salario", "supervisores", "coordinadores", "backoffice", "controllers"))
+                                  * (1 + float(base["costos"]["ips_pct"]) / 100) * (13 / 12 if base["costos"].get("aguinaldo", True) else 1)
+                                  + float(base["costos"]["logistica_premios"])),
+        "cola_post_12": {**{k: round(v) for k, v in cola.items()}, "total": round(cola_total)},
+        "resultado_con_cola": round(tot("resultado") + cola_total),
+        "meses_negativos": sum(1 for f in meses if f["resultado"] < 0),
+        "mejor_mes": max(meses, key=lambda f: f["resultado"])["mes"],
+        "peor_mes": min(meses, key=lambda f: f["resultado"])["mes"],
+        "meses_sin_bono_productividad": sum(1 for f in meses if f["monto_bono_productividad"] == 0),
+    }
+
+    def gs(v: float) -> str:
+        return f"Gs {v:,.0f}".replace(",", ".")
+    def n(v: float) -> str:
+        return f"{v:,.0f}".replace(",", ".")
+    partes = [
+        f"Año simulado con estructura fija del mes 1 ({headcount['vendedores']} vendedores, {headcount['supervisores']} supervisores, "
+        f"{headcount['backoffice']} backoffice; costo fijo {gs(anual['costos_fijos_mes'])}/mes) y objetivo CO {n(float(base['objetivo_co']))}.",
+        f"Ventas del año: {n(anual['ventas'])}. Facturación bruta {gs(anual['facturacion_bruta'])}; con los ajustes de chargeback, cuota 2 y residual "
+        f"el ingreso neto liquidado es {gs(anual['ingreso_neto'])}. Costos {gs(anual['costos'])}. "
+        f"Resultado anual {gs(anual['resultado'])} ({anual['margen_pct']}%).",
+    ]
+    if anual["meses_negativos"]:
+        partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es el mes {anual['peor_mes']} y el mejor el {anual['mejor_mes']}.")
+    if anual["meses_sin_bono_productividad"] and base.get("bonos_activos", True):
+        partes.append(f"En {anual['meses_sin_bono_productividad']} mes(es) las ventas quedaron bajo el 90% del objetivo y el bono productividad no se liquidó.")
+    if cola_total:
+        partes.append(f"Después del mes 12 quedan pendientes {gs(cola_total)} de las cohortes del año (residual por cobrar menos devoluciones): "
+                      f"resultado con esa cola {gs(anual['resultado_con_cola'])}.")
+
+    return {
+        "parametros": base, "ventas_por_mes": [round(v) for v in ventas],
+        "headcount": headcount, "meses": meses, "anual": anual, "conclusion": " ".join(partes),
+    }
