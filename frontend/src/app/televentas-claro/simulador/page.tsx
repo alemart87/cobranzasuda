@@ -276,6 +276,121 @@ export default function SimuladorFacturacionPage() {
                   </div>
                 )}
 
+                {/* ===== EERR ===== */}
+                {res.costos && res.margen && (() => {
+                  const sumM = (k: string, n: number) => res.meses.slice(1, n + 1).reduce((acc: number, m: any) => acc + (m[k] ?? 0), 0);
+                  const devBonos = (n: number) => sumM("clawback_bonos", n) + sumM("recalculo_productividad", n);
+                  const c = res.costos, r0 = res.bruto_mes0, r6 = res.neto_6, r12 = res.neto_12;
+                  type Fila = { label: string; v: [number, number, number]; tipo?: "ingreso" | "ajuste" | "sub" | "costo" | "total" | "pct" | "head" };
+                  const filas: Fila[] = [
+                    { label: "INGRESOS — facturación del mes", v: [0, 0, 0], tipo: "head" },
+                    { label: "Activaciones (cuota 1)", v: [res.mes0.activaciones_cuota1, res.mes0.activaciones_cuota1, res.mes0.activaciones_cuota1], tipo: "ingreso" },
+                    { label: "Plus portabilidad", v: [res.mes0.portabilidad, res.mes0.portabilidad, res.mes0.portabilidad], tipo: "ingreso" },
+                    { label: "Bono productividad", v: [res.mes0.bono_productividad, res.mes0.bono_productividad, res.mes0.bono_productividad], tipo: "ingreso" },
+                    { label: "Bono efectividad", v: [res.mes0.bono_efectividad, res.mes0.bono_efectividad, res.mes0.bono_efectividad], tipo: "ingreso" },
+                    { label: "Facturación bruta", v: [r0, r0, r0], tipo: "sub" },
+                    { label: "AJUSTES POSTERIORES — chargeback, cuota 2 y residual", v: [0, 0, 0], tipo: "head" },
+                    { label: "+ Residual cobrado", v: [0, sumM("residual", 6), sumM("residual", 12)], tipo: "ajuste" },
+                    { label: "+ Cuota 2 cobrada", v: [0, sumM("cuota2", 6), sumM("cuota2", 12)], tipo: "ajuste" },
+                    { label: "− Legajos faltantes / incompletos", v: [0, sumM("legajos", 6), sumM("legajos", 12)], tipo: "ajuste" },
+                    { label: "− Devoluciones por caídas (cuota 1, portabilidad, residual)", v: [0, sumM("clawbacks", 6), sumM("clawbacks", 12)], tipo: "ajuste" },
+                    { label: "− Devolución de bonos (efectividad y recálculo productividad)", v: [0, devBonos(6), devBonos(12)], tipo: "ajuste" },
+                    { label: "INGRESO NETO", v: [r0, r6, r12], tipo: "total" },
+                    { label: "COSTOS DE LA ESTRUCTURA", v: [0, 0, 0], tipo: "head" },
+                    { label: `Operadores — salario (${c.headcount.vendedores} × ${formatGs(c.salario_operador_mes)})`, v: [c.rrhh.operadores_salario, c.rrhh.operadores_salario, c.rrhh.operadores_salario], tipo: "costo" },
+                    { label: `Operadores — comisiones ${p.costos.comision_vendedores_pct}%`, v: [c.rrhh.operadores_comisiones, c.rrhh.operadores_comisiones, c.rrhh.operadores_comisiones], tipo: "costo" },
+                    { label: `Supervisores (${c.headcount.supervisores})`, v: [c.rrhh.supervisores, c.rrhh.supervisores, c.rrhh.supervisores], tipo: "costo" },
+                    { label: `Coordinación (${c.headcount.coordinadores})`, v: [c.rrhh.coordinadores, c.rrhh.coordinadores, c.rrhh.coordinadores], tipo: "costo" },
+                    { label: `Backoffice (${c.headcount.backoffice})`, v: [c.rrhh.backoffice, c.rrhh.backoffice, c.rrhh.backoffice], tipo: "costo" },
+                    { label: `Controllers (${c.headcount.controllers})`, v: [c.rrhh.controllers, c.rrhh.controllers, c.rrhh.controllers], tipo: "costo" },
+                    { label: `IPS ${p.costos.ips_pct}%`, v: [c.ips, c.ips, c.ips], tipo: "costo" },
+                    { label: "Previsión de aguinaldo (÷ 12)", v: [c.aguinaldo, c.aguinaldo, c.aguinaldo], tipo: "costo" },
+                    { label: "Logística — entregas", v: [c.logistica_entregas, c.logistica_entregas, c.logistica_entregas], tipo: "costo" },
+                    { label: "Logística — premios", v: [c.logistica_premios, c.logistica_premios, c.logistica_premios], tipo: "costo" },
+                    { label: "Costos operativos", v: [c.operativos, c.operativos, c.operativos], tipo: "costo" },
+                    { label: "TOTAL COSTOS", v: [c.total, c.total, c.total], tipo: "sub" },
+                    { label: "RESULTADO (MARGEN)", v: [res.margen.mes0, res.margen.meses6, res.margen.meses12], tipo: "total" },
+                    { label: "Margen sobre ingreso neto", v: [res.margen.pct_mes0, res.margen.pct_6, res.margen.pct_12], tipo: "pct" },
+                    { label: "Resultado por venta", v: [res.margen.mes0 / d.activaciones, res.margen.meses6 / d.activaciones, res.margen.meses12 / d.activaciones], tipo: "pct" },
+                  ];
+                  const cls = (t?: string) => t === "head" ? "bg-brand-bg text-[10px] uppercase tracking-wider2 text-brand-slate font-bold"
+                    : t === "sub" ? "bg-brand-bg-soft font-semibold text-brand-ink border-t border-brand-border"
+                    : t === "total" ? "bg-brand-ink text-white font-bold"
+                    : t === "pct" ? "text-brand-graphite italic"
+                    : "text-brand-ink";
+                  return (
+                    <section className="card overflow-x-auto">
+                      <div className="px-4 pt-4">
+                        <h2 className="font-display text-xl text-brand-ink uppercase">Estado de resultados (EERR)</h2>
+                        <p className="text-xs text-brand-slate mb-2">
+                          Un mes de estructura produce una cohorte de {formatInt(d.activaciones)} ventas. El EERR se lee en tres cortes: lo facturado
+                          en el mes, lo que realmente queda a 6 meses (fin del chargeback) y a 12 (residual completo). La columna de 6 meses es la que decide.
+                        </p>
+                      </div>
+                      <table className="w-full text-sm min-w-[720px]">
+                        <thead className="border-b border-brand-border">
+                          <tr className="text-[10px] uppercase tracking-wider2 text-brand-slate">
+                            <th className="px-4 py-2 text-left">Concepto</th>
+                            <th className="px-4 py-2 text-right">Mes 0</th>
+                            <th className="px-4 py-2 text-right bg-brand-primary/5 text-brand-primary">A 6 meses</th>
+                            <th className="px-4 py-2 text-right">A 12 meses</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filas.map((f) => (
+                            <tr key={f.label} className={cls(f.tipo)}>
+                              <td className={`px-4 ${f.tipo === "head" ? "py-1.5" : "py-1"} ${f.tipo === "ingreso" || f.tipo === "ajuste" || f.tipo === "costo" ? "pl-7" : ""}`}>{f.label}</td>
+                              {f.v.map((v, i) => (
+                                <td key={i} className={`px-4 py-1 text-right font-mono whitespace-nowrap ${i === 1 && f.tipo !== "total" ? "bg-brand-primary/5" : ""} ${f.tipo !== "head" && f.tipo !== "total" && v < 0 ? "text-brand-primary" : ""}`}>
+                                  {f.tipo === "head" ? "" : f.tipo === "pct" && f.label.startsWith("Margen") ? `${v}%` : f.tipo === "pct" ? formatGs(v) : (f.tipo === "ajuste" && v === 0) ? "—" : formatGs(v)}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div className="px-4 py-3">
+                        <Lectura>
+                          Ingresos menos ajustes posteriores da el ingreso neto de la cohorte; menos el costo de la estructura que la produjo, el
+                          resultado. En el mes 0 casi siempre da positivo porque todavía no se devolvió nada; la columna de 6 meses ya descontó las
+                          caídas del chargeback y es el margen real del negocio. La de 12 suma el residual completo.
+                        </Lectura>
+                      </div>
+                    </section>
+                  );
+                })()}
+
+                {/* ===== Estructura necesaria ===== */}
+                {res.costos && (
+                  <section className="card p-5">
+                    <h2 className="font-display text-xl text-brand-ink uppercase mb-1">Estructura necesaria</h2>
+                    <p className="text-xs text-brand-slate mb-4">
+                      Para {formatInt(d.activaciones)} ventas efectivas, con {p.costos.ventas_por_vendedor} ventas por vendedor, 1 supervisor cada {p.costos.supervisor_cada_vendedores} vendedores y 1 backoffice cada {p.costos.backoffice_cada_ventas} ventas.
+                    </p>
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                      {([
+                        ["Vendedores", res.costos.headcount.vendedores, "#E6332A", `${formatGs(res.costos.rrhh.operadores_salario)} salarios`],
+                        ["Supervisores", res.costos.headcount.supervisores, "#F39200", formatGs(res.costos.rrhh.supervisores)],
+                        ["Backoffice", res.costos.headcount.backoffice, "#0EA5E9", formatGs(res.costos.rrhh.backoffice)],
+                        ["Coordinador", res.costos.headcount.coordinadores, "#662483", formatGs(res.costos.rrhh.coordinadores)],
+                        ["Controllers", res.costos.headcount.controllers, "#00B2BF", formatGs(res.costos.rrhh.controllers)],
+                        ["Total personas", res.costos.headcount.total, "#0F1116", `${formatGs(res.costos.rrhh_total)} RRHH con cargas`],
+                      ] as Array<[string, number, string, string]>).map(([label, n, color, hint]) => (
+                        <div key={label} className="rounded-md border border-brand-border bg-white p-4 text-center" style={{ borderTop: `4px solid ${color}` }}>
+                          <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">{label}</div>
+                          <div className="font-display text-4xl text-brand-ink leading-tight mt-1">{formatInt(n)}</div>
+                          <div className="text-[10px] text-brand-slate mt-1">{hint}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-brand-slate mt-3">
+                      Costo total de la estructura {formatGs(res.costos.total)} / mes · {formatGs(res.costos.costo_por_venta)} por venta ·
+                      {" "}{formatGs(Math.round(res.costos.total / Math.max(res.costos.headcount.total, 1)))} por persona · operador {formatGs(res.costos.salario_operador_mes)}/mes
+                      ({formatGs(p.costos.salario_hora)} × {p.costos.horas_dia} h × {p.costos.dias_mes} días).
+                    </p>
+                  </section>
+                )}
+
                 <div className="grid xl:grid-cols-2 gap-6 print:block">
                   <section className="card p-5 print:mb-5">
                     <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Facturación del mes por componente</h2>
@@ -370,7 +485,7 @@ export default function SimuladorFacturacionPage() {
                     <p className="text-xs text-brand-slate mb-3">
                       La estructura de un mes produce la cohorte: su costo se compara con lo facturado (mes 0) y con lo que realmente queda a 6 y 12 meses.
                     </p>
-                    <div className="grid xl:grid-cols-2 gap-5 print:block">
+                    <div>
                       <div>
                         <ResponsiveContainer width="100%" height={220}>
                           <BarChart data={[
@@ -396,43 +511,6 @@ export default function SimuladorFacturacionPage() {
                           residual completo (12). La barra naranja es el costo de la estructura que produjo esas ventas; la verde/roja,
                           el margen. El corte que decide el negocio es el de 6 meses: ahí ya no hay devoluciones pendientes.
                         </Lectura>
-                      </div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead className="bg-brand-bg text-[10px] uppercase tracking-wider2 text-brand-slate">
-                            <tr><th className="px-2 py-1.5 text-left">Costo mensual</th><th className="px-2 py-1.5 text-right">Cantidad</th><th className="px-2 py-1.5 text-right">Gs</th></tr>
-                          </thead>
-                          <tbody>
-                            {([
-                              ["Operadores — salario por hora", `${res.costos.headcount.vendedores} × ${formatGs(res.costos.salario_operador_mes)}`, res.costos.rrhh.operadores_salario],
-                              ["Operadores — comisiones", `${p.costos.comision_vendedores_pct}%`, res.costos.rrhh.operadores_comisiones],
-                              ["Supervisores", `${res.costos.headcount.supervisores}`, res.costos.rrhh.supervisores],
-                              ["Coordinadores", `${res.costos.headcount.coordinadores}`, res.costos.rrhh.coordinadores],
-                              ["Backoffice", `${res.costos.headcount.backoffice}`, res.costos.rrhh.backoffice],
-                              ["Controllers", `${res.costos.headcount.controllers}`, res.costos.rrhh.controllers],
-                              [`IPS ${p.costos.ips_pct}%`, "", res.costos.ips],
-                              ["Previsión de aguinaldo", "÷ 12", res.costos.aguinaldo],
-                              ["Logística — entregas", `${formatInt(d.activaciones)} ventas`, res.costos.logistica_entregas],
-                              ["Logística — premios", "fijo", res.costos.logistica_premios],
-                              ["Costos operativos", `${formatGs(p.costos.operativo_por_venta)} × venta`, res.costos.operativos],
-                            ] as Array<[string, string, number]>).map(([k, q, v]) => (
-                              <tr key={k} className="border-t border-brand-border">
-                                <td className="px-2 py-1 text-brand-ink">{k}</td>
-                                <td className="px-2 py-1 text-right text-brand-slate">{q}</td>
-                                <td className="px-2 py-1 text-right font-mono">{formatGs(v)}</td>
-                              </tr>
-                            ))}
-                            <tr className="border-t-2 border-brand-ink bg-brand-bg-soft font-bold">
-                              <td className="px-2 py-1.5 text-brand-ink">Total estructura</td>
-                              <td className="px-2 py-1.5 text-right text-brand-slate">{res.costos.headcount.total} personas</td>
-                              <td className="px-2 py-1.5 text-right font-mono">{formatGs(res.costos.total)}</td>
-                            </tr>
-                            <tr className="border-t border-brand-border">
-                              <td className="px-2 py-1 text-brand-ink" colSpan={2}>Por venta: costo / facturado / queda a 6 meses</td>
-                              <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{formatGs(res.costos.costo_por_venta)} / {formatGs(res.costos.facturacion_por_venta)} / {formatGs(res.costos.neto_6_por_venta)}</td>
-                            </tr>
-                          </tbody>
-                        </table>
                       </div>
                     </div>
                   </section>
