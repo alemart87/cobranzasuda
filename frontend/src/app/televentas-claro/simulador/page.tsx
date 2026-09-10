@@ -99,7 +99,7 @@ export default function SimuladorFacturacionPage() {
         <div>
           <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Simulador de Facturación</h1>
           <p className="text-sm text-brand-slate mt-1 max-w-3xl">
-            Cargá la cantidad de ventas del mes y el simulador genera la facturación del mes, cuánto queda realmente
+            Cargá la cantidad de ventas efectivas del mes y el simulador genera la facturación del mes, cuánto queda realmente
             a los 6 meses (chargeback) y a los 12 (residual), y el peso de los bonos sobre la facturación neta.
             Todas las variables de negocio y componentes de facturación son editables.
           </p>
@@ -120,8 +120,8 @@ export default function SimuladorFacturacionPage() {
             </div>
 
             <Grupo titulo="Ventas y objetivo" abierto>
-              <Campo label="Ventas del mes" hint="ventas entregadas a Claro" value={p.ventas} onChange={(v) => set("ventas", v)} step={10} />
-              <Campo label="Efectividad" hint="activaciones ÷ ventas (define el bono efectividad)" value={p.efectividad_pct} onChange={(v) => set("efectividad_pct", v)} step={0.5} suffix="%" />
+              <Campo label="Ventas efectivas del mes" hint="ya son las activaciones (cuota 1): no se descuentan" value={p.ventas} onChange={(v) => set("ventas", v)} step={10} />
+              <Campo label="Efectividad de entregas" hint="solo define el escalón del bono efectividad" value={p.efectividad_pct} onChange={(v) => set("efectividad_pct", v)} step={0.5} suffix="%" />
               <Campo label="Objetivo CO (Claro)" hint="objetivo mensual de líneas para el bono productividad" value={p.objetivo_co} onChange={(v) => set("objetivo_co", v)} step={10} />
               <Campo label="Líneas en estado A" hint="activaciones que suman para el bono" value={p.pct_estado_a} onChange={(v) => set("pct_estado_a", v)} step={0.5} suffix="%" />
               <Campo label="Portabilidad" hint="% de activaciones con portación" value={p.porta_pct} onChange={(v) => set("porta_pct", v)} step={1} suffix="%" />
@@ -330,7 +330,7 @@ export default function SimuladorFacturacionPage() {
                   </div>
                   <div className="grid md:grid-cols-2 gap-4">
                     {([["Bono productividad", b.distancia_productividad, p.escala_productividad, "cumplimiento del objetivo CO"],
-                       ["Bono efectividad", b.distancia_efectividad, p.escala_efectividad, "efectividad (activaciones ÷ ventas)"]] as any[]).map(([titulo, dist, escala, medida]) => (
+                       ["Bono efectividad", b.distancia_efectividad, p.escala_efectividad, "efectividad de entregas"]] as any[]).map(([titulo, dist, escala, medida]) => (
                       <div key={titulo} className="rounded-md border border-brand-border p-3">
                         <div className="text-sm font-semibold text-brand-ink mb-1">{titulo} — {medida}: <span className="font-mono">{dist.valor_pct}%</span></div>
                         <table className="w-full text-xs mb-2">
@@ -349,8 +349,8 @@ export default function SimuladorFacturacionPage() {
                           </tbody>
                         </table>
                         <p className="text-[11px] text-brand-graphite">
-                          {dist.siguiente_escalon ? <>Faltan <b>{formatInt(dist.faltan_unidades)} {dist.unidad}</b> para el escalón {dist.siguiente_escalon.desde_pct}%. </> : <>Está en el escalón máximo. </>}
-                          {dist.escalon_actual && <>Margen antes de bajar de escalón: <b>{formatInt(dist.margen_unidades)} {dist.unidad}</b>.</>}
+                          {dist.siguiente_escalon ? <>Faltan <b>{dist.unidad === "pts" ? `${dist.faltan_pct} puntos` : `${formatInt(dist.faltan_unidades)} ${dist.unidad}`}</b> para el escalón {dist.siguiente_escalon.desde_pct}%. </> : <>Está en el escalón máximo. </>}
+                          {dist.escalon_actual && <>Margen antes de bajar de escalón: <b>{dist.unidad === "pts" ? `${dist.margen_pct} puntos` : `${formatInt(dist.margen_unidades)} ${dist.unidad}`}</b>.</>}
                         </p>
                       </div>
                     ))}
@@ -390,9 +390,9 @@ export default function SimuladorFacturacionPage() {
                 <section className="card p-5">
                   <h2 className="font-display text-lg text-brand-ink uppercase mb-2">Criterios del modelo</h2>
                   <div className="text-xs text-brand-graphite leading-relaxed space-y-1.5">
-                    <p><b>Activaciones</b> = ventas × efectividad. <b>Mes 0</b> = cuota 1 por plan (mix) + plus de portabilidad (% portadas) + bono productividad + bono efectividad.</p>
+                    <p><b>Ventas efectivas</b> = activaciones (cuota 1); la efectividad es de entregas y solo define el escalón de su bono. <b>Mes 0</b> = cuota 1 por plan (mix) + plus de portabilidad (% portadas) + bono productividad + bono efectividad.</p>
                     <p><b>Bono productividad (1771)</b>: por línea en estado A; % cumplimiento = activaciones netas ÷ objetivo CO comunicado por Claro; escala por tramos (bajo el mínimo, 0). Al 6º mes se descuenta el de las líneas no activas al día 180 (1871).</p>
-                    <p><b>Bono efectividad (1891)</b>: por venta entregada (activación cuota 1) según efectividad = activaciones ÷ ventas; escala por tramos (bajo el mínimo, 0). Se descuenta en las líneas penalizadas.</p>
+                    <p><b>Bono efectividad (1891)</b>: por venta entregada (activación cuota 1) según la efectividad de entregas; escala por tramos (bajo el mínimo, 0). Se descuenta en las líneas penalizadas.</p>
                     <p><b>Cuota 2</b>: al mes +3, líneas activas al día 90 (zafra M3); legajo incompleto cobra el 50%; legajo no presentado descuenta la cuota 1.</p>
                     <p><b>Residual</b>: {p.residual_pct}% del abono acreditado ({p.pct_abono_acreditado}% del abono del plan) por línea activa, durante {p.residual_meses} liquidaciones.</p>
                     <p><b>Chargeback</b>: las líneas que caen dentro de los {p.chargeback_meses} meses (según la zafra) devuelven cuota 1{p.clawback_incluye_residual ? " + un residual" : ""}, el plus de portabilidad y el bono efectividad, neto del recupero por reconexión.</p>

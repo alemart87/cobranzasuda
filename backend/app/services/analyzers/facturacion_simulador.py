@@ -1,14 +1,15 @@
 """Simulador de FACTURACIÓN — Televentas Claro (liquidación de comisiones).
 
-El usuario carga la cantidad de VENTAS del mes y el simulador genera la
-facturación del mes (mes 0) y cuánto de esa facturación queda realmente a los
+El usuario carga la cantidad de VENTAS EFECTIVAS del mes (= activaciones,
+cuota 1) y el simulador genera la facturación del mes (mes 0) y cuánto de esa facturación queda realmente a los
 6 meses (fin del chargeback) y a los 12 (fin del residual), proyectando las
 caídas de líneas con la ZAFRA (curva de líneas activas por mes de antigüedad).
 
 TODAS las variables de negocio y componentes de facturación son editables
 (`PARAMETROS_DEFAULT` son los valores sembrados con las liquidaciones reales):
 
-  Ventas × efectividad → activaciones (cuota 1)
+  Ventas efectivas = activaciones (cuota 1). La EFECTIVIDAD es de ENTREGAS:
+  solo define el escalón del bono efectividad, NO descuenta ventas.
   Mes 0  = cuota 1 por plan + plus de portabilidad + bono productividad + bono efectividad
   Mes 1  = − legajos faltantes/incompletos
   Mes k  = + residual (14,5% del abono acreditado × líneas activas según zafra)
@@ -36,8 +37,8 @@ ZAFRA_DEFAULT = [99.9, 82.6, 58.5, 53.8, 53.1, 49.2, 51.1, 46.2, 41.9, 40.7, 40.
 
 PARAMETROS_DEFAULT: dict[str, Any] = {
     # ---- entrada principal ----
-    "ventas": 1950,                 # ventas del mes (entregadas a Claro)
-    "efectividad_pct": 89.0,        # activaciones ÷ ventas (liquidaciones reales: 88,5–89,1%)
+    "ventas": 1950,                 # ventas EFECTIVAS del mes (= activaciones cuota 1)
+    "efectividad_pct": 89.0,        # efectividad de ENTREGAS: solo elige el escalón del bono (real: 88,5–89,1%)
     "objetivo_co": 1750,            # objetivo mensual de líneas CO (lo comunica Claro)
     "pct_estado_a": 99.5,           # activaciones en estado A (no S/P/C) al liquidar
     # ---- tarifas por plan (Gs sin IVA) y mix ----
@@ -96,7 +97,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     p = parametros_con_defaults(params)
     ventas = max(float(p["ventas"] or 0), 0)
     efect = max(float(p["efectividad_pct"] or 0), 0)
-    act = ventas * efect / 100.0
+    act = ventas  # las ventas cargadas ya son efectivas: NO se descuentan por efectividad
     act_a = act * max(float(p["pct_estado_a"] or 0), 0) / 100.0
     objetivo = max(float(p["objetivo_co"] or 0), 1)
     cumplimiento = act_a / objetivo * 100.0
@@ -191,14 +192,14 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         return out
 
     dist_prod = _distancias(p["escala_productividad"], cumplimiento, objetivo, "activaciones")
-    dist_efect = _distancias(p["escala_efectividad"], efect, ventas, "activaciones")
+    dist_efect = _distancias(p["escala_efectividad"], efect, 0, "pts")  # se mide en puntos de efectividad
 
     # ---- conclusión ejecutiva ----
     def gs(v: float) -> str:
         return f"Gs {v:,.0f}".replace(",", ".")
     partes = [
-        f"Con {ventas:,.0f} ventas y {efect:.1f}% de efectividad se activan {act:,.0f} líneas. "
-        f"Facturación del mes: {gs(bruto_mes0)}.".replace(",", "."),
+        f"Con {ventas:,.0f} ventas efectivas (efectividad de entregas {efect:.1f}%), la facturación del mes es "
+        f"{gs(bruto_mes0)}.".replace(",", "."),
         f"A los 6 meses (fin del chargeback) de esa facturación quedan {gs(neto_6)} — el {neto_6 / bruto_mes0 * 100 if bruto_mes0 else 0:.0f}% — "
         f"y a los 12 meses, sumando el residual completo, {gs(neto_12)} ({neto_12 / bruto_mes0 * 100 if bruto_mes0 else 0:.0f}%).",
         f"Los bonos pesan {bonos_mes0 / bruto_mes0 * 100 if bruto_mes0 else 0:.0f}% de la facturación del mes y "
