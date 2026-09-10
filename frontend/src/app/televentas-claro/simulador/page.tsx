@@ -90,7 +90,7 @@ export default function SimuladorFacturacionPage() {
   return (
     <AppShell>
       <PrintCover titulo={`Simulación de Facturación${res ? ` — ${formatInt(p.ventas)} ventas` : ""}`}
-        periodo={res ? `Facturación del mes ${formatGs(res.bruto_mes0)} · queda a 6 meses ${formatGs(res.neto_6)} (${res.pct_retenido_6}%) · margen a 6 meses ${formatGs(res.margen?.meses6 ?? 0)} · Televentas Claro` : undefined} />
+        periodo={res ? `Facturación del mes ${formatGs(res.bruto_mes0)} · queda a 6 meses ${formatGs(res.neto_6)} (${res.pct_retenido_6}%) · margen a 6 meses ${formatGs(res.margen?.meses6 ?? 0)}${p.bonos_activos === false ? " · SIN BONOS" : ""} · Televentas Claro` : undefined} />
 
       <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/televentas-claro" className="hover:text-brand-primary">Televentas Claro</Link>
@@ -124,7 +124,15 @@ export default function SimuladorFacturacionPage() {
               <Campo label="Ventas efectivas del mes" hint="ya son las activaciones (cuota 1): no se descuentan" value={p.ventas} onChange={(v) => set("ventas", v)} step={10} />
               <Campo label="Efectividad de entregas" hint="solo define el escalón del bono efectividad" value={p.efectividad_pct} onChange={(v) => set("efectividad_pct", v)} step={0.5} suffix="%" />
               <Campo label="Objetivo CO (Claro)" hint="objetivo mensual de líneas para el bono productividad" value={p.objetivo_co} onChange={(v) => set("objetivo_co", v)} step={10} />
-              <Campo label="Líneas en estado A" hint="activaciones que suman para el bono" value={p.pct_estado_a} onChange={(v) => set("pct_estado_a", v)} step={0.5} suffix="%" />
+              <Campo label="Líneas en estado A" hint="activaciones que suman para el bono (no S/P/C al liquidar)" value={p.pct_estado_a} onChange={(v) => set("pct_estado_a", v)} step={0.5} suffix="%" />
+              {d && (
+                <p className={`text-[11px] rounded px-2 py-1.5 ${d.escalon_productividad ? "bg-brand-bg-soft text-brand-graphite" : "bg-brand-primary/10 text-brand-primary"}`}>
+                  Cumplimiento: <b>{formatInt(d.activaciones_estado_a)}</b> en estado A ÷ objetivo <b>{formatInt(p.objetivo_co)}</b> = <b>{d.cumplimiento_pct}%</b>
+                  {" → "}{d.escalon_productividad
+                    ? <>escalón {d.escalon_productividad.desde_pct}%: <b>{formatGs(d.monto_bono_productividad)}</b>/línea</>
+                    : <b>bajo la escala mínima: bono productividad 0</b>}
+                </p>
+              )}
               <Campo label="Portabilidad" hint="% de activaciones con portación" value={p.porta_pct} onChange={(v) => set("porta_pct", v)} step={1} suffix="%" />
             </Grupo>
 
@@ -246,6 +254,21 @@ export default function SimuladorFacturacionPage() {
           <div className="lg:col-span-3 space-y-6">
             {res && d && b && (
               <>
+                <div className={`flex flex-wrap items-center justify-between gap-3 rounded-md border-2 px-4 py-3 ${p.bonos_activos === false ? "border-brand-ink bg-brand-ink text-white" : "border-brand-border bg-white"}`}>
+                  <div>
+                    <div className={`text-[10px] uppercase tracking-wider2 font-bold ${p.bonos_activos === false ? "text-white/70" : "text-brand-slate"}`}>Escenario de bonos</div>
+                    <div className="text-sm font-semibold">
+                      {p.bonos_activos === false
+                        ? "Bonos DESACTIVADOS — resultado sin bono productividad ni bono efectividad"
+                        : "Bonos activos — se liquidan según las escalas de Claro"}
+                    </div>
+                  </div>
+                  <button onClick={() => set("bonos_activos", p.bonos_activos === false)}
+                    className={`no-print px-4 py-2 rounded-md text-sm font-bold transition-colors ${p.bonos_activos === false ? "bg-white text-brand-ink hover:bg-brand-bg" : "bg-brand-primary text-white hover:bg-brand-primary/90"}`}>
+                    {p.bonos_activos === false ? "Reactivar bonos" : "Simular sin bonos"}
+                  </button>
+                </div>
+
                 <div className="print-only card p-4">
                   <h3 className="text-sm font-semibold text-brand-ink mb-2">Supuestos de la simulación</h3>
                   <p className="text-xs text-brand-graphite leading-relaxed">
@@ -520,6 +543,11 @@ export default function SimuladorFacturacionPage() {
                 <section className="card p-5">
                   <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Peso de los bonos sobre la facturación neta</h2>
                   <p className="text-xs text-brand-slate mb-3">Los bonos dependen de umbrales: valen mucho y se pierden enteros. Este análisis se genera con cada simulación.</p>
+                  {p.bonos_activos === false && (
+                    <p className="text-xs font-semibold text-brand-ink bg-brand-bg-soft border border-brand-border rounded px-3 py-2 mb-3">
+                      Bonos desactivados por el usuario: todos los resultados de la página corresponden al escenario sin bonos. Las escalas se muestran solo como referencia.
+                    </p>
+                  )}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     <KpiCard label="Bonos del mes" value={formatGs(b.mes0)} hint={`${b.peso_mes0_pct}% de la facturación`} accent="primary" />
                     <KpiCard label="Bonos que quedan a 6 meses" value={formatGs(b.netos_6)} hint={`${b.peso_neto_6_pct}% del neto · devueltos ${formatGs(Math.abs(b.devueltos_6))}`} accent="orange" />

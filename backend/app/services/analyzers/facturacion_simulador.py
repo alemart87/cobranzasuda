@@ -42,6 +42,7 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "efectividad_pct": 89.0,        # efectividad de ENTREGAS: solo elige el escalón del bono (real: 88,5–89,1%)
     "objetivo_co": 1750,            # objetivo mensual de líneas CO (lo comunica Claro)
     "pct_estado_a": 99.5,           # activaciones en estado A (no S/P/C) al liquidar
+    "bonos_activos": True,          # False = simular SIN bonos (productividad y efectividad en 0)
     # ---- tarifas por plan (Gs sin IVA) y mix ----
     "planes": [
         {"plan": "CG15G", "mix_pct": 68.0, "cuota1": 204545, "cuota2": 34091, "porta_plus": 218182, "abono": 170455},
@@ -139,8 +140,9 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     cuota1_w, cuota2_w, porta_w, abono_w = w("cuota1"), w("cuota2"), w("porta_plus"), w("abono")
     residual_linea = abono_w * float(p["pct_abono_acreditado"]) / 100.0 * float(p["residual_pct"]) / 100.0
 
-    monto_prod, esc_prod = _escala(p["escala_productividad"], cumplimiento)
-    monto_efect, esc_efect = _escala(p["escala_efectividad"], efect)
+    bonos_activos = bool(p.get("bonos_activos", True))
+    monto_prod, esc_prod = _escala(p["escala_productividad"], cumplimiento) if bonos_activos else (0.0, None)
+    monto_efect, esc_efect = _escala(p["escala_efectividad"], efect) if bonos_activos else (0.0, None)
 
     # ---- MES 0: facturación del mes ----
     mes0 = {
@@ -246,14 +248,17 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         f"a 6 meses, con las caídas descontadas, {gs(margen['meses6'])} ({margen['pct_6']}%)"
         + (f"; punto de equilibrio a 6 meses: {margen['breakeven_ventas_6']:,.0f} ventas." if margen.get("breakeven_ventas_6") else ".")
     )
-    if esc_prod is None:
+    if not bonos_activos:
+        partes.append("SIMULACIÓN SIN BONOS: los bonos de productividad y efectividad están desactivados por el usuario "
+                      "— este es el resultado que sostiene el negocio si Claro no los liquida.")
+    if bonos_activos and esc_prod is None:
         partes.append(f"ALERTA: el cumplimiento del objetivo CO es {cumplimiento:.1f}% — por debajo de la escala mínima, "
                       "el bono productividad liquida 0.")
     elif dist_prod.get("siguiente_escalon"):
         partes.append(f"Bono productividad: escalón {esc_prod['desde_pct']}% ({gs(monto_prod)}/línea); "
                       f"faltan {dist_prod['faltan_unidades']} activaciones para el escalón {dist_prod['siguiente_escalon']['desde_pct']}% "
                       f"({gs(float(dist_prod['siguiente_escalon']['monto']))}/línea) y hay {dist_prod['margen_unidades']} de margen antes de caer al escalón inferior.")
-    if esc_efect is None:
+    if bonos_activos and esc_efect is None:
         partes.append(f"ALERTA: efectividad {efect:.1f}% por debajo del 80% — el bono efectividad liquida 0.")
     conclusion = " ".join(partes)
 
@@ -292,7 +297,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     return {
         "parametros": p,
         "derivados": {
-            "activaciones": round(act), "activaciones_estado_a": round(act_a),
+            "activaciones": round(act), "activaciones_estado_a": round(act_a), "bonos_activos": bonos_activos,
             "cumplimiento_pct": round(cumplimiento, 2), "monto_bono_productividad": monto_prod,
             "escalon_productividad": esc_prod, "monto_bono_efectividad": monto_efect, "escalon_efectividad": esc_efect,
             "cuota1_ponderada": round(cuota1_w), "cuota2_ponderada": round(cuota2_w),

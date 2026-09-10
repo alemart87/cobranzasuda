@@ -83,3 +83,13 @@ def test_costos_estructura_y_margen():
                                  "costos": {"ventas_por_vendedor": 30, "comision_incluye_bonos": False}})
     assert mejor["costos"]["headcount"]["vendedores"] == 64
     assert mejor["margen"]["meses6"] > m["meses6"]
+
+
+def test_simulacion_sin_bonos():
+    con = simular_facturacion({"ventas": 1950, "objetivo_co": 1750})
+    sin = simular_facturacion({"ventas": 1950, "objetivo_co": 1750, "bonos_activos": False})
+    assert sin["mes0"]["bono_productividad"] == 0 and sin["mes0"]["bono_efectividad"] == 0
+    assert sin["bruto_mes0"] == con["bruto_mes0"] - con["bonos"]["mes0"]
+    assert sin["meses"][6]["recalculo_productividad"] == 0  # sin bono no hay recálculo
+    assert "SIN BONOS" in sin["conclusion"] and "ALERTA" not in sin["conclusion"]
+    assert sin["margen"]["meses6"] < con["margen"]["meses6"]
