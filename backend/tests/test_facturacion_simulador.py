@@ -5,9 +5,9 @@ from app.services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, sim
 def test_mes0_y_retencion_a_6_y_12_meses():
     r = simular_facturacion({"ventas": 1950, "objetivo_co": 1750})
     d = r["derivados"]
-    assert d["activaciones"] == round(1950 * 0.89)
-    # cumplimiento 99,2% → escalón 95% (50.000); efectividad 89% → 50.000
-    assert d["monto_bono_productividad"] == 50000 and d["monto_bono_efectividad"] == 50000
+    assert d["activaciones"] == 1950  # las ventas cargadas ya son efectivas: no se descuentan
+    # 1.940 en estado A ÷ 1.750 = 110,9% → escalón 110% (105.000); efectividad 89% → 50.000
+    assert d["monto_bono_productividad"] == 105000 and d["monto_bono_efectividad"] == 50000
     assert r["bruto_mes0"] == sum(r["mes0"].values())
     # A los 6 meses queda menos que lo facturado (chargebacks) y a 12 se recupera parte con residual
     assert r["neto_6"] < r["bruto_mes0"]
@@ -26,13 +26,14 @@ def test_mes0_y_retencion_a_6_y_12_meses():
 
 def test_escalas_de_bonos_y_acantilado():
     # ≥100% del objetivo → 95.000; <90% → 0
-    alto = simular_facturacion({"ventas": 2000, "objetivo_co": 1700})
+    alto = simular_facturacion({"ventas": 1720, "objetivo_co": 1700})  # 100,7%
     assert alto["derivados"]["monto_bono_productividad"] == 95000
-    bajo = simular_facturacion({"ventas": 1600, "objetivo_co": 1750})
+    bajo = simular_facturacion({"ventas": 1500, "objetivo_co": 1750})  # 85,3% < 90%
     assert bajo["derivados"]["monto_bono_productividad"] == 0
     assert "ALERTA" in bajo["conclusion"]
-    # efectividad: 84% → 45.000; 79% → 0
-    assert simular_facturacion({"efectividad_pct": 84})["derivados"]["monto_bono_efectividad"] == 45000
+    # efectividad (de entregas): elige el escalón pero NO cambia las activaciones
+    r84 = simular_facturacion({"efectividad_pct": 84})
+    assert r84["derivados"]["monto_bono_efectividad"] == 45000 and r84["derivados"]["activaciones"] == 1950
     assert simular_facturacion({"efectividad_pct": 79})["derivados"]["monto_bono_efectividad"] == 0
     # distancia al siguiente escalón informada en activaciones
     dist = alto["bonos"]["distancia_productividad"]
