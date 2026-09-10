@@ -254,7 +254,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     if bonos_activos and esc_prod is None:
         partes.append(f"ALERTA: el cumplimiento del objetivo CO es {cumplimiento:.1f}% — por debajo de la escala mínima, "
                       "el bono productividad liquida 0.")
-    elif dist_prod.get("siguiente_escalon"):
+    elif bonos_activos and esc_prod is not None and dist_prod.get("siguiente_escalon"):
         partes.append(f"Bono productividad: escalón {esc_prod['desde_pct']}% ({gs(monto_prod)}/línea); "
                       f"faltan {dist_prod['faltan_unidades']} activaciones para el escalón {dist_prod['siguiente_escalon']['desde_pct']}% "
                       f"({gs(float(dist_prod['siguiente_escalon']['monto']))}/línea) y hay {dist_prod['margen_unidades']} de margen antes de caer al escalón inferior.")
@@ -263,12 +263,12 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     conclusion = " ".join(partes)
 
     recomendaciones: list[dict] = []
-    if dist_prod.get("siguiente_escalon") and dist_prod["faltan_unidades"] <= max(30, act * 0.03):
+    if bonos_activos and dist_prod.get("siguiente_escalon") and dist_prod["faltan_unidades"] <= max(30, act * 0.03):
         e = dist_prod["siguiente_escalon"]
         ganancia = act_a * (float(e["monto"]) - monto_prod)
         recomendaciones.append({"severidad": "alert", "titulo": f"A {dist_prod['faltan_unidades']} activaciones del escalón {e['desde_pct']}%",
                                 "detalle": f"Sumar {dist_prod['faltan_unidades']} activaciones netas vale {gs(ganancia)} adicionales de bono productividad este mes (todas las líneas pasan a {gs(float(e['monto']))})."})
-    if esc_prod is not None and dist_prod.get("margen_unidades", 0) <= max(30, act * 0.03):
+    if bonos_activos and esc_prod is not None and dist_prod.get("margen_unidades", 0) <= max(30, act * 0.03):
         inferior = [x for x in sorted(p["escala_productividad"], key=lambda x: -float(x["desde_pct"])) if float(x["desde_pct"]) < float(esc_prod["desde_pct"])]
         perdida = act_a * (monto_prod - (float(inferior[0]["monto"]) if inferior else 0))
         recomendaciones.append({"severidad": "warning", "titulo": f"Acantilado del bono: solo {dist_prod['margen_unidades']} activaciones de margen",
