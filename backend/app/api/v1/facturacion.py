@@ -23,8 +23,10 @@ from ...models.facturacion_upload import FacturacionUpload
 from ...schemas.facturacion import (
     CompareRequest, CompareResponse, FacturacionReportDetail, FacturacionReportList,
     FacturacionReportSummary, FacturacionUploadList, FacturacionUploadRead, PublishRequest,
+    SimuladorRequest,
 )
 from ...services.analyzers.facturacion_compare import compare_facturacion
+from ...services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, simular_facturacion
 from ...services.audit_service import record_action
 from ..deps import (
     CurrentUser, client_ip, require_facturacion_access, require_facturacion_manage,
@@ -191,6 +193,26 @@ async def delete_report(
         resource_type="facturacion_report", resource_id=report_id, ip=client_ip(request),
     )
     return {"status": "deleted", "report_id": report_id}
+
+
+# ============================ SIMULADOR DE FACTURACIÓN ============================
+@router.get("/simulador/parametros")
+async def simulador_parametros(user: CurrentUser = Depends(require_facturacion_access)) -> dict:
+    """Variables de negocio y componentes de facturación (todas editables), sembradas
+    con las liquidaciones reales y los criterios de Claro (bonos, cuota 2, zafra)."""
+    return {"parametros": PARAMETROS_DEFAULT}
+
+
+@router.post("/simulador")
+async def simulador_run(payload: SimuladorRequest,
+                        user: CurrentUser = Depends(require_facturacion_access)) -> dict:
+    """Con la cantidad de ventas (y cualquier variable sobreescrita) genera la
+    facturación del mes, la proyección a 12 meses con caídas por chargeback
+    (zafra) y el peso de los bonos sobre la facturación neta."""
+    try:
+        return simular_facturacion(payload.parametros)
+    except (TypeError, ValueError, KeyError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 
 
 # ============================ COMPARE ============================
