@@ -19,6 +19,7 @@ export default function SimuladorAnualPage() {
   const [p, setP] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
   const [seteado, setSeteado] = useState(false);
+  const [horizonte, setHorizonte] = useState<12 | 18>(12);
   const [ventas, setVentas] = useState<number[]>([]);
   const [res, setRes] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,24 +31,42 @@ export default function SimuladorAnualPage() {
     }).catch((e) => setError(e.message));
   }, []);
 
-  const simular = useCallback((params: any, vpm: number[]) => {
+  const simular = useCallback((params: any, vpm: number[], h: number) => {
     apiFetch<any>("/api/v1/facturacion/simulador/anual", {
-      method: "POST", body: JSON.stringify({ parametros: params, ventas_por_mes: vpm }),
+      method: "POST", body: JSON.stringify({ parametros: params, ventas_por_mes: vpm, horizonte: h }),
     }).then((d) => { setRes(d); setError(null); }).catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => {
-    if (!seteado || !p || ventas.length !== 12) return;
+    if (!seteado || !p || ventas.length !== horizonte) return;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => simular(p, ventas), 250);
+    timer.current = setTimeout(() => simular(p, ventas, horizonte), 250);
     return () => clearTimeout(timer.current);
-  }, [seteado, p, ventas, simular]);
+  }, [seteado, p, ventas, horizonte, simular]);
 
   const setear = () => {
     const v1 = Number(p.ventas) || 0;
-    setVentas([v1, ...Array(11).fill(v1)]);
+    setVentas([v1, ...Array(horizonte - 1).fill(v1)]);
     setSeteado(true);
   };
+  const cambiarHorizonte = (h: 12 | 18) => {
+    setHorizonte(h);
+    setVentas((prev) => {
+      if (!prev.length) return prev;
+      const base = prev[prev.length - 1] ?? prev[0];
+      return h > prev.length ? [...prev, ...Array(h - prev.length).fill(base)] : prev.slice(0, h);
+    });
+  };
+  const HorizonteToggle = () => (
+    <div className="inline-flex rounded-md border border-brand-border overflow-hidden no-print">
+      {([12, 18] as const).map((h) => (
+        <button key={h} onClick={() => cambiarHorizonte(h)}
+          className={`px-3 py-1.5 text-xs font-bold ${horizonte === h ? "bg-brand-primary text-white" : "text-brand-graphite hover:bg-brand-bg"}`}>
+          {h} meses
+        </button>
+      ))}
+    </div>
+  );
   const editarMes1 = () => { setSeteado(false); setRes(null); };
   const setVenta = (i: number, v: number) => setVentas((prev) => prev.map((x, j) => (j === i ? v : x)));
 
@@ -57,8 +76,8 @@ export default function SimuladorAnualPage() {
 
   return (
     <AppShell>
-      <PrintCover titulo="Simulación Anual de Facturación"
-        periodo={a ? `${formatInt(a.ventas)} ventas en 12 meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%) · Televentas Claro` : undefined} />
+      <PrintCover titulo={`Simulación de Facturación a ${horizonte} meses`}
+        periodo={a ? `${formatInt(a.ventas)} ventas en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%) · Televentas Claro` : undefined} />
 
       <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/televentas-claro" className="hover:text-brand-primary">Televentas Claro</Link>
@@ -68,13 +87,17 @@ export default function SimuladorAnualPage() {
         <div>
           <h1 className="font-display text-3xl sm:text-4xl text-brand-ink uppercase">Simulador Anual</h1>
           <p className="text-sm text-brand-slate mt-1 max-w-3xl">
-            Balance de 12 meses. Seteás el mes 1 (objetivo, tarifas, zafra y estructura); los meses siguientes solo cambian
+            Balance a 12 o 18 meses. Seteás el mes 1 (objetivo, tarifas, zafra y estructura); los meses siguientes solo cambian
             las ventas. La estructura fija del mes 1 se mantiene todo el año: lo que varía con las ventas son los bonos,
             las comisiones y la logística. Cada mes liquida su facturación más los ajustes (chargeback, cuota 2, residual)
             de los meses anteriores.
           </p>
         </div>
-        <PrintButton label="Imprimir / Guardar PDF" />
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate no-print">Horizonte</span>
+          <HorizonteToggle />
+          <PrintButton label="Imprimir / Guardar PDF" />
+        </div>
       </div>
 
       {error && <p className="text-sm text-brand-primary mb-4">{error}</p>}
@@ -95,12 +118,12 @@ export default function SimuladorAnualPage() {
                 {" "}<b>{Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.ventas_por_vendedor) || 1, 1))} vendedores</b>,
                 {" "}{Math.ceil(Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.ventas_por_vendedor) || 1, 1)) / Math.max(Number(p.costos.supervisor_cada_vendedores) || 1, 1))} supervisores,
                 {" "}{Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.backoffice_cada_ventas) || 1, 1))} backoffice, {p.costos.coordinadores} coordinador y {p.costos.controllers} controllers.
-                Esa estructura y el objetivo CO de <b>{formatInt(Number(p.objetivo_co) || 0)}</b> quedan fijos para los 12 meses.
+                Esa estructura y el objetivo CO de <b>{formatInt(Number(p.objetivo_co) || 0)}</b> quedan fijos para los {horizonte} meses.
               </p>
               <button onClick={setear} disabled={!(Number(p.ventas) > 0)} className="btn-primary !px-6 !py-3 text-base shadow-lg disabled:opacity-50">
                 Setear mes 1 y fijar la estructura →
               </button>
-              <p className="text-[11px] text-brand-slate mt-3">Después vas a cargar solo las ventas de los meses 2 a 12. Podés volver a editar el mes 1 cuando quieras.</p>
+              <p className="text-[11px] text-brand-slate mt-3">Después vas a cargar solo las ventas de los meses 2 a {horizonte}. Podés volver a editar el mes 1 cuando quieras.</p>
             </section>
           </div>
         </div>
@@ -142,17 +165,17 @@ export default function SimuladorAnualPage() {
           {res && a && (
             <>
               <section className="card p-5 border-l-4 border-brand-ink bg-white">
-                <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Conclusión del año</h2>
+                <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Conclusión del período ({horizonte} meses)</h2>
                 <p className="text-[15px] text-brand-ink leading-relaxed font-medium">{res.conclusion}</p>
               </section>
 
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                <KpiCard label="Ventas del año" value={formatInt(a.ventas)} hint={`${formatInt(Math.round(a.ventas / 12))} por mes`} accent="neutral" />
-                <KpiCard label="Facturación bruta" value={formatGs(a.facturacion_bruta)} hint="suma de los 12 meses" accent="primary" />
+                <KpiCard label={`Ventas en ${horizonte} meses`} value={formatInt(a.ventas)} hint={`${formatInt(Math.round(a.ventas / horizonte))} por mes`} accent="neutral" />
+                <KpiCard label="Facturación bruta" value={formatGs(a.facturacion_bruta)} hint={`suma de los ${horizonte} meses`} accent="primary" />
                 <KpiCard label="Ingreso neto liquidado" value={formatGs(a.ingreso_neto)} hint={`ajustes ${formatGs(a.ajustes)}`} accent="cyan" />
-                <KpiCard label="Costos del año" value={formatGs(a.costos)} hint={`fijos ${formatGs(a.costos_fijos_mes)}/mes`} accent="orange" />
-                <KpiCard label="Resultado anual" value={formatGs(a.resultado)} hint={`${a.margen_pct}% sobre ingreso neto`} accent={a.resultado >= 0 ? "cyan" : "primary"} />
-                <KpiCard label="Con cola post-12" value={formatGs(a.resultado_con_cola)} hint={`pendiente ${formatGs(a.cola_post_12.total)}`} accent={a.resultado_con_cola >= 0 ? "cyan" : "primary"} />
+                <KpiCard label="Costos del período" value={formatGs(a.costos)} hint={`fijos ${formatGs(a.costos_fijos_mes)}/mes`} accent="orange" />
+                <KpiCard label={`Resultado a ${horizonte} meses`} value={formatGs(a.resultado)} hint={`${a.margen_pct}% sobre ingreso neto`} accent={a.resultado >= 0 ? "cyan" : "primary"} />
+                <KpiCard label={`Con cola post-${horizonte}`} value={formatGs(a.resultado_con_cola)} hint={`pendiente ${formatGs(a.cola_post_12.total)}`} accent={a.resultado_con_cola >= 0 ? "cyan" : "primary"} />
               </div>
 
               <div className="grid xl:grid-cols-2 gap-6 print:block">
@@ -213,15 +236,15 @@ export default function SimuladorAnualPage() {
               {/* ===== EERR anual ===== */}
               <section className="card overflow-x-auto">
                 <div className="px-4 pt-4">
-                  <h2 className="font-display text-xl text-brand-ink uppercase">Estado de resultados anual (EERR)</h2>
-                  <p className="text-xs text-brand-slate mb-2">Liquidación mes a mes con estructura fija del mes 1. Cada columna es un mes calendario; la última, el total del año.</p>
+                  <h2 className="font-display text-xl text-brand-ink uppercase">Estado de resultados a {horizonte} meses (EERR)</h2>
+                  <p className="text-xs text-brand-slate mb-2">Liquidación mes a mes con estructura fija del mes 1. Cada columna es un mes calendario; la última, el total del período.</p>
                 </div>
-                <table className="w-full text-[11px] min-w-[1180px]">
+                <table className="w-full text-[11px]" style={{ minWidth: `${300 + meses.length * 74}px` }}>
                   <thead className="border-b border-brand-border">
                     <tr className="text-[9px] uppercase tracking-wider2 text-brand-slate">
                       <th className="px-3 py-2 text-left sticky left-0 bg-white">Concepto</th>
                       {meses.map((m: any) => <th key={m.mes} className="px-2 py-2 text-right">M{m.mes}</th>)}
-                      <th className="px-3 py-2 text-right bg-brand-primary/5 text-brand-primary">Año</th>
+                      <th className="px-3 py-2 text-right bg-brand-primary/5 text-brand-primary">Total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -285,7 +308,7 @@ export default function SimuladorAnualPage() {
                   <Lectura>
                     Leé cada columna como la liquidación de ese mes: lo que facturan las ventas del mes, más lo que las cohortes
                     anteriores devuelven (chargeback) o suman (cuota 2, residual), menos los costos — los fijos no cambian, los
-                    variables siguen a las ventas. La columna "Año" es el balance de los 12 meses; la cola post-12 (residual por
+                    variables siguen a las ventas. La columna "Total" es el balance del período; la cola posterior (residual por
                     cobrar y devoluciones pendientes de las últimas cohortes) se informa aparte en los KPIs.
                   </Lectura>
                 </div>
@@ -295,7 +318,7 @@ export default function SimuladorAnualPage() {
               <section className="card overflow-x-auto">
                 <div className="px-4 pt-4">
                   <h2 className="font-display text-lg text-brand-ink uppercase">Bonos mes a mes</h2>
-                  <p className="text-xs text-brand-slate mb-2">Cumplimiento del objetivo CO ({formatInt(Number(p.objetivo_co))}) y escalón alcanzado cada mes. Bonos del año: {formatGs(a.bonos)} · devueltos {formatGs(Math.abs(a.devolucion_bonos))}.</p>
+                  <p className="text-xs text-brand-slate mb-2">Cumplimiento del objetivo CO ({formatInt(Number(p.objetivo_co))}) y escalón alcanzado cada mes. Bonos del período: {formatGs(a.bonos)} · devueltos {formatGs(Math.abs(a.devolucion_bonos))}.</p>
                 </div>
                 <table className="w-full text-xs min-w-[720px]">
                   <thead className="bg-brand-bg text-[10px] uppercase tracking-wider2 text-brand-slate">

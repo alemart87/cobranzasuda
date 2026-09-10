@@ -222,7 +222,9 @@ async def simulador_anual_run(payload: SimuladorAnualRequest,
     meses 2..12 solo cambian las ventas. Balance mensual con los ajustes de todas
     las cohortes, EERR anual y cola pendiente después del mes 12."""
     try:
-        return simular_anual(payload.parametros, payload.ventas_por_mes)
+        if payload.horizonte not in (12, 18):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12 o 18 meses.")
+        return simular_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte)
     except (TypeError, ValueError, KeyError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 

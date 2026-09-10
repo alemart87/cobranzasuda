@@ -435,8 +435,11 @@ def _ahorro_por_venta_vendedor(p: dict, act: float) -> float:
 _FLUJOS = ("residual", "cuota2", "legajos", "clawbacks", "clawback_bonos", "recalculo_productividad")
 
 
-def simular_anual(params: dict | None, ventas_por_mes: list[float]) -> dict[str, Any]:
-    """Balance de 12 meses con estructura FIJA seteada en el mes 1.
+HORIZONTES = (12, 18)
+
+
+def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12) -> dict[str, Any]:
+    """Balance de 12 o 18 meses con estructura FIJA seteada en el mes 1.
 
     - El mes 1 define objetivo CO, tarifas, zafra, escalas y la estructura
       (vendedores, supervisores, backoffice, coordinación, controllers).
@@ -448,8 +451,9 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float]) -> dict[str,
       legajos, chargebacks, devolución de bonos): así funciona la liquidación real.
     """
     base = parametros_con_defaults(params)
-    ventas = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:12]
-    while len(ventas) < 12:
+    h = int(horizonte) if int(horizonte or 12) in HORIZONTES else 12
+    ventas = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:h]
+    while len(ventas) < h:
         ventas.append(ventas[-1] if ventas else float(base["ventas"]))
     base["ventas"] = ventas[0]
 
@@ -461,7 +465,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float]) -> dict[str,
 
     meses: list[dict] = []
     acumulado = 0.0
-    for t in range(12):
+    for t in range(h):
         c = cohortes[t]
         fila: dict[str, Any] = {
             "mes": t + 1, "ventas": round(ventas[t]),
@@ -474,8 +478,10 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float]) -> dict[str,
         }
         for k in _FLUJOS:
             fila[k] = 0.0
-        for m in range(t):  # cohortes anteriores, edad t-m
+        for m in range(t):  # cohortes anteriores, edad t-m (los flujos terminan a los 12 meses)
             edad = t - m
+            if edad > 12:
+                continue
             for k in _FLUJOS:
                 fila[k] += cohortes[m]["meses"][edad][k]
         fila["ajustes"] = sum(fila[k] for k in _FLUJOS)
@@ -490,15 +496,16 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float]) -> dict[str,
         acumulado += fila["resultado"]
         fila["acumulado"] = round(acumulado)
         fila["ventas_por_vendedor"] = round(ventas[t] / headcount["vendedores"], 1) if headcount["vendedores"] else 0
-        fila["lineas_activas"] = round(sum(cohortes[m]["meses"][t - m]["lineas_activas"] for m in range(t + 1)))
+        # Líneas activas: después de los 12 meses la cohorte se mantiene en su último nivel de zafra.
+        fila["lineas_activas"] = round(sum(cohortes[m]["meses"][min(t - m, 12)]["lineas_activas"] for m in range(t + 1)))
         for k in ("facturacion_bruta", "ajustes", "ingreso_neto", *_FLUJOS):
             fila[k] = round(fila[k])
         meses.append(fila)
 
-    # Cola después del mes 12: flujos de las cohortes que caen fuera del horizonte.
+    # Cola después del horizonte: flujos de las cohortes que caen fuera de él.
     cola = {k: 0.0 for k in _FLUJOS}
-    for m in range(12):
-        for edad in range(12 - m, 13):
+    for m in range(h):
+        for edad in range(h - m, 13):
             if edad <= 0:
                 continue
             for k in _FLUJOS:
@@ -520,6 +527,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float]) -> dict[str,
         "costos_fijos_mes": round(sum(m1["costos"]["rrhh"][k] for k in ("operadores_salario", "supervisores", "coordinadores", "backoffice", "controllers"))
                                   * (1 + float(base["costos"]["ips_pct"]) / 100) * (13 / 12 if base["costos"].get("aguinaldo", True) else 1)
                                   + float(base["costos"]["logistica_premios"])),
+        "horizonte": h,
         "cola_post_12": {**{k: round(v) for k, v in cola.items()}, "total": round(cola_total)},
         "resultado_con_cola": round(tot("resultado") + cola_total),
         "meses_negativos": sum(1 for f in meses if f["resultado"] < 0),
@@ -533,21 +541,21 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float]) -> dict[str,
     def n(v: float) -> str:
         return f"{v:,.0f}".replace(",", ".")
     partes = [
-        f"Año simulado con estructura fija del mes 1 ({headcount['vendedores']} vendedores, {headcount['supervisores']} supervisores, "
+        f"{h} meses simulados con estructura fija del mes 1 ({headcount['vendedores']} vendedores, {headcount['supervisores']} supervisores, "
         f"{headcount['backoffice']} backoffice; costo fijo {gs(anual['costos_fijos_mes'])}/mes) y objetivo CO {n(float(base['objetivo_co']))}.",
-        f"Ventas del año: {n(anual['ventas'])}. Facturación bruta {gs(anual['facturacion_bruta'])}; con los ajustes de chargeback, cuota 2 y residual "
+        f"Ventas del período: {n(anual['ventas'])}. Facturación bruta {gs(anual['facturacion_bruta'])}; con los ajustes de chargeback, cuota 2 y residual "
         f"el ingreso neto liquidado es {gs(anual['ingreso_neto'])}. Costos {gs(anual['costos'])}. "
-        f"Resultado anual {gs(anual['resultado'])} ({anual['margen_pct']}%).",
+        f"Resultado del período {gs(anual['resultado'])} ({anual['margen_pct']}%).",
     ]
     if anual["meses_negativos"]:
         partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es el mes {anual['peor_mes']} y el mejor el {anual['mejor_mes']}.")
     if anual["meses_sin_bono_productividad"] and base.get("bonos_activos", True):
         partes.append(f"En {anual['meses_sin_bono_productividad']} mes(es) las ventas quedaron bajo el 90% del objetivo y el bono productividad no se liquidó.")
     if cola_total:
-        partes.append(f"Después del mes 12 quedan pendientes {gs(cola_total)} de las cohortes del año (residual por cobrar menos devoluciones): "
+        partes.append(f"Después del mes {h} quedan pendientes {gs(cola_total)} de las cohortes del año (residual por cobrar menos devoluciones): "
                       f"resultado con esa cola {gs(anual['resultado_con_cola'])}.")
 
     return {
-        "parametros": base, "ventas_por_mes": [round(v) for v in ventas],
+        "parametros": base, "horizonte": h, "ventas_por_mes": [round(v) for v in ventas],
         "headcount": headcount, "meses": meses, "anual": anual, "conclusion": " ".join(partes),
     }

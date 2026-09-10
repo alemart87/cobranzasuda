@@ -140,3 +140,18 @@ def test_simulacion_anual_estructura_fija():
     assert a["resultado"] == sum(f["resultado"] for f in r["meses"])
     assert r["meses"][-1]["acumulado"] == a["resultado"]
     assert a["cola_post_12"]["total"] != 0
+
+
+def test_simulacion_a_18_meses():
+    from app.services.analyzers.facturacion_simulador import simular_anual
+    r12 = simular_anual({"objetivo_co": 1750}, [1900] * 12, 12)
+    r18 = simular_anual({"objetivo_co": 1750}, [1900] * 18, 18)
+    assert len(r18["meses"]) == 18 and r18["horizonte"] == 18 and r12["horizonte"] == 12
+    # los primeros 12 meses son idénticos en ambos horizontes
+    assert [m["resultado"] for m in r18["meses"][:12]] == [m["resultado"] for m in r12["meses"]]
+    # el mes 13 sigue recibiendo residual de cohortes recientes y ajustes
+    m13 = r18["meses"][12]
+    assert m13["residual"] > 0 and m13["ajustes"] != 0
+    # a 18 meses queda menos cola pendiente que a 12 (más flujos entran en el período)
+    assert abs(r18["anual"]["cola_post_12"]["total"]) <= abs(r12["anual"]["cola_post_12"]["total"]) + 1
+    assert "18 meses simulados" in r18["conclusion"]
