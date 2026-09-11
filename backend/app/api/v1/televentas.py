@@ -22,6 +22,7 @@ from ...core.database import get_db
 from ...jobs.televentas_queue import estado_cola, signal_televentas_queue
 from ...models.televentas_analisis import TeleventasAnalisis
 from ...models.televentas_compromiso import TeleventasCompromiso
+from ...models.televentas_reunion import TeleventasReunionSemanal
 from ...models.televentas_alerta import TeleventasAlerta
 from ...models.televentas_eficiencia import TeleventasEficiencia, TeleventasEficienciaNota
 from ...models.televentas_crm_report import TeleventasCrmReport
@@ -32,7 +33,7 @@ from ...models.televentas_produccion_item import TeleventasProduccionItem
 from ...models.televentas_produccion_report import TeleventasProduccionReport
 from ...models.televentas_produccion_upload import TeleventasProduccionUpload
 from ...schemas.televentas import (
-    AnalizadorRequest, CompromisoCreate, CompromisoUpdate, SemanalAnalizadorRequest,
+    AnalizadorRequest, CompromisoCreate, CompromisoUpdate, ReunionSemanalUpsert, SemanalAnalizadorRequest,
     EficienciaRequest, EficienciaNotaRequest, AlertaAccionRequest,
     PublishRequest,
     TeleventasCrmReportDetail, TeleventasCrmReportList, TeleventasCrmReportSummary,
@@ -884,11 +885,17 @@ async def actualizar_compromiso(
         c.nota = payload.nota.strip() or None
     if payload.descripcion is not None and payload.descripcion.strip():
         c.descripcion = payload.descripcion.strip()
+    if payload.responsable is not None:
+        if payload.responsable not in ("Voicenter", "Sudameris"):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Responsable debe ser Voicenter o Sudameris.")
+        c.responsable = payload.responsable
     await db.commit()
     await db.refresh(c)  # updated_at es server-side: sin refresh queda expirado (500 en async)
     await record_action(db, user_id=user.id, action="update_televentas_compromiso",
                         resource_type="televentas_compromiso", resource_id=c.id,
-                        ip=client_ip(request), extra={"estado": c.estado})
+                        ip=client_ip(request),
+                        extra={"estado": c.estado, "responsable": c.responsable,
+                               "editado": bool(payload.descripcion or payload.nota is not None)})
     return _compromiso_out(c)
 
 
@@ -906,6 +913,83 @@ async def borrar_compromiso(
     await record_action(db, user_id=user.id, action="delete_televentas_compromiso",
                         resource_type="televentas_compromiso", resource_id=compromiso_id, ip=client_ip(request))
     return {"status": "deleted", "id": compromiso_id}
+
+
+# ---- Conclusión de la reunión semanal (una por semana) ----
+def _reunion_out(r: TeleventasReunionSemanal | None) -> dict:
+    if not r:
+        return {"reunion": None}
+    return {"reunion": {
+        "id": r.id, "semana": r.semana, "conclusion": r.conclusion,
+        "created_by": r.created_by, "created_by_nombre": r.created_by_nombre,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "updated_by": r.updated_by, "updated_by_nombre": r.updated_by_nombre,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    }}
+
+
+@router.get("/semanal/reunion")
+async def obtener_reunion(
+    semana: str = Query(..., description="Clave de la semana (fecha de inicio o YYYY-Www)"),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    r = (await db.execute(
+        select(TeleventasReunionSemanal).where(TeleventasReunionSemanal.semana == semana.strip())
+    )).scalars().first()
+    return _reunion_out(r)
+
+
+@router.put("/semanal/reunion")
+async def guardar_reunion(
+    payload: ReunionSemanalUpsert, request: Request,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Crea o reemplaza la conclusión de la semana. Queda autor y fecha de la
+    creación y de la última edición."""
+    semana = payload.semana.strip()
+    texto = payload.conclusion.strip()
+    if not semana or not texto:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La conclusión necesita semana y texto.")
+    r = (await db.execute(
+        select(TeleventasReunionSemanal).where(TeleventasReunionSemanal.semana == semana)
+    )).scalars().first()
+    if r:
+        r.conclusion = texto
+        r.updated_by = user.id
+        r.updated_by_nombre = user.full_name
+        accion = "update_televentas_reunion"
+    else:
+        r = TeleventasReunionSemanal(semana=semana, conclusion=texto,
+                                     created_by=user.id, created_by_nombre=user.full_name)
+        db.add(r)
+        accion = "create_televentas_reunion"
+    await db.commit()
+    await db.refresh(r)
+    await record_action(db, user_id=user.id, action=accion,
+                        resource_type="televentas_reunion", resource_id=r.id,
+                        ip=client_ip(request), extra={"semana": semana})
+    return _reunion_out(r)
+
+
+@router.delete("/semanal/reunion")
+async def borrar_reunion(
+    semana: str, request: Request,
+    user: CurrentUser = Depends(require_analyst_or_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    r = (await db.execute(
+        select(TeleventasReunionSemanal).where(TeleventasReunionSemanal.semana == semana.strip())
+    )).scalars().first()
+    if not r:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "La semana no tiene conclusión registrada")
+    await db.delete(r)
+    await db.commit()
+    await record_action(db, user_id=user.id, action="delete_televentas_reunion",
+                        resource_type="televentas_reunion", resource_id=r.id,
+                        ip=client_ip(request), extra={"semana": semana})
+    return {"status": "deleted", "semana": semana}
 
 
 # ============================ EFICIENCIA DEL NEGOCIO ============================

@@ -7,15 +7,10 @@ import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover, PrintHeader } from "@/components/PrintButton";
 import { InformeAnalisis } from "@/components/televentas/InformeAnalisis";
 import { ResenaRegistro } from "@/components/televentas/ResenaRegistro";
+import { ReunionSemanal } from "@/components/televentas/ReunionSemanal";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt, formatPct } from "@/lib/format";
 import { weekLabel } from "@/lib/month";
-
-const ESTADO_COMP: Record<string, { label: string; cls: string; next: string }> = {
-  pendiente: { label: "Pendiente", cls: "bg-brand-primary/10 text-brand-primary", next: "en_proceso" },
-  en_proceso: { label: "En proceso", cls: "bg-brand-orange/10 text-brand-orange", next: "cumplido" },
-  cumplido: { label: "Cumplido", cls: "bg-emerald-100 text-emerald-700", next: "pendiente" },
-};
 
 const FMT: Record<string, (v: number) => string> = {
   gs: formatGs, pct: (v) => formatPct(v), int: formatInt,
@@ -39,11 +34,6 @@ export default function SemanalPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandido, setExpandido] = useState(false);
 
-  // Compromisos de la reunión
-  const [compromisos, setCompromisos] = useState<any[]>([]);
-  const [nuevoDesc, setNuevoDesc] = useState("");
-  const [nuevoResp, setNuevoResp] = useState<"Voicenter" | "Sudameris">("Voicenter");
-
   useEffect(() => {
     const saved = Number(localStorage.getItem(INICIO_KEY));
     if (!Number.isNaN(saved) && saved >= 0 && saved <= 6 && saved !== 4) setInicio(saved);
@@ -63,12 +53,8 @@ export default function SemanalPage() {
     setInicio(v);
   };
 
-  const cargarCompromisos = (sem: string) =>
-    apiFetch<any>(`/api/v1/televentas/semanal/compromisos?semana=${sem}`)
-      .then((d) => setCompromisos(d.compromisos ?? [])).catch(() => setCompromisos([]));
-
   useEffect(() => {
-    if (semanaSel) { cargarCompromisos(semanaSel); setRes(null); setExpandido(false); setError(null); }
+    if (semanaSel) { setRes(null); setExpandido(false); setError(null); }
   }, [semanaSel]);
 
   const semanas: any[] = data?.semanas ?? [];
@@ -86,28 +72,6 @@ export default function SemanalPage() {
       });
       setRes(d);
     } catch (e: any) { setError(e.message); } finally { setRunning(false); }
-  };
-
-  const agregarCompromiso = async () => {
-    if (!semanaSel || !nuevoDesc.trim()) return;
-    try {
-      await apiFetch<any>("/api/v1/televentas/semanal/compromisos", {
-        method: "POST",
-        body: JSON.stringify({ semana: semanaSel, descripcion: nuevoDesc.trim(), responsable: nuevoResp }),
-      });
-      setNuevoDesc("");
-      cargarCompromisos(semanaSel);
-    } catch { /* noop */ }
-  };
-
-  const cambiarEstado = async (c: any) => {
-    const next = ESTADO_COMP[c.estado]?.next ?? "pendiente";
-    try {
-      await apiFetch<any>(`/api/v1/televentas/semanal/compromisos/${c.id}`, {
-        method: "PATCH", body: JSON.stringify({ estado: next }),
-      });
-      if (semanaSel) cargarCompromisos(semanaSel);
-    } catch { /* noop */ }
   };
 
   const obs = res?.observacion;
@@ -346,75 +310,8 @@ export default function SemanalPage() {
                 </table>
               </section>
 
-              {/* Reunión de los viernes: compromisos */}
-              <section className="card p-5 mb-6">
-                <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
-                  <h2 className="font-display text-xl text-brand-ink uppercase">Reunión semanal · Compromisos</h2>
-                  <span className="text-[10px] uppercase tracking-wider2 text-brand-slate font-semibold">Voicenter · Sudameris — quedan registrados</span>
-                </div>
-                <p className="text-xs text-brand-slate mb-4 max-w-3xl">
-                  Acciones acordadas en la reunión de los viernes. Ambas partes cargan sus compromisos;
-                  el estado se actualiza clickeando el chip y todo queda en el registro con fecha y autor.
-                </p>
-
-                <div className="flex flex-wrap items-end gap-2 mb-4 no-print">
-                  <label className="text-sm flex-1 min-w-[260px]">
-                    <span className="block text-[11px] text-brand-slate mb-1">Nuevo compromiso para {weekLabel(semanaSel!)}</span>
-                    <input value={nuevoDesc} onChange={(e) => setNuevoDesc(e.target.value)}
-                      placeholder='Ej.: "Sudameris entrega base depurada de 20.000 registros el lunes"'
-                      className="input w-full !py-1.5" />
-                  </label>
-                  <select value={nuevoResp} onChange={(e) => setNuevoResp(e.target.value as any)}
-                    className="text-sm border border-brand-border rounded px-3 py-2 bg-white">
-                    <option value="Voicenter">Responsable: Voicenter</option>
-                    <option value="Sudameris">Responsable: Sudameris</option>
-                  </select>
-                  <button onClick={agregarCompromiso} disabled={!nuevoDesc.trim()} className="btn-primary disabled:opacity-50">
-                    Registrar
-                  </button>
-                </div>
-
-                {compromisos.length === 0 ? (
-                  <p className="text-sm text-brand-slate">Sin compromisos registrados para esta semana.</p>
-                ) : (
-                  <table className="w-full text-sm">
-                    <thead className="bg-brand-bg">
-                      <tr className="text-[10px] uppercase tracking-wider2 text-brand-slate">
-                        <th className="px-3 py-2 text-left">Compromiso</th>
-                        <th className="px-3 py-2 text-center">Responsable</th>
-                        <th className="px-3 py-2 text-center">Estado</th>
-                        <th className="px-3 py-2 text-right">Registrado</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {compromisos.map((c) => {
-                        const st = ESTADO_COMP[c.estado] ?? ESTADO_COMP.pendiente;
-                        return (
-                          <tr key={c.id} className="border-t border-brand-border">
-                            <td className="px-3 py-2 text-brand-ink">{c.descripcion}
-                              {c.nota && <div className="text-[11px] text-brand-slate mt-0.5">{c.nota}</div>}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${c.responsable === "Voicenter" ? "bg-brand-cyan/10 text-brand-cyan" : "bg-brand-purple/10 text-brand-purple"}`}>
-                                {c.responsable}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <button onClick={() => cambiarEstado(c)} title="Click para cambiar estado"
-                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${st.cls} hover:opacity-80`}>
-                                {st.label}
-                              </button>
-                            </td>
-                            <td className="px-3 py-2 text-right text-[11px] text-brand-slate whitespace-nowrap">
-                              {c.created_at ? new Date(c.created_at).toLocaleDateString("es-PY") : "—"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </section>
+              {/* Reunión de los viernes: conclusión + compromisos (editar / eliminar / arrastrados) */}
+              <ReunionSemanal semana={semanaSel!} />
             </>
           )}
         </>
