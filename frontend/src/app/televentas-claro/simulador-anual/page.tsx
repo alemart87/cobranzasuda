@@ -77,7 +77,7 @@ export default function SimuladorAnualPage() {
   return (
     <AppShell>
       <PrintCover titulo={`Simulación de Facturación a ${horizonte} meses`}
-        periodo={a ? `${formatInt(a.ventas)} ventas en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%) · Televentas Claro` : undefined} />
+        periodo={a ? `${formatInt(a.ventas)} ventas en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%)${p?.bonos_activos === false ? " · SIN BONOS" : ""} · Televentas Claro` : undefined} />
 
       <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/televentas-claro" className="hover:text-brand-primary">Televentas Claro</Link>
@@ -161,6 +161,21 @@ export default function SimuladorAnualPage() {
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(0.98, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Caer 2% mensual</button>
             </div>
           </section>
+
+          <div className={`flex flex-wrap items-center justify-between gap-3 rounded-md border-2 px-4 py-3 ${p.bonos_activos === false ? "border-brand-ink bg-brand-ink text-white" : "border-brand-border bg-white"}`}>
+            <div>
+              <div className={`text-[10px] uppercase tracking-wider2 font-bold ${p.bonos_activos === false ? "text-white/70" : "text-brand-slate"}`}>Escenario de bonos</div>
+              <div className="text-sm font-semibold">
+                {p.bonos_activos === false
+                  ? `Bonos DESACTIVADOS — los ${horizonte} meses se calculan sin bono productividad ni bono efectividad`
+                  : "Bonos activos — cada mes liquida según las escalas de Claro"}
+              </div>
+            </div>
+            <button onClick={() => setP((prev: any) => ({ ...prev, bonos_activos: prev.bonos_activos === false }))}
+              className={`no-print px-4 py-2 rounded-md text-sm font-bold transition-colors ${p.bonos_activos === false ? "bg-white text-brand-ink hover:bg-brand-bg" : "bg-brand-primary text-white hover:bg-brand-primary/90"}`}>
+              {p.bonos_activos === false ? "Reactivar bonos" : "Simular sin bonos"}
+            </button>
+          </div>
 
           {res && a && (
             <>
