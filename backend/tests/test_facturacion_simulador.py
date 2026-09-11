@@ -62,7 +62,7 @@ def test_costos_estructura_y_margen():
     r = simular_facturacion({"ventas": 1900, "objetivo_co": 1750})
     c, m = r["costos"], r["margen"]
     assert c["headcount"] == {"vendedores": 95, "supervisores": 7, "backoffice": 11,
-                              "coordinadores": 1, "controllers": 2, "total": 116}
+                              "coordinadores": 1, "controllers": 2, "subgerencia": 0, "total": 116}
     assert c["salario_operador_mes"] == round(14635 * 7 * 23)
     assert c["rrhh"]["operadores_salario"] == round(95 * 14635 * 7 * 23)
     assert c["rrhh"]["operadores_comisiones"] == round(r["bruto_mes0"] * 0.25)
@@ -203,3 +203,24 @@ def test_cierre_con_todas_las_caidas():
     assert v["resultado_final"] == a["resultado_con_cola"] == a["resultado"] + cola["total"]
     assert v["gana"] == (a["resultado_con_cola"] >= 0)
     assert cola["ultimo_mes_caidas"] == 18 and cola["ultimo_mes_residual"] == 24
+
+
+def test_subgerencia_comercial_en_analisis():
+    """SubGerencia Comercial: 0 por defecto (no cambia nada); al cargarla suma al costo con IPS y aguinaldo."""
+    from app.services.analyzers.facturacion_simulador import simular_anual
+    base = simular_facturacion({"ventas": 1900})
+    assert PARAMETROS_DEFAULT["costos"]["subgerencia_salario"] == 0
+    assert base["costos"]["rrhh"]["subgerencia"] == 0 and base["costos"]["headcount"]["subgerencia"] == 0
+    con = simular_facturacion({"ventas": 1900, "costos": {"subgerencia_salario": 8_000_000}})
+    c = con["costos"]
+    assert c["rrhh"]["subgerencia"] == 8_000_000 and c["headcount"]["subgerencia"] == 1
+    assert c["headcount"]["total"] == base["costos"]["headcount"]["total"] + 1
+    ips = 16.5 / 100
+    esperado = 8_000_000 * (1 + ips) * (13 / 12)          # salario + IPS + aguinaldo sobre (salario + IPS)
+    assert abs((c["total"] - base["costos"]["total"]) - esperado) <= 3
+    assert con["margen"]["meses6"] == base["margen"]["meses6"] - (c["total"] - base["costos"]["total"])
+    # en la anual entra en el costo fijo mensual
+    a0 = simular_anual({}, [1900] * 12)["anual"]
+    a1 = simular_anual({"costos": {"subgerencia_salario": 8_000_000}}, [1900] * 12)["anual"]
+    assert abs((a1["costos_fijos_mes"] - a0["costos_fijos_mes"]) - esperado) <= 3
+    assert abs((a1["costos"] - a0["costos"]) - esperado * 12) <= 40

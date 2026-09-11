@@ -118,7 +118,7 @@ export default function SimuladorAnualPage() {
                 Con las ventas del mes 1 (<b>{formatInt(Number(p.ventas) || 0)}</b>) se dimensiona la estructura:
                 {" "}<b>{Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.ventas_por_vendedor) || 1, 1))} vendedores</b>,
                 {" "}{Math.ceil(Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.ventas_por_vendedor) || 1, 1)) / Math.max(Number(p.costos.supervisor_cada_vendedores) || 1, 1))} supervisores,
-                {" "}{Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.backoffice_cada_ventas) || 1, 1))} backoffice, {p.costos.coordinadores} coordinador y {p.costos.controllers} controllers.
+                {" "}{Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.backoffice_cada_ventas) || 1, 1))} backoffice, {p.costos.coordinadores} coordinador y {p.costos.controllers} controllers{Number(p.costos.subgerencia_salario) > 0 ? <> y <b className="text-brand-primary">1 SubGerencia Comercial</b> ({formatGs(Number(p.costos.subgerencia_salario))}/mes, en análisis)</> : null}.
                 Esa estructura y el objetivo CO de <b>{formatInt(Number(p.objetivo_co) || 0)}</b> quedan fijos para los {horizonte} meses.
               </p>
               <button onClick={setear} disabled={!(Number(p.ventas) > 0)} className="btn-primary !px-6 !py-3 text-base shadow-lg disabled:opacity-50">
@@ -138,7 +138,7 @@ export default function SimuladorAnualPage() {
               <div>
                 <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate">Mes 1 seteado · estructura fija</div>
                 <div className="text-sm text-brand-ink mt-1">
-                  {hc ? <><b>{hc.vendedores}</b> vendedores · <b>{hc.supervisores}</b> supervisores · <b>{hc.backoffice}</b> backoffice · {hc.coordinadores} coordinador · {hc.controllers} controllers</> : "calculando…"}
+                  {hc ? <><b>{hc.vendedores}</b> vendedores · <b>{hc.supervisores}</b> supervisores · <b>{hc.backoffice}</b> backoffice · {hc.coordinadores} coordinador · {hc.controllers} controllers{hc.subgerencia ? <> · <b className="text-brand-primary">1 SubGerencia Comercial</b></> : null}</> : "calculando…"}
                   {" "}· objetivo CO <b>{formatInt(Number(p.objetivo_co))}</b> · {p.costos.ventas_por_vendedor} ventas/vendedor
                   {a ? <> · costo fijo <b>{formatGs(a.costos_fijos_mes)}</b>/mes</> : null}
                   {p.bonos_activos === false ? <span className="ml-2 px-1.5 py-0.5 rounded bg-brand-ink text-white text-[10px] font-bold">SIN BONOS</span> : null}
