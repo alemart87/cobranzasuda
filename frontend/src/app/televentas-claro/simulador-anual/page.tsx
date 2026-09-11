@@ -6,6 +6,7 @@ import { Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceLine, R
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
+import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
@@ -212,6 +213,68 @@ export default function SimuladorAnualPage() {
                 <KpiCard label={`Resultado a ${horizonte} meses`} value={formatGs(a.resultado)} hint={`${a.margen_pct}% sobre ingreso neto`} accent={a.resultado >= 0 ? "cyan" : "primary"} />
                 <KpiCard label={`Con cola post-${horizonte}`} value={formatGs(a.resultado_con_cola)} hint={`pendiente ${formatGs(a.cola_post_12.total)}`} accent={a.resultado_con_cola >= 0 ? "cyan" : "primary"} />
               </div>
+
+              {a.veredicto && (() => {
+                const cola = a.cola_post_12;
+                const v = a.veredicto;
+                const gana = v.gana;
+                const respuesta = gana
+                  ? `Sí. Los ${horizonte} meses facturan ${formatGs(a.facturacion_bruta)}; con las devoluciones y cobros que llegan dentro del período quedan ${formatGs(a.ingreso_neto)} liquidados contra ${formatGs(a.costos)} de costos. Sumando lo que las cohortes todavía tienen pendiente después del mes ${horizonte}, el negocio cierra ganando ${formatGs(v.resultado_final)} (${v.pct_sobre_ingreso}% del ingreso).`
+                  : `No. Los ${horizonte} meses facturan ${formatGs(a.facturacion_bruta)}; con las devoluciones y cobros que llegan dentro del período quedan ${formatGs(a.ingreso_neto)} liquidados contra ${formatGs(a.costos)} de costos. Sumando lo que las cohortes todavía tienen pendiente después del mes ${horizonte}, el negocio cierra perdiendo ${formatGs(Math.abs(v.resultado_final))} (${v.pct_sobre_ingreso}% del ingreso).`;
+                const notas = [
+                  `Sin la cola, el período ${v.periodo_gana ? "gana" : "pierde"} ${formatGs(Math.abs(a.resultado))}. La cola ${cola.total >= 0 ? "suma" : "resta"} ${formatGs(Math.abs(cola.total))}: ${formatGs(cola.cobros)} por cobrar (cuota 2 y residual, hasta el mes ${cola.ultimo_mes_residual}) contra ${formatGs(Math.abs(cola.devoluciones))} por devolver (chargebacks hasta el mes ${cola.ultimo_mes_caidas}).`,
+                  v.la_cola_lo_da_vuelta
+                    ? (gana ? "La cola da vuelta el resultado: el período cerraba en pérdida y lo pendiente por cobrar lo lleva a ganancia. Depende de que las líneas sigan activas según la zafra."
+                            : "La cola da vuelta el resultado: el período cerraba en ganancia pero las devoluciones pendientes de las últimas cohortes la consumen.")
+                    : `El signo no cambia con la cola: lo que el período muestra es lo que el negocio ${gana ? "gana" : "pierde"} de verdad.`,
+                  `La cola es solo lo que las ${horizonte} cohortes ya vendidas tienen por liquidar; no incluye ventas nuevas. Si el negocio sigue, el mes ${horizonte + 1} arranca con esa cola ${cola.total >= 0 ? "a favor" : "en contra"}.`,
+                ];
+                return (
+                  <>
+                    <ExplicacionCuadros
+                      intro={`Los seis cuadros de arriba, uno por uno, con el valor de esta simulación de ${horizonte} meses.`}
+                      items={[
+                        { label: `Ventas en ${horizonte} meses`, valor: formatInt(a.ventas), accent: "neutral",
+                          queEs: `La suma de las ventas cargadas mes a mes (${formatInt(Math.round(a.ventas / horizonte))} por mes en promedio).`,
+                          comoLeerlo: "Cada mes es una cohorte: factura en su mes y después ajusta durante 12 meses (residual, cuota 2, caídas)." },
+                        { label: "Facturación bruta", valor: formatGs(a.facturacion_bruta), accent: "primary",
+                          queEs: "Lo que cada mes factura en el momento de la venta: cuota 1, plus de portabilidad y bonos, sumado en el período.",
+                          comoLeerlo: "No es ingreso: una parte se devuelve cuando las líneas caen. Es el punto de partida del puente de la derecha." },
+                        { label: "Ingreso neto liquidado", valor: formatGs(a.ingreso_neto), accent: "cyan",
+                          queEs: `Facturación bruta menos las devoluciones (${formatGs(Math.abs(a.devoluciones_periodo))}) más los cobros (${formatGs(a.cobros_periodo)}) que llegaron dentro del período.`,
+                          comoLeerlo: `Es lo que Claro efectivamente liquidó en estos ${horizonte} meses. Los ajustes de las últimas cohortes todavía no llegaron: están en la cola.` },
+                        { label: "Costos del período", valor: formatGs(a.costos), accent: "orange",
+                          queEs: `Estructura fija del mes 1 (${formatGs(a.costos_fijos_mes)} por mes) más comisiones, logística y operativos de cada mes.`,
+                          comoLeerlo: "Los fijos se pagan aunque un mes venda menos; los variables siguen a las ventas. Se pagan en el mes, sin espera." },
+                        { label: `Resultado a ${horizonte} meses`, valor: formatGs(a.resultado), accent: a.resultado >= 0 ? "cyan" : "primary",
+                          queEs: "Ingreso neto liquidado menos costos del período: lo que el período dejó en caja.",
+                          comoLeerlo: "Está incompleto: las últimas cohortes todavía tienen caídas por devolver y residual por cobrar. Es caja, no resultado final." },
+                        { label: `Con cola post-${horizonte}`, valor: formatGs(a.resultado_con_cola), accent: a.resultado_con_cola >= 0 ? "cyan" : "primary",
+                          queEs: `Resultado más lo pendiente de las cohortes después del mes ${horizonte}: ${formatGs(cola.cobros)} por cobrar y ${formatGs(Math.abs(cola.devoluciones))} por devolver.`,
+                          comoLeerlo: "Es la respuesta a “ganamos o perdemos”: cuando ya no queda nada por caer ni por cobrar, este es el número." },
+                      ]}
+                    />
+                    <VeredictoCierre
+                      gana={gana}
+                      monto={v.resultado_final}
+                      titulo={`¿Ganamos o perdemos al final, cuando cayeron todas las caídas de los ${horizonte} meses?`}
+                      respuesta={respuesta}
+                      pasos={[
+                        { label: "Facturación bruta", valor: a.facturacion_bruta, tipo: "base", nota: `${horizonte} meses de ventas` },
+                        { label: "Devoluciones dentro del período", valor: a.devoluciones_periodo, tipo: "menos", nota: "chargebacks, legajos y devolución de bonos de las cohortes ya liquidadas" },
+                        { label: "Cobros dentro del período", valor: a.cobros_periodo, tipo: "mas", nota: "cuota 2 y residual de las cohortes anteriores" },
+                        { label: "Ingreso neto liquidado", valor: a.ingreso_neto, tipo: "sub" },
+                        { label: "Costos del período", valor: a.costos, tipo: "menos", nota: `fijos ${formatGs(a.costos_fijos_mes)}/mes + variables` },
+                        { label: `Resultado a ${horizonte} meses`, valor: a.resultado, tipo: "sub" },
+                        { label: `Devoluciones pendientes después del mes ${horizonte}`, valor: cola.devoluciones, tipo: "menos", nota: `caídas de las últimas cohortes, hasta el mes ${cola.ultimo_mes_caidas}` },
+                        { label: `Cobros pendientes después del mes ${horizonte}`, valor: cola.cobros, tipo: "mas", nota: `cuota 2 y residual, hasta el mes ${cola.ultimo_mes_residual}` },
+                        { label: "Resultado final con todas las caídas", valor: v.resultado_final, tipo: "final", nota: `${v.pct_sobre_ingreso}% del ingreso total` },
+                      ]}
+                      notas={notas}
+                    />
+                  </>
+                );
+              })()}
 
               <div className="grid xl:grid-cols-2 gap-6 print:block">
                 <section className="card p-5 print:mb-5">
