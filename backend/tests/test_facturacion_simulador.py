@@ -181,3 +181,25 @@ def test_ajuste_de_comisiones():
     assert a5["anual"]["facturacion_bruta"] > a0["anual"]["facturacion_bruta"]
     assert all(m5["costos"]["rrhh"]["operadores_comisiones"] == m0["costos"]["rrhh"]["operadores_comisiones"]
                for m5, m0 in zip(a5["meses"], a0["meses"]))
+
+
+def test_cierre_con_todas_las_caidas():
+    """El puente de lo facturado al resultado final cierra en ambos simuladores."""
+    from app.services.analyzers.facturacion_simulador import simular_anual
+    r = simular_facturacion({"ventas": 1900, "objetivo_co": 1750})
+    ci = r["cierre"]
+    # facturado − devoluciones + cobros == lo que queda a 12 meses
+    assert abs(r["bruto_mes0"] + ci["devoluciones_12"] + ci["cobros_12"] - r["neto_12"]) <= 2
+    assert ci["resultado_final"] == r["margen"]["meses12"]
+    assert ci["gana"] == (r["margen"]["meses12"] >= 0)
+    assert ci["ultimo_mes_caidas"] == 6 and ci["ultimo_mes_residual"] == 12
+    assert ci["devoluciones_12"] < 0 < ci["cobros_12"]
+    assert ci["devoluciones_12"] == ci["devoluciones_6"]  # después del mes 6 no cae nada más
+
+    a = simular_anual({"objetivo_co": 1750}, [1900] * 12)["anual"]
+    cola, v = a["cola_post_12"], a["veredicto"]
+    assert abs(a["facturacion_bruta"] + a["devoluciones_periodo"] + a["cobros_periodo"] - a["ingreso_neto"]) <= 2
+    assert abs(cola["cobros"] + cola["devoluciones"] - cola["total"]) <= 2
+    assert v["resultado_final"] == a["resultado_con_cola"] == a["resultado"] + cola["total"]
+    assert v["gana"] == (a["resultado_con_cola"] >= 0)
+    assert cola["ultimo_mes_caidas"] == 18 and cola["ultimo_mes_residual"] == 24

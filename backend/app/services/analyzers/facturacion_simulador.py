@@ -341,8 +341,36 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         },
         "costos": costos,
         "margen": margen,
+        "cierre": _cierre_cohorte(p, meses, bruto_mes0, neto_6, neto_12, costos["total"], margen),
         "conclusion": conclusion,
         "recomendaciones": recomendaciones,
+    }
+
+
+def _cierre_cohorte(p: dict, meses: list[dict], bruto_mes0: float, neto_6: float, neto_12: float,
+                    costo_total: float, margen: dict) -> dict[str, Any]:
+    """Puente de una cohorte desde lo facturado hasta el resultado final, cuando ya
+    cayeron todas las caídas (ventana de chargeback) y se cobró todo el residual."""
+    chb = int(p["chargeback_meses"])
+    neg = ("legajos", "clawbacks", "clawback_bonos", "recalculo_productividad")
+    pos = ("residual", "cuota2")
+    dev_12 = sum(m[k] for m in meses[1:] for k in neg)
+    cob_12 = sum(m[k] for m in meses[1:] for k in pos)
+    dev_6 = sum(m[k] for m in meses[1:7] for k in neg)
+    cob_6 = sum(m[k] for m in meses[1:7] for k in pos)
+    # Mes en que ya no hay devoluciones pendientes (chargeback, recálculo de bono, legajos).
+    ultimo_mes_caidas = max([chb, int(p["recalculo_productividad_mes"]) if p.get("bonos_activos", True) else 0, 1])
+    final = float(margen["meses12"])
+    return {
+        "ultimo_mes_caidas": ultimo_mes_caidas,
+        "ultimo_mes_residual": int(p["residual_meses"]),
+        "devoluciones_6": round(dev_6), "cobros_6": round(cob_6),
+        "devoluciones_12": round(dev_12), "cobros_12": round(cob_12),
+        "pct_devuelto_12": round(-dev_12 / bruto_mes0 * 100, 1) if bruto_mes0 else 0.0,
+        "resultado_final": round(final),
+        "gana": final >= 0,
+        "gana_a_6": float(margen["meses6"]) >= 0,
+        "el_residual_lo_da_vuelta": float(margen["meses6"]) < 0 <= final,
     }
 
 
@@ -532,6 +560,11 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
             for k in _FLUJOS:
                 cola[k] += cohortes[m]["meses"][edad][k]
     cola_total = sum(cola.values())
+    cola_cobros = sum(v for v in cola.values() if v > 0)
+    cola_devoluciones = sum(v for v in cola.values() if v < 0)
+    chb = max(int(base["chargeback_meses"]),
+              int(base["recalculo_productividad_mes"]) if base.get("bonos_activos", True) else 0)
+    res_meses = int(base["residual_meses"])
 
     def tot(k: str) -> float:
         return sum(float(f[k]) for f in meses)
@@ -549,8 +582,16 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                                   * (1 + float(base["costos"]["ips_pct"]) / 100) * (13 / 12 if base["costos"].get("aguinaldo", True) else 1)
                                   + float(base["costos"]["logistica_premios"])),
         "horizonte": h,
-        "cola_post_12": {**{k: round(v) for k, v in cola.items()}, "total": round(cola_total)},
+        "cola_post_12": {
+            **{k: round(v) for k, v in cola.items()}, "total": round(cola_total),
+            "cobros": round(cola_cobros), "devoluciones": round(cola_devoluciones),
+            # Última cohorte (mes h): sus caídas terminan h + chargeback; su residual, h + residual_meses.
+            "ultimo_mes_caidas": h + chb, "ultimo_mes_residual": h + res_meses,
+        },
         "resultado_con_cola": round(tot("resultado") + cola_total),
+        # Dentro del período: cuánto devolvieron y cuánto sumaron las cohortes ya liquidadas.
+        "devoluciones_periodo": round(tot("legajos") + tot("clawbacks") + tot("clawback_bonos") + tot("recalculo_productividad")),
+        "cobros_periodo": round(tot("residual") + tot("cuota2")),
         "meses_negativos": sum(1 for f in meses if f["resultado"] < 0),
         "mejor_mes": max(meses, key=lambda f: f["resultado"])["mes"],
         "peor_mes": min(meses, key=lambda f: f["resultado"])["mes"],
@@ -572,9 +613,23 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es el mes {anual['peor_mes']} y el mejor el {anual['mejor_mes']}.")
     if anual["meses_sin_bono_productividad"] and base.get("bonos_activos", True):
         partes.append(f"En {anual['meses_sin_bono_productividad']} mes(es) las ventas quedaron bajo el 90% del objetivo y el bono productividad no se liquidó.")
-    if cola_total:
-        partes.append(f"Después del mes {h} quedan pendientes {gs(cola_total)} de las cohortes del año (residual por cobrar menos devoluciones): "
-                      f"resultado con esa cola {gs(anual['resultado_con_cola'])}.")
+    final = anual["resultado_con_cola"]
+    ingreso_final = tot("ingreso_neto") + cola_total
+    anual["veredicto"] = {
+        "gana": final >= 0,
+        "resultado_final": final,
+        "pct_sobre_ingreso": round(final / ingreso_final * 100, 1) if ingreso_final else 0.0,
+        "periodo_gana": anual["resultado"] >= 0,
+        "la_cola_lo_da_vuelta": (anual["resultado"] >= 0) != (final >= 0),
+    }
+    partes.append(
+        f"Cierre con todas las caídas: después del mes {h} las cohortes del período todavía tienen {gs(cola_cobros)} por cobrar "
+        f"(residual y cuota 2, hasta el mes {h + res_meses}) y {gs(abs(cola_devoluciones))} por devolver (chargebacks hasta el mes {h + chb}). "
+        f"Con esa cola el negocio {'GANA' if final >= 0 else 'PIERDE'} {gs(abs(final))}"
+        + (" — el período cerraba en pérdida y la cola lo da vuelta." if anual["veredicto"]["la_cola_lo_da_vuelta"] and final >= 0
+           else " — el período cerraba en ganancia pero las devoluciones pendientes la consumen." if anual["veredicto"]["la_cola_lo_da_vuelta"]
+           else ".")
+    )
 
     return {
         "parametros": base, "horizonte": h, "ventas_por_mes": [round(v) for v in ventas],

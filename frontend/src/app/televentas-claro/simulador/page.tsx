@@ -8,6 +8,7 @@ import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { Lectura } from "@/components/televentas/Lectura";
+import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
@@ -155,6 +156,70 @@ export default function SimuladorFacturacionPage() {
                     <KpiCard label="Punto de equilibrio (6 m)" value={res.margen.breakeven_ventas_6 ? `${formatInt(res.margen.breakeven_ventas_6)} ventas` : "no cierra"} hint={res.margen.breakeven_ventas_6 ? "ventas para margen cero a 6 meses" : "con esta estructura no hay volumen que lo cierre"} accent={res.margen.breakeven_ventas_6 ? "orange" : "primary"} />
                   </div>
                 )}
+
+                {res.cierre && res.costos && res.margen && (() => {
+                  const ci = res.cierre;
+                  const gana = ci.gana;
+                  const be = res.margen.breakeven_ventas_6;
+                  const respuesta = gana
+                    ? `Sí. Con ${formatInt(p.ventas)} ventas, después de devolver ${formatGs(Math.abs(ci.devoluciones_12))} por caídas y cobrar ${formatGs(ci.cobros_12)} de cuota 2 y residual, la cohorte deja ${formatGs(res.neto_12)} contra un costo de estructura de ${formatGs(res.costos.total)}: ganamos ${formatGs(ci.resultado_final)}.`
+                    : `No. Con ${formatInt(p.ventas)} ventas, después de devolver ${formatGs(Math.abs(ci.devoluciones_12))} por caídas y cobrar ${formatGs(ci.cobros_12)} de cuota 2 y residual, la cohorte deja ${formatGs(res.neto_12)} contra un costo de estructura de ${formatGs(res.costos.total)}: perdemos ${formatGs(Math.abs(ci.resultado_final))}. ${be ? `Para empatar a 6 meses hacen falta ${formatInt(be)} ventas.` : "Con esta estructura no hay volumen que lo cierre."}`;
+                  const notas = [
+                    `A 6 meses, cuando ya cayeron todas las caídas (ventana de chargeback de ${p.chargeback_meses} meses) pero el residual va por la mitad, ${ci.gana_a_6 ? "ganamos" : "perdemos"} ${formatGs(Math.abs(res.margen.meses6))}. Es la lectura conservadora, la que decide.`,
+                    ci.el_residual_lo_da_vuelta
+                      ? "El residual de los meses 7 a 12 da vuelta el resultado: se pierde a 6 meses y se gana a 12. Depende de que las líneas sigan activas según la zafra; si la retención empeora, no llega."
+                      : `Entre el mes 7 y el 12 ya no hay devoluciones, solo suma residual (${formatGs(ci.cobros_12 - ci.cobros_6)}). El signo del negocio no cambia después del mes 6.`,
+                    "Es una sola cohorte: el mes de la venta paga toda la estructura y después cobra durante un año. Para ver el negocio mes a mes, con todas las cohortes superpuestas, usá el Simulador anual.",
+                  ];
+                  return (
+                    <>
+                      <ExplicacionCuadros
+                        intro="Los ocho cuadros de arriba, uno por uno, con el valor de esta simulación."
+                        items={[
+                          { label: "Facturación del mes", valor: formatGs(res.bruto_mes0), accent: "primary",
+                            queEs: `Lo que Claro liquida en el mes de la venta por ${formatInt(d.activaciones)} activaciones: cuota 1, plus de portabilidad y bonos.`,
+                            comoLeerlo: "Es el punto de partida, no lo que queda. Todavía no cayó ninguna línea ni se descontó nada." },
+                          { label: "Queda a 6 meses", valor: formatGs(res.neto_6), accent: res.pct_retenido_6 >= 75 ? "cyan" : "orange",
+                            queEs: `Lo facturado menos las devoluciones de la ventana de chargeback (${p.chargeback_meses} meses), más cuota 2 y el residual cobrado hasta ahí.`,
+                            comoLeerlo: `A los ${ci.ultimo_mes_caidas} meses ya cayeron todas las caídas: es el piso del negocio. Retiene el ${res.pct_retenido_6}% de lo facturado.` },
+                          { label: "Queda a 12 meses", valor: formatGs(res.neto_12), accent: "cyan",
+                            queEs: `Lo mismo, con las ${p.residual_meses} liquidaciones de residual cobradas.`,
+                            comoLeerlo: "Entre el mes 7 y el 12 ya no hay devoluciones: solo suma residual. Es el cierre completo de la cohorte." },
+                          { label: "Peso de los bonos", valor: `${b.peso_mes0_pct}%`, accent: "purple",
+                            queEs: "Qué parte de lo facturado son bono productividad y bono efectividad.",
+                            comoLeerlo: `Cuanto más alto, más depende el mes de cumplir las escalas. A 6 meses, con las devoluciones de bonos, pesan ${b.peso_neto_6_pct}% del neto.` },
+                          { label: "Costo de la estructura", valor: formatGs(res.costos.total), accent: "neutral",
+                            queEs: `Salarios, comisiones, cargas sociales, logística y operativos del mes para ${res.costos.headcount.total} personas.`,
+                            comoLeerlo: `${formatGs(res.costos.costo_por_venta)} por venta. Se paga una sola vez, en el mes de la venta; el ingreso llega durante un año.` },
+                          { label: "Margen del mes", valor: formatGs(res.margen.mes0), accent: res.margen.mes0 >= 0 ? "cyan" : "primary",
+                            queEs: "Facturación del mes menos el costo de la estructura.",
+                            comoLeerlo: "Engaña: compara un ingreso que todavía puede devolverse contra un costo ya pagado. No se decide con este número." },
+                          { label: "Margen a 6 meses", valor: formatGs(res.margen.meses6), accent: res.margen.meses6 >= 0 ? "cyan" : "primary",
+                            queEs: "Lo que queda a 6 meses menos el costo de la estructura.",
+                            comoLeerlo: "La cifra que decide: ya cayeron todas las caídas y todavía no se cuenta el residual de los meses 7 a 12." },
+                          { label: "Punto de equilibrio (6 m)", valor: be ? `${formatInt(be)} ventas` : "no cierra", accent: be ? "orange" : "primary",
+                            queEs: "Ventas del mes necesarias para que el margen a 6 meses sea cero con esta misma estructura.",
+                            comoLeerlo: be ? "Por debajo de ese volumen el mes pierde, aunque el margen del mes se vea positivo." : "Ningún volumen cierra: el costo por venta supera lo que queda por venta a 6 meses." },
+                        ]}
+                      />
+                      <VeredictoCierre
+                        gana={gana}
+                        monto={ci.resultado_final}
+                        titulo="¿Ganamos o perdemos con las ventas de este mes, cuando cayeron todas las caídas?"
+                        respuesta={respuesta}
+                        pasos={[
+                          { label: "Facturación del mes", valor: res.bruto_mes0, tipo: "base", nota: `${formatInt(d.activaciones)} activaciones` },
+                          { label: "Devoluciones", valor: ci.devoluciones_12, tipo: "menos", nota: `chargebacks, legajos y devolución de bonos hasta el mes ${ci.ultimo_mes_caidas} (${ci.pct_devuelto_12}% de lo facturado)` },
+                          { label: "Cobros posteriores", valor: ci.cobros_12, tipo: "mas", nota: `cuota 2 (mes ${p.cuota2_mes}) y residual de ${p.residual_meses} liquidaciones` },
+                          { label: "Queda a 12 meses", valor: res.neto_12, tipo: "sub", nota: `${res.pct_retenido_12}% de lo facturado` },
+                          { label: "Costo de la estructura", valor: res.costos.total, tipo: "menos", nota: "pagado en el mes de la venta" },
+                          { label: "Resultado final de la cohorte", valor: ci.resultado_final, tipo: "final", nota: `${res.margen.pct_12}% de lo que queda` },
+                        ]}
+                        notas={notas}
+                      />
+                    </>
+                  );
+                })()}
 
                 {/* ===== EERR ===== */}
                 {res.costos && res.margen && (() => {
