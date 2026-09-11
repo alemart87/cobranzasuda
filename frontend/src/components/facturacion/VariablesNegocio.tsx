@@ -157,6 +157,14 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="Backoffice" value={p.costos.backoffice_salario} onChange={(v) => setC("backoffice_salario", v)} step={10000} />
               <Campo label="Controller" hint="salario" value={p.costos.controller_salario} onChange={(v) => setC("controller_salario", v)} step={10000} />
               <Campo label="Controller — premio" value={p.costos.controller_premio} onChange={(v) => setC("controller_premio", v)} step={10000} />
+              <label className="flex items-center gap-3 rounded-md border-2 border-brand-primary bg-brand-primary/5 px-2 py-1.5">
+                <span className="flex-1">
+                  <span className="block text-sm font-bold text-brand-primary">SubGerencia Comercial</span>
+                  <span className="block text-[10px] text-brand-primary/80">en análisis · salario mensual, 0 = no incorporada · suma IPS y aguinaldo</span>
+                </span>
+                <input type="number" step={100000} value={p.costos.subgerencia_salario ?? 0} onChange={(e) => setC("subgerencia_salario", Number(e.target.value))}
+                  className="input max-w-[120px] !py-1 text-sm text-right font-bold text-brand-primary border-brand-primary" />
+              </label>
               <Campo label="IPS" hint="sobre todos los costos de RRHH" value={p.costos.ips_pct} onChange={(v) => setC("ips_pct", v)} step={0.5} suffix="%" />
               <label className="flex items-center gap-2 text-sm text-brand-ink">
                 <input type="checkbox" checked={!!p.costos.aguinaldo} onChange={(e) => setC("aguinaldo", e.target.checked)} className="accent-brand-primary" />

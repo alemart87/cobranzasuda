@@ -248,6 +248,7 @@ export default function SimuladorFacturacionPage() {
                     { label: `Coordinación (${c.headcount.coordinadores})`, v: [c.rrhh.coordinadores, c.rrhh.coordinadores, c.rrhh.coordinadores], tipo: "costo" },
                     { label: `Backoffice (${c.headcount.backoffice})`, v: [c.rrhh.backoffice, c.rrhh.backoffice, c.rrhh.backoffice], tipo: "costo" },
                     { label: `Controllers (${c.headcount.controllers})`, v: [c.rrhh.controllers, c.rrhh.controllers, c.rrhh.controllers], tipo: "costo" },
+                    ...(c.rrhh.subgerencia > 0 ? [{ label: "SubGerencia Comercial (1) — en análisis", v: [c.rrhh.subgerencia, c.rrhh.subgerencia, c.rrhh.subgerencia] as [number, number, number], tipo: "costo" as const }] : []),
                     { label: `IPS ${p.costos.ips_pct}%`, v: [c.ips, c.ips, c.ips], tipo: "costo" },
                     { label: "Previsión de aguinaldo (÷ 12)", v: [c.aguinaldo, c.aguinaldo, c.aguinaldo], tipo: "costo" },
                     { label: "Logística — entregas", v: [c.logistica_entregas, c.logistica_entregas, c.logistica_entregas], tipo: "costo" },
@@ -312,13 +313,14 @@ export default function SimuladorFacturacionPage() {
                     <p className="text-xs text-brand-slate mb-4">
                       Para {formatInt(d.activaciones)} ventas efectivas, con {p.costos.ventas_por_vendedor} ventas por vendedor, 1 supervisor cada {p.costos.supervisor_cada_vendedores} vendedores y 1 backoffice cada {p.costos.backoffice_cada_ventas} ventas.
                     </p>
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
                       {([
                         ["Vendedores", res.costos.headcount.vendedores, "#E6332A", `${formatGs(res.costos.rrhh.operadores_salario)} salarios`],
                         ["Supervisores", res.costos.headcount.supervisores, "#F39200", formatGs(res.costos.rrhh.supervisores)],
                         ["Backoffice", res.costos.headcount.backoffice, "#0EA5E9", formatGs(res.costos.rrhh.backoffice)],
                         ["Coordinador", res.costos.headcount.coordinadores, "#662483", formatGs(res.costos.rrhh.coordinadores)],
                         ["Controllers", res.costos.headcount.controllers, "#00B2BF", formatGs(res.costos.rrhh.controllers)],
+                        ["SubGerencia Comercial", res.costos.headcount.subgerencia ?? 0, "#E6332A", res.costos.rrhh.subgerencia > 0 ? `${formatGs(res.costos.rrhh.subgerencia)} · en análisis` : "no incorporada (en análisis)"],
                         ["Total personas", res.costos.headcount.total, "#0F1116", `${formatGs(res.costos.rrhh_total)} RRHH con cargas`],
                       ] as Array<[string, number, string, string]>).map(([label, n, color, hint]) => (
                         <div key={label} className="rounded-md border border-brand-border bg-white p-4 text-center" style={{ borderTop: `4px solid ${color}` }}>

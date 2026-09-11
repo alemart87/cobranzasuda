@@ -91,6 +91,7 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
         "coordinador_salario": 6000000, "coordinador_premio": 2500000,
         "backoffice_salario": 3044000,
         "controller_salario": 3600000, "controller_premio": 750000,
+        "subgerencia_salario": 0,           # SubGerencia Comercial (en análisis): salario mensual, 0 = no incorporada
         "ips_pct": 16.5,                    # sobre todos los costos de RRHH
         "aguinaldo": True,                  # previsión: (RRHH + IPS) ÷ 12
         "logistica_central": 55000, "logistica_interior": 80000, "logistica_interior_pct": 60.0,
@@ -402,7 +403,10 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
         "coordinadores": coordinadores * (float(c["coordinador_salario"]) + float(c["coordinador_premio"])),
         "backoffice": backoffice * float(c["backoffice_salario"]),
         "controllers": controllers * (float(c["controller_salario"]) + float(c["controller_premio"])),
+        # SubGerencia Comercial: 1 persona si se carga un salario; paga IPS y aguinaldo como el resto.
+        "subgerencia": float(c.get("subgerencia_salario") or 0),
     }
+    subgerencia = 1 if rrhh["subgerencia"] > 0 else 0
     rrhh_base = sum(rrhh.values())
     ips = rrhh_base * float(c["ips_pct"]) / 100.0
     aguinaldo = (rrhh_base + ips) / 12.0 if c.get("aguinaldo", True) else 0.0
@@ -417,8 +421,8 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
 
     costos = {
         "headcount": {"vendedores": vendedores, "supervisores": supervisores, "backoffice": backoffice,
-                      "coordinadores": coordinadores, "controllers": controllers,
-                      "total": vendedores + supervisores + backoffice + coordinadores + controllers},
+                      "coordinadores": coordinadores, "controllers": controllers, "subgerencia": subgerencia,
+                      "total": vendedores + supervisores + backoffice + coordinadores + controllers + subgerencia},
         "salario_operador_mes": round(salario_operador),
         "rrhh": {k: round(v) for k, v in rrhh.items()},
         "rrhh_base": round(rrhh_base), "ips": round(ips), "aguinaldo": round(aguinaldo),
@@ -578,7 +582,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "margen_pct": round(tot("resultado") / tot("ingreso_neto") * 100, 1) if tot("ingreso_neto") else 0.0,
         "bonos": round(tot("bono_productividad") + tot("bono_efectividad")),
         "devolucion_bonos": round(tot("clawback_bonos") + tot("recalculo_productividad")),
-        "costos_fijos_mes": round(sum(m1["costos"]["rrhh"][k] for k in ("operadores_salario", "supervisores", "coordinadores", "backoffice", "controllers"))
+        "costos_fijos_mes": round(sum(m1["costos"]["rrhh"][k] for k in ("operadores_salario", "supervisores", "coordinadores", "backoffice", "controllers", "subgerencia"))
                                   * (1 + float(base["costos"]["ips_pct"]) / 100) * (13 / 12 if base["costos"].get("aguinaldo", True) else 1)
                                   + float(base["costos"]["logistica_premios"])),
         "horizonte": h,
