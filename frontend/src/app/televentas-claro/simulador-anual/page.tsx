@@ -233,7 +233,6 @@ export default function SimuladorAnualPage() {
                         className="no-print min-w-0 w-full bg-transparent border-b border-dashed border-brand-border focus:border-brand-primary outline-none text-[10px] font-semibold text-inherit placeholder:text-brand-slate/70" />
                       <span className="print-only">{nombreMes(i)}</span>
                       {i === 0 && <span className="shrink-0">(seteado)</span>}
-                      {esAfectado(i + 1) && <span className="shrink-0 px-1 rounded bg-brand-purple text-white text-[9px] font-bold">afectado</span>}
                     </span>
                     <span className="flex items-center gap-0.5">
                       {i > 0 && (
