@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
+import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
@@ -25,6 +26,13 @@ export default function SimuladorAnualPage() {
   const [res, setRes] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<any>(null);
+  // Registro del trabajo: simulación guardada abierta, ítems marcados y post-its.
+  const [actual, setActual] = useState<any | null>(null);
+  const [marcas, setMarcas] = useState<Marca[]>([]);
+  const [postits, setPostits] = useState<Postit[]>([]);
+  const esMarcado = (key: string) => marcas.some((m) => m.key === key);
+  const toggleMarca = (key: string, label: string) =>
+    setMarcas((prev) => (prev.some((m) => m.key === key) ? prev.filter((m) => m.key !== key) : [...prev, { key, label }]));
 
   useEffect(() => {
     apiFetch<any>("/api/v1/facturacion/simulador/parametros").then((d) => {
@@ -75,6 +83,26 @@ export default function SimuladorAnualPage() {
   const a = res?.anual;
   const hc = res?.headcount;
 
+  const getSnapshot = (): Snapshot => ({
+    parametros: p, ventas_por_mes: ventas, horizonte,
+    resumen: a ? {
+      ventas: a.ventas, facturacion_bruta: a.facturacion_bruta, ingreso_neto: a.ingreso_neto, costos: a.costos,
+      resultado: a.resultado, margen_pct: a.margen_pct, resultado_con_cola: a.resultado_con_cola,
+      bonos_activos: p?.bonos_activos !== false, ajuste_comisiones_pct: Number(p?.ajuste_comisiones_pct || 0),
+    } : {},
+  });
+  const abrirSimulacion = (s: any) => {
+    const h = (s.horizonte === 18 ? 18 : 12) as 12 | 18;
+    setP(s.parametros);
+    setHorizonte(h);
+    const v = (s.ventas_por_mes || []).map(Number);
+    while (v.length < h) v.push(v[v.length - 1] ?? Number(s.parametros?.ventas) ?? 0);
+    setVentas(v.slice(0, h));
+    setMarcas(s.marcas ?? []);
+    setPostits(s.postits ?? []);
+    setSeteado(true);
+  };
+
   return (
     <AppShell>
       <PrintCover titulo={`Simulación de Facturación a ${horizonte} meses`}
@@ -103,6 +131,11 @@ export default function SimuladorAnualPage() {
 
       {error && <p className="text-sm text-brand-primary mb-4">{error}</p>}
       {!p && !error && <div className="text-brand-slate">Cargando variables de negocio…</div>}
+
+      {p && (
+        <RegistroSimulaciones listo={seteado && !!res} getSnapshot={getSnapshot} onAbrir={abrirSimulacion}
+          actual={actual} setActual={setActual} marcas={marcas} setMarcas={setMarcas} postits={postits} setPostits={setPostits} />
+      )}
 
       {/* ===== Paso 1: setear el mes 1 ===== */}
       {p && !seteado && (
@@ -149,8 +182,11 @@ export default function SimuladorAnualPage() {
             <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate mb-2">Ventas efectivas por mes</div>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-12 gap-2">
               {ventas.map((v, i) => (
-                <label key={i} className={`text-[10px] ${i === 0 ? "text-brand-primary font-bold" : "text-brand-slate"}`}>
-                  Mes {i + 1}{i === 0 ? " (seteado)" : ""}
+                <label key={i} className={`text-[10px] ${i === 0 ? "text-brand-primary font-bold" : "text-brand-slate"} ${esMarcado(`mes:${i + 1}`) ? "rounded ring-2 ring-amber-400 ring-offset-1 bg-amber-50" : ""}`}>
+                  <span className="flex items-center justify-between gap-1">
+                    <span>Mes {i + 1}{i === 0 ? " (seteado)" : ""}</span>
+                    <Pin marcado={esMarcado(`mes:${i + 1}`)} onClick={() => toggleMarca(`mes:${i + 1}`, `Mes ${i + 1} (${formatInt(v)} ventas)`)} className="!w-5 !h-5 !text-[10px]" />
+                  </span>
                   <input type="number" step={10} value={v} disabled={i === 0} onChange={(e) => setVenta(i, Number(e.target.value))}
                     className={`input !py-1 !px-1.5 text-sm text-right w-full ${i === 0 ? "bg-brand-bg-soft" : ""}`} />
                 </label>
@@ -206,12 +242,16 @@ export default function SimuladorAnualPage() {
               </section>
 
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
-                <KpiCard label={`Ventas en ${horizonte} meses`} value={formatInt(a.ventas)} hint={`${formatInt(Math.round(a.ventas / horizonte))} por mes`} accent="neutral" />
-                <KpiCard label="Facturación bruta" value={formatGs(a.facturacion_bruta)} hint={`suma de los ${horizonte} meses`} accent="primary" />
-                <KpiCard label="Ingreso neto liquidado" value={formatGs(a.ingreso_neto)} hint={`ajustes ${formatGs(a.ajustes)}`} accent="cyan" />
-                <KpiCard label="Costos del período" value={formatGs(a.costos)} hint={`fijos ${formatGs(a.costos_fijos_mes)}/mes`} accent="orange" />
-                <KpiCard label={`Resultado a ${horizonte} meses`} value={formatGs(a.resultado)} hint={`${a.margen_pct}% sobre ingreso neto`} accent={a.resultado >= 0 ? "cyan" : "primary"} />
-                <KpiCard label={`Con cola post-${horizonte}`} value={formatGs(a.resultado_con_cola)} hint={`pendiente ${formatGs(a.cola_post_12.total)}`} accent={a.resultado_con_cola >= 0 ? "cyan" : "primary"} />
+                {([
+                  ["kpi:ventas", `Ventas en ${horizonte} meses`, <KpiCard key="k1" label={`Ventas en ${horizonte} meses`} value={formatInt(a.ventas)} hint={`${formatInt(Math.round(a.ventas / horizonte))} por mes`} accent="neutral" />],
+                  ["kpi:bruta", "Facturación bruta", <KpiCard key="k2" label="Facturación bruta" value={formatGs(a.facturacion_bruta)} hint={`suma de los ${horizonte} meses`} accent="primary" />],
+                  ["kpi:neto", "Ingreso neto liquidado", <KpiCard key="k3" label="Ingreso neto liquidado" value={formatGs(a.ingreso_neto)} hint={`ajustes ${formatGs(a.ajustes)}`} accent="cyan" />],
+                  ["kpi:costos", "Costos del período", <KpiCard key="k4" label="Costos del período" value={formatGs(a.costos)} hint={`fijos ${formatGs(a.costos_fijos_mes)}/mes`} accent="orange" />],
+                  ["kpi:resultado", `Resultado a ${horizonte} meses`, <KpiCard key="k5" label={`Resultado a ${horizonte} meses`} value={formatGs(a.resultado)} hint={`${a.margen_pct}% sobre ingreso neto`} accent={a.resultado >= 0 ? "cyan" : "primary"} />],
+                  ["kpi:cola", `Con cola post-${horizonte}`, <KpiCard key="k6" label={`Con cola post-${horizonte}`} value={formatGs(a.resultado_con_cola)} hint={`pendiente ${formatGs(a.cola_post_12.total)}`} accent={a.resultado_con_cola >= 0 ? "cyan" : "primary"} />],
+                ] as Array<[string, string, React.ReactNode]>).map(([key, label, card]) => (
+                  <Marcable key={key} marcado={esMarcado(key)} onToggle={() => toggleMarca(key, label)}>{card}</Marcable>
+                ))}
               </div>
 
               {a.veredicto && (() => {
@@ -388,7 +428,12 @@ export default function SimuladorAnualPage() {
                       const f = (v: number) => fmt === "int" ? formatInt(v) : fmt === "pct" ? `${Math.round(v * 10) / 10}%` : formatGs(v);
                       return (
                         <tr key={label} className={cls}>
-                          <td className={`px-3 py-1 sticky left-0 ${tipo === "total" ? "bg-brand-ink" : tipo === "sub" ? "bg-brand-bg-soft" : tipo === "sep" ? "bg-brand-bg" : "bg-white"} ${tipo === "row" ? "pl-6" : ""}`}>{label}</td>
+                          <td className={`px-3 py-1 sticky left-0 ${tipo === "total" ? "bg-brand-ink" : tipo === "sub" ? "bg-brand-bg-soft" : tipo === "sep" ? "bg-brand-bg" : "bg-white"} ${tipo === "row" ? "pl-6" : ""} ${key && esMarcado(`eerr:${key}`) ? "!bg-amber-100 !text-brand-ink" : ""}`}>
+                            <span className="flex items-center justify-between gap-2">
+                              <span>{label}</span>
+                              {key && tipo !== "sep" && <Pin marcado={esMarcado(`eerr:${key}`)} onClick={() => toggleMarca(`eerr:${key}`, `EERR · ${label}`)} className="!w-5 !h-5 !text-[10px]" />}
+                            </span>
+                          </td>
                           {meses.map((m: any) => (
                             <td key={m.mes} className={`px-2 py-1 text-right font-mono whitespace-nowrap ${tipo !== "total" && tipo !== "sep" && val(m) < 0 ? "text-brand-primary" : ""}`}>
                               {tipo === "sep" ? "" : f(key === "margen_pct" ? m.margen_pct : val(m))}

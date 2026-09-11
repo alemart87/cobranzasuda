@@ -74,6 +74,29 @@ class SimuladorAnualRequest(BaseModel):
     horizonte: int = 12                   # 12 o 18 meses
 
 
+class SimulacionCreate(BaseModel):
+    """Simulación anual guardada: registro del trabajo (nombre, comentario, marcas, post-its)."""
+    nombre: str = Field(min_length=1, max_length=160)
+    comentario: Optional[str] = None
+    horizonte: int = 12
+    parametros: dict[str, Any] = Field(default_factory=dict)
+    ventas_por_mes: List[float] = Field(min_length=1, max_length=18)
+    marcas: List[dict[str, Any]] = Field(default_factory=list)
+    postits: List[dict[str, Any]] = Field(default_factory=list)
+    resumen: dict[str, Any] = Field(default_factory=dict)
+
+
+class SimulacionUpdate(BaseModel):
+    nombre: Optional[str] = Field(default=None, max_length=160)
+    comentario: Optional[str] = None
+    horizonte: Optional[int] = None
+    parametros: Optional[dict[str, Any]] = None
+    ventas_por_mes: Optional[List[float]] = Field(default=None, max_length=18)
+    marcas: Optional[List[dict[str, Any]]] = None
+    postits: Optional[List[dict[str, Any]]] = None
+    resumen: Optional[dict[str, Any]] = None
+
+
 class CompareResponse(BaseModel):
     columnas: list[dict[str, Any]]
     conceptos: list[dict[str, Any]]
