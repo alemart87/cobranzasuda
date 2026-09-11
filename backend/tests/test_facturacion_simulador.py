@@ -169,8 +169,15 @@ def test_ajuste_de_comisiones():
     assert mas5["mes0"]["bono_productividad"] == base["mes0"]["bono_productividad"]
     assert mas5["mes0"]["activaciones_cuota1"] == round(base["mes0"]["activaciones_cuota1"] * 1.05)
     assert mas5["neto_6"] > base["neto_6"] and "ajuste de comisiones del +5.0%" in mas5["conclusion"]
+    # la comisión de los VENDEDORES no cambia con el ajuste: se calcula sobre la tarifa sin ajuste
+    assert mas5["costos"]["rrhh"]["operadores_comisiones"] == base["costos"]["rrhh"]["operadores_comisiones"]
+    assert mas5["costos"]["vendedor"]["comision_promedio"] == base["costos"]["vendedor"]["comision_promedio"]
+    # y toda la mejora va al margen: margen mes 0 sube exactamente lo que subió la facturación
+    assert mas5["margen"]["mes0"] - base["margen"]["mes0"] == mas5["bruto_mes0"] - base["bruto_mes0"]
     # también aplica en la simulación anual (cohortes)
     from app.services.analyzers.facturacion_simulador import simular_anual
     a0 = simular_anual({"objetivo_co": 1750}, [1900] * 12)
     a5 = simular_anual({"objetivo_co": 1750, "ajuste_comisiones_pct": 5}, [1900] * 12)
     assert a5["anual"]["facturacion_bruta"] > a0["anual"]["facturacion_bruta"]
+    assert all(m5["costos"]["rrhh"]["operadores_comisiones"] == m0["costos"]["rrhh"]["operadores_comisiones"]
+               for m5, m0 in zip(a5["meses"], a0["meses"]))

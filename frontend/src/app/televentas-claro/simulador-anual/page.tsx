@@ -186,7 +186,7 @@ export default function SimuladorAnualPage() {
                   ? "Sin ajuste — cuota 1, cuota 2 y plus de portabilidad según tarifa vigente"
                   : `Cuota 1, cuota 2 y plus de portabilidad ${Number(p.ajuste_comisiones_pct) > 0 ? "mejoran" : "bajan"} ${Math.abs(Number(p.ajuste_comisiones_pct))}%`}
               </div>
-              <div className="text-[11px] text-brand-slate">Simula una renegociación de comisiones con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados.</div>
+              <div className="text-[11px] text-brand-slate">Simula una renegociación con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados. La comisión de los vendedores se calcula sobre la tarifa SIN ajuste: la mejora es íntegramente margen de Voicenter.</div>
             </div>
             <label className="flex items-center gap-2 text-sm no-print">
               <span className="text-brand-graphite">Ajuste</span>

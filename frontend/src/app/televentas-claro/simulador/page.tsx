@@ -115,7 +115,7 @@ export default function SimuladorFacturacionPage() {
                         ? "Sin ajuste — cuota 1, cuota 2 y plus de portabilidad según tarifa vigente"
                         : `Cuota 1, cuota 2 y plus de portabilidad ${Number(p.ajuste_comisiones_pct) > 0 ? "mejoran" : "bajan"} ${Math.abs(Number(p.ajuste_comisiones_pct))}%`}
                     </div>
-                    <div className="text-[11px] text-brand-slate">Simula una renegociación de comisiones con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados.</div>
+                    <div className="text-[11px] text-brand-slate">Simula una renegociación con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados. La comisión de los vendedores se calcula sobre la tarifa SIN ajuste: la mejora es íntegramente margen de Voicenter.</div>
                   </div>
                   <label className="flex items-center gap-2 text-sm no-print">
                     <span className="text-brand-graphite">Ajuste</span>
@@ -275,7 +275,7 @@ export default function SimuladorFacturacionPage() {
                           <div>
                             <div className="text-[10px] text-brand-slate">Comisión promedio (mes)</div>
                             <div className="font-display text-xl text-brand-primary">{formatGs(res.costos.vendedor.comision_promedio)}</div>
-                            <div className="text-[10px] text-brand-slate">{p.costos.comision_vendedores_pct}% sobre {formatGs(res.costos.vendedor.base_comision)} ÷ {res.costos.headcount.vendedores} vendedores</div>
+                            <div className="text-[10px] text-brand-slate">{p.costos.comision_vendedores_pct}% sobre {formatGs(res.costos.vendedor.base_comision)} (tarifa sin ajuste) ÷ {res.costos.headcount.vendedores} vendedores</div>
                           </div>
                           <div>
                             <div className="text-[10px] text-brand-slate">Comisión por venta promedio</div>
