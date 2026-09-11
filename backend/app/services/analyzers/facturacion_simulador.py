@@ -139,8 +139,11 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     def w(key: str) -> float:
         return sum(float(pl.get(key) or 0) * float(pl["mix_pct"]) / mix_total for pl in planes)
     cuota1_w, cuota2_w, porta_w, abono_w = w("cuota1"), w("cuota2"), w("porta_plus"), w("abono")
-    # Ajuste de comisiones negociado: escala cuota 1, cuota 2 y porta (el residual y los bonos no cambian).
+    # Ajuste de comisiones negociado con Claro: escala cuota 1, cuota 2 y porta (residual y bonos no cambian).
+    # Las comisiones que se pagan a los VENDEDORES se calculan sobre la tarifa SIN ajuste:
+    # la mejora negociada es íntegramente margen de Voicenter.
     ajuste = 1 + float(p.get("ajuste_comisiones_pct") or 0) / 100.0
+    cuota1_base, porta_base = cuota1_w, porta_w
     cuota1_w, cuota2_w, porta_w = cuota1_w * ajuste, cuota2_w * ajuste, porta_w * ajuste
     residual_linea = abono_w * float(p["pct_abono_acreditado"]) / 100.0 * float(p["residual_pct"]) / 100.0
 
@@ -229,7 +232,12 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     dist_efect = _distancias(p["escala_efectividad"], efect, 0, "pts")  # se mide en puntos de efectividad
 
     # ---- COSTOS de la estructura y MARGEN (evaluación del negocio, foco a 6 meses) ----
-    costos, margen = _costos_y_margen(p["costos"], act, mes0, bruto_mes0, neto_6, neto_12)
+    # Base de la comisión del vendedor: facturación con tarifa SIN ajuste (con o sin bonos según config).
+    mes0_sin_ajuste = act * cuota1_base + act * porta * porta_base
+    base_comision_vendedor = (mes0_sin_ajuste + mes0["bono_productividad"] + mes0["bono_efectividad"]
+                              if p["costos"].get("comision_incluye_bonos", True) else mes0_sin_ajuste)
+    costos, margen = _costos_y_margen(p["costos"], act, mes0, bruto_mes0, neto_6, neto_12,
+                                      base_comision=base_comision_vendedor)
     if not p.get("_sin_breakeven"):
         margen["breakeven_ventas_6"] = _breakeven(p)
 
@@ -255,7 +263,8 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     if float(p.get("ajuste_comisiones_pct") or 0):
         aj = float(p["ajuste_comisiones_pct"])
         partes.append(f"Con un ajuste de comisiones del {aj:+.1f}% sobre cuota 1, cuota 2 y portabilidad "
-                      f"(cuota 1 ponderada {gs(cuota1_w)}).")
+                      f"(cuota 1 ponderada {gs(cuota1_w)}); la comisión de los vendedores se mantiene sobre la tarifa "
+                      f"sin ajuste, así que la mejora es íntegramente margen de Voicenter.")
     if not bonos_activos:
         partes.append("SIMULACIÓN SIN BONOS: los bonos de productividad y efectividad están desactivados por el usuario "
                       "— este es el resultado que sostiene el negocio si Claro no los liquida.")
@@ -338,7 +347,8 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
 
 
 def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
-                     neto_6: float, neto_12: float, headcount: dict | None = None) -> tuple[dict, dict]:
+                     neto_6: float, neto_12: float, headcount: dict | None = None,
+                     base_comision: float | None = None) -> tuple[dict, dict]:
     """Costos mensuales de la estructura para `act` ventas y margen contra lo facturado
     (mes 0) y contra lo que realmente queda a 6 y 12 meses. Con `headcount` la
     estructura queda FIJA (simulación anual: se setea en el mes 1) y solo varían
@@ -355,7 +365,8 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
         controllers = int(c["controllers"] or 0)
 
     salario_operador = float(c["salario_hora"]) * float(c["horas_dia"]) * float(c["dias_mes"])
-    base_comision = bruto_mes0 if c.get("comision_incluye_bonos", True) else (mes0["activaciones_cuota1"] + mes0["portabilidad"])
+    if base_comision is None:
+        base_comision = bruto_mes0 if c.get("comision_incluye_bonos", True) else (mes0["activaciones_cuota1"] + mes0["portabilidad"])
     rrhh = {
         "operadores_salario": vendedores * salario_operador,
         "operadores_comisiones": base_comision * float(c["comision_vendedores_pct"]) / 100.0,
@@ -497,7 +508,8 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         fila["ingreso_neto"] = fila["facturacion_bruta"] + fila["ajustes"]
         # Costos del mes: estructura fija del mes 1 + variables de las ventas del mes.
         costos_t, _ = _costos_y_margen(base["costos"], ventas[t], c["mes0"], c["bruto_mes0"],
-                                       c["neto_6"], c["neto_12"], headcount=headcount)
+                                       c["neto_6"], c["neto_12"], headcount=headcount,
+                                       base_comision=c["costos"]["vendedor"]["base_comision"])
         fila["costos"] = costos_t
         fila["costo_total"] = costos_t["total"]
         fila["resultado"] = round(fila["ingreso_neto"] - costos_t["total"])
