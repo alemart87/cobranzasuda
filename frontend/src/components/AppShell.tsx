@@ -729,7 +729,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {!isAgent && (
         <footer className="border-t border-brand-border bg-white px-4 sm:px-6 py-3 text-[11px] text-brand-slate flex flex-wrap items-center justify-between gap-1">
           <span>© {new Date().getFullYear()} Voicenter S.A.</span>
-          <span className="font-display tracking-wider2 uppercase">Operaciones · Sudameris Seguros</span>
+          <span className="font-display tracking-wider2 uppercase">Operaciones · Voicenter</span>
         </footer>
       )}
     </div>

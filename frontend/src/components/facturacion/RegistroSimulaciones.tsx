@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
-import type { Nota } from "./NotasSimulacion";
+import { NotasSimulacion, type Nota } from "./NotasSimulacion";
 
 /** Barra lateral "Registro del trabajo" del Simulador Anual (Televentas Claro):
  *  simulación abierta, ítems marcados, post-its y simulaciones guardadas.
@@ -59,7 +59,7 @@ function Seccion({ titulo, extra, abierta = true, children }: { titulo: string; 
   );
 }
 
-export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, onAbrir, actual, setActual, marcas, setMarcas, postits, setPostits, notas, setNotas }: {
+export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, onAbrir, actual, setActual, marcas, setMarcas, postits, setPostits, notas, setNotas, nombresMeses }: {
   abierta: boolean; setAbierta: (v: boolean) => void;
   listo: boolean;                                   // hay simulación en pantalla para guardar
   getSnapshot: () => Snapshot;
@@ -69,8 +69,10 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
   marcas: Marca[]; setMarcas: (m: Marca[]) => void;
   postits: Postit[]; setPostits: (p: Postit[]) => void;
   notas: Nota[]; setNotas: (n: Nota[]) => void;
+  nombresMeses: string[];
 }) {
   const [lista, setLista] = useState<any[]>([]);
+  const [verGuardadas, setVerGuardadas] = useState(false);
   const [filtro, setFiltro] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
@@ -121,6 +123,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
     onAbrir(s);
     setActual(s);
     setForm(null);
+    setVerGuardadas(false);
     aviso(`"${s.nombre}" abierta.`);
   };
   const cerrar = () => { skipSync.current = true; setActual(null); setMarcas([]); setPostits([]); setNotas([]); setForm(null); };
@@ -210,7 +213,11 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
               <div className="text-[10px] text-white/60 mt-0.5">{listo ? "Lista para guardar" : "Seteá el mes 1 para poder guardar"}</div>
             )}
           </div>
-          <button onClick={() => setAbierta(false)} title="Ocultar barra" className="shrink-0 text-white/70 hover:text-white text-lg leading-none">›</button>
+          <div className="shrink-0 flex items-center gap-1">
+            <button onClick={() => setVerGuardadas(true)} title="Ver, abrir o eliminar simulaciones guardadas"
+              className="px-2 py-1 rounded text-[10px] font-bold bg-white/15 hover:bg-white/25 whitespace-nowrap">Guardadas · {lista.length}</button>
+            <button onClick={() => setAbierta(false)} title="Ocultar barra" className="text-white/70 hover:text-white text-lg leading-none px-1">›</button>
+          </div>
         </div>
         {sinGuardar && <div className="mt-2 text-[10px] font-bold px-2 py-1 rounded bg-brand-orange text-white">Cambios sin guardar (variables, ventas, nombres, bonos o meses afectados)</div>}
         <div className="mt-2 flex flex-wrap gap-1.5">
@@ -223,7 +230,10 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
               <button onClick={cerrar} className="px-2 py-1 text-[11px] text-white/70 hover:text-white">Cerrar</button>
             </>
           ) : (
-            <button onClick={() => abrirForm("nueva")} disabled={!listo} className="px-3 py-1.5 rounded text-[11px] font-bold bg-brand-primary hover:bg-brand-primary/90 disabled:opacity-40">Guardar simulación</button>
+            <>
+              <button onClick={() => abrirForm("nueva")} disabled={!listo} className="px-3 py-1.5 rounded text-[11px] font-bold bg-brand-primary hover:bg-brand-primary/90 disabled:opacity-40">Guardar simulación</button>
+              {lista.length > 0 && <button onClick={() => setVerGuardadas(true)} className="px-3 py-1.5 rounded text-[11px] font-bold bg-white/15 hover:bg-white/25">Abrir una guardada</button>}
+            </>
           )}
         </div>
         {ok && <div className="mt-1.5 text-[11px] text-emerald-300 font-semibold">{ok}</div>}
@@ -250,6 +260,10 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
             <p className="text-[13px] text-brand-ink leading-relaxed whitespace-pre-line">{actual.comentario}</p>
           </div>
         )}
+
+        <Seccion titulo="Notas y comentarios" extra={<span className="text-brand-ink">{notas.length}</span>}>
+          <NotasSimulacion notas={notas} setNotas={setNotas} nombres={nombresMeses} guardaSola={!!actual} compacto />
+        </Seccion>
 
         <Seccion titulo="Ítems marcados" extra={<span className="text-brand-ink">{marcas.length}</span>}>
           {marcas.length === 0 ? (
@@ -298,40 +312,68 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
           {!actual && postits.length + marcas.length > 0 && <p className="text-[10px] text-brand-orange mt-1.5">Marcas y post-its se guardan al guardar la simulación.</p>}
         </Seccion>
 
-        <Seccion titulo="Simulaciones guardadas" extra={<span className="text-brand-ink">{lista.length}</span>}>
-          {lista.length > 3 && <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar por nombre o comentario…" className="input w-full !py-1 text-[12px] mb-2" />}
-          {lista.length === 0 ? (
-            <p className="text-[12px] text-brand-slate">Todavía no hay simulaciones guardadas.</p>
-          ) : (
-            <ul className="space-y-1.5">
-              {listaFiltrada.map((s) => {
-                const r = s.resumen || {};
-                const fin = r.resultado_con_cola ?? r.resultado;
-                const activa = actual?.id === s.id;
-                return (
-                  <li key={s.id} className={`rounded-md border px-2.5 py-2 ${activa ? "border-amber-400 bg-amber-50" : "border-brand-border bg-white hover:border-brand-ink/40"}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <button onClick={() => abrir(s.id)} className="text-left min-w-0 flex-1" title="Abrir">
-                        <div className="text-[13px] font-semibold text-brand-ink leading-tight truncate">{s.nombre}</div>
-                        {s.comentario && <div className="text-[11px] text-brand-slate line-clamp-1">{s.comentario}</div>}
-                      </button>
-                      <button onClick={() => eliminar(s)} className="text-[11px] text-brand-slate hover:text-brand-primary shrink-0" title="Eliminar">✕</button>
-                    </div>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-brand-slate">
-                      <span>{s.horizonte} m</span>
-                      {r.ventas != null && <span>· {formatInt(r.ventas)} ventas</span>}
-                      {fin != null && <span className={`font-mono font-bold ${fin < 0 ? "text-brand-primary" : "text-emerald-700"}`}>· {formatGs(fin)}</span>}
-                      <span>· {(s.marcas ?? []).length} 📌 · {(s.postits ?? []).length} 📝 · {(s.notas ?? []).length} notas</span>
-                      <span>· {fecha(s.created_at)}{s.created_by_nombre ? ` · ${s.created_by_nombre}` : ""}</span>
-                    </div>
-                    {!activa && <button onClick={() => abrir(s.id)} className="mt-1 text-[11px] font-bold text-brand-primary hover:underline">Abrir</button>}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </Seccion>
       </div>
+
+      {/* ===== Diálogo: simulaciones guardadas ===== */}
+      {verGuardadas && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brand-ink/40 p-4" onClick={() => setVerGuardadas(false)}>
+          <div className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-lg bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 pt-4 pb-3 border-b border-brand-border flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate">Registro del trabajo</div>
+                <h2 className="font-display text-xl text-brand-ink uppercase">Simulaciones guardadas · {lista.length}</h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar por nombre o comentario…" autoFocus className="input !py-1.5 text-sm w-64" />
+                <button onClick={() => setVerGuardadas(false)} className="text-brand-slate hover:text-brand-ink text-xl leading-none px-1">✕</button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {lista.length === 0 ? (
+                <p className="p-6 text-sm text-brand-slate">Todavía no hay simulaciones guardadas. Seteá el mes 1, cargá las ventas y usá "Guardar simulación".</p>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-brand-bg text-[9px] uppercase tracking-wider2 text-brand-slate sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Nombre</th>
+                      <th className="px-3 py-2 text-right">Horizonte</th>
+                      <th className="px-3 py-2 text-right">Ventas</th>
+                      <th className="px-3 py-2 text-right">Resultado final</th>
+                      <th className="px-3 py-2 text-center">📌 / 📝 / notas</th>
+                      <th className="px-3 py-2 text-right">Guardada</th>
+                      <th className="px-4 py-2 text-right"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {listaFiltrada.map((s) => {
+                      const r = s.resumen || {};
+                      const fin = r.resultado_con_cola ?? r.resultado;
+                      const activa = actual?.id === s.id;
+                      return (
+                        <tr key={s.id} className={`border-t border-brand-border ${activa ? "bg-amber-50" : "hover:bg-brand-bg-soft"}`}>
+                          <td className="px-4 py-2">
+                            <div className="text-[13px] font-semibold text-brand-ink">{s.nombre}{activa && <span className="ml-2 text-[9px] font-bold uppercase text-amber-700">abierta</span>}</div>
+                            {s.comentario && <div className="text-[11px] text-brand-slate line-clamp-2 max-w-md">{s.comentario}</div>}
+                          </td>
+                          <td className="px-3 py-2 text-right">{s.horizonte} m</td>
+                          <td className="px-3 py-2 text-right font-mono">{r.ventas != null ? formatInt(r.ventas) : "—"}</td>
+                          <td className={`px-3 py-2 text-right font-mono font-bold ${fin != null && fin < 0 ? "text-brand-primary" : "text-emerald-700"}`}>{fin != null ? formatGs(fin) : "—"}</td>
+                          <td className="px-3 py-2 text-center text-brand-slate">{(s.marcas ?? []).length} / {(s.postits ?? []).length} / {(s.notas ?? []).length}</td>
+                          <td className="px-3 py-2 text-right text-brand-slate whitespace-nowrap">{fecha(s.created_at)}<div className="text-[10px]">{s.created_by_nombre}</div></td>
+                          <td className="px-4 py-2 text-right whitespace-nowrap">
+                            {!activa && <button onClick={() => abrir(s.id)} className="font-bold text-brand-primary hover:underline mr-3">Abrir</button>}
+                            <button onClick={() => eliminar(s)} className="font-semibold text-brand-slate hover:text-brand-primary hover:underline">Eliminar</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

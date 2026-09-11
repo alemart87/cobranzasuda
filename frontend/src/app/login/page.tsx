@@ -56,7 +56,7 @@ export default function LoginPage() {
         <div className="space-y-6 max-w-md">
           <h1 className="font-display text-5xl uppercase leading-tight">
             Operaciones<br />
-            <span className="text-white/90">Sudameris Seguros</span>
+            <span className="text-white/90">Voicenter</span>
           </h1>
           <p className="text-white/90 text-base leading-relaxed">
             Plataforma que disponibiliza información útil para la gestión de Cobranzas, Atención al Cliente, Ventas y procesos operativos.

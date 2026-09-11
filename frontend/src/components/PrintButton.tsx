@@ -24,7 +24,7 @@ export function PrintHeader({ titulo, subtitulo }: { titulo: string; subtitulo?:
     <div className="print-only print-header">
       <div className="print-header-row">
         <img src="/logo-voicenter-color.png" alt="Voicenter" style={{ height: 30, width: "auto" }} />
-        <span className="print-header-kicker">Operaciones · Sudameris Seguros</span>
+        <span className="print-header-kicker">Operaciones · Voicenter</span>
       </div>
       <h1 className="print-header-title">{titulo}</h1>
       {subtitulo && <div className="print-header-sub">{subtitulo}</div>}
@@ -40,7 +40,7 @@ export function PrintCover({ titulo, periodo }: { titulo: string; periodo?: stri
       <div className="print-cover-band" />
       <div className="print-cover-body">
         <img src="/logo-voicenter-color.png" alt="Voicenter" style={{ height: 64, width: "auto", marginBottom: 18 }} />
-        <div className="print-cover-kicker">Operaciones · Sudameris Seguros</div>
+        <div className="print-cover-kicker">Operaciones · Voicenter</div>
         <h1 className="print-cover-title">{titulo || "Informe General"}</h1>
         <div className="print-cover-rule" />
         {periodo && <div className="print-cover-period">{periodo}</div>}
