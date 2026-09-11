@@ -252,6 +252,29 @@ def _postits_con_autor(postits: list[dict], user: CurrentUser) -> list[dict]:
     return out
 
 
+_TIPOS_NOTA = ("supuesto", "observacion", "decision", "pendiente", "riesgo")
+
+
+def _notas_con_autor(notas: list[dict], user: CurrentUser) -> list[dict]:
+    """Notas y comentarios sobre la simulación: las nuevas quedan firmadas; las editadas
+    conservan autor y fecha originales y registran quién y cuándo editó."""
+    out: list[dict] = []
+    for n in notas or []:
+        if not isinstance(n, dict) or not str(n.get("texto") or "").strip():
+            continue
+        out.append({
+            "id": n.get("id") or str(uuid.uuid4()),
+            "texto": str(n["texto"]).strip()[:4000],
+            "tipo": n.get("tipo") if n.get("tipo") in _TIPOS_NOTA else "observacion",
+            "mes": int(n["mes"]) if str(n.get("mes") or "").strip().isdigit() else None,
+            "autor": n.get("autor") or user.full_name,
+            "fecha": n.get("fecha") or datetime.utcnow().isoformat(),
+            "editada_por": n.get("editada_por") or None,
+            "editada_el": n.get("editada_el") or None,
+        })
+    return out
+
+
 def _marcas_limpias(marcas: list[dict]) -> list[dict]:
     vistos: set[str] = set()
     out: list[dict] = []
@@ -266,7 +289,7 @@ def _marcas_limpias(marcas: list[dict]) -> list[dict]:
 def _simulacion_out(s: FacturacionSimulacion, detalle: bool = True) -> dict:
     base = {
         "id": s.id, "nombre": s.nombre, "comentario": s.comentario, "horizonte": s.horizonte,
-        "resumen": s.resumen or {}, "marcas": s.marcas or [], "postits": s.postits or [],
+        "resumen": s.resumen or {}, "marcas": s.marcas or [], "postits": s.postits or [], "notas": s.notas or [],
         "created_by": s.created_by, "created_by_nombre": s.created_by_nombre,
         "created_at": s.created_at.isoformat() if s.created_at else None,
         "updated_by_nombre": s.updated_by_nombre,
@@ -302,6 +325,7 @@ async def crear_simulacion(payload: SimulacionCreate, request: Request,
         meses_afectados=payload.meses_afectados or {},
         bonos_adicionales_por_mes=payload.bonos_adicionales_por_mes or [], nombres_meses=payload.nombres_meses or [],
         marcas=_marcas_limpias(payload.marcas), postits=_postits_con_autor(payload.postits, user),
+        notas=_notas_con_autor(payload.notas, user),
         resumen=payload.resumen, created_by=user.id, created_by_nombre=user.full_name,
     )
     db.add(s)
@@ -355,6 +379,14 @@ async def actualizar_simulacion(simulacion_id: str, payload: SimulacionUpdate, r
         s.marcas = _marcas_limpias(payload.marcas)
     if payload.postits is not None:
         s.postits = _postits_con_autor(payload.postits, user)
+    if payload.notas is not None:
+        previas = {n.get("id"): n for n in (s.notas or [])}
+        nuevas = _notas_con_autor(payload.notas, user)
+        for n in nuevas:   # edición: si el texto cambió respecto de la guardada, queda quién y cuándo
+            prev = previas.get(n["id"])
+            if prev and prev.get("texto") != n["texto"]:
+                n["editada_por"], n["editada_el"] = user.full_name, datetime.utcnow().isoformat()
+        s.notas = nuevas
     if payload.resumen is not None:
         s.resumen = payload.resumen
     s.updated_by_nombre = user.full_name

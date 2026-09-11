@@ -102,6 +102,7 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("facturacion_simulaciones", "meses_afectados", "JSON NOT NULL DEFAULT '{}'"),
     ("facturacion_simulaciones", "bonos_adicionales_por_mes", "JSON NOT NULL DEFAULT '[]'"),
     ("facturacion_simulaciones", "nombres_meses", "JSON NOT NULL DEFAULT '[]'"),
+    ("facturacion_simulaciones", "notas", "JSON NOT NULL DEFAULT '[]'"),
 ]
 
 

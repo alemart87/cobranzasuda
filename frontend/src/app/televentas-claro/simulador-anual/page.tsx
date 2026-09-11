@@ -9,6 +9,7 @@ import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
 import { Afectados, MesAfectadoEditor, ResumenAfectados, describirVariaciones } from "@/components/facturacion/MesAfectado";
 import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
+import { Nota, NotasSimulacion } from "@/components/facturacion/NotasSimulacion";
 import { NumeroInput } from "@/components/facturacion/NumeroInput";
 import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
@@ -38,6 +39,7 @@ export default function SimuladorAnualPage() {
   const [actual, setActual] = useState<any | null>(null);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [postits, setPostits] = useState<Postit[]>([]);
+  const [notas, setNotas] = useState<Nota[]>([]);      // notas y comentarios sobre la simulación (zona de trabajo)
   const [barra, setBarra] = useState(false);          // barra lateral de registro (se abre en pantallas anchas)
   // Meses afectados: variaciones propias de un mes (porta, efectividad, mix, costos variables…).
   const [afectados, setAfectados] = useState<Afectados>({});
@@ -127,6 +129,7 @@ export default function SimuladorAnualPage() {
     setMostrarBonosAd((s.bonos_adicionales_por_mes ?? []).some((x: number) => Number(x) > 0));
     setMarcas(s.marcas ?? []);
     setPostits(s.postits ?? []);
+    setNotas(s.notas ?? []);
     setSeteado(true);
   };
 
@@ -165,7 +168,7 @@ export default function SimuladorAnualPage() {
       {/* ===== Barra lateral de registro (se muestra / oculta) ===== */}
       {p && (
         <RegistroSimulaciones abierta={barra} setAbierta={setBarra} listo={seteado && !!res} getSnapshot={getSnapshot} onAbrir={abrirSimulacion}
-          actual={actual} setActual={setActual} marcas={marcas} setMarcas={setMarcas} postits={postits} setPostits={setPostits} />
+          actual={actual} setActual={setActual} marcas={marcas} setMarcas={setMarcas} postits={postits} setPostits={setPostits} notas={notas} setNotas={setNotas} />
       )}
       {actual && (
         <div className="print-only card p-4 mb-4">
@@ -287,6 +290,8 @@ export default function SimuladorAnualPage() {
           </section>
 
           <ResumenAfectados afectados={afectados} base={p} ventas={ventas} nombres={nombres.map((_, i) => nombreMes(i))} onEditar={(m) => setEditandoMes(m)} onQuitar={quitarAfectado} />
+
+          <NotasSimulacion notas={notas} setNotas={setNotas} nombres={ventas.map((_, i) => nombreMes(i))} guardaSola={!!actual} />
           {editandoMes != null && (
             <MesAfectadoEditor mes={editandoMes} nombre={nombreMes(editandoMes - 1)} nombres={nombres.map((_, i) => nombreMes(i))} horizonte={horizonte} base={p} ventas={ventas[editandoMes - 1] ?? 0}
               actual={afectados[String(editandoMes)]}
