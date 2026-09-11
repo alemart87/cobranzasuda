@@ -490,7 +490,52 @@ _FLUJOS = ("residual", "cuota2", "legajos", "clawbacks", "clawback_bonos", "reca
 HORIZONTES = (12, 18)
 
 
-def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12) -> dict[str, Any]:
+# Claves que un "mes afectado" NO puede pisar: las ventas van aparte y la estructura queda fija al mes 1.
+_NO_AFECTABLES = {"ventas", "_sin_breakeven", "costos"}
+_COSTOS_AFECTABLES = {"comision_vendedores_pct", "comision_incluye_bonos", "logistica_central",
+                      "logistica_interior", "logistica_interior_pct", "operativo_por_venta"}
+
+
+def _normalizar_afectados(meses_afectados: dict | None, h: int) -> dict[int, dict]:
+    """{"7": {...}} → {6: {...}} (índice 0-based), solo meses 2..h con variaciones no vacías."""
+    out: dict[int, dict] = {}
+    for k, ov in (meses_afectados or {}).items():
+        try:
+            mes = int(k)
+        except (TypeError, ValueError):
+            continue
+        if mes < 2 or mes > h or not isinstance(ov, dict):
+            continue
+        limpio = {kk: vv for kk, vv in ov.items() if kk not in _NO_AFECTABLES and vv is not None}
+        if isinstance(ov.get("costos"), dict):
+            cc = {kk: vv for kk, vv in ov["costos"].items() if kk in _COSTOS_AFECTABLES and vv is not None}
+            if cc:
+                limpio["costos"] = cc
+        if limpio:
+            out[mes - 1] = limpio
+    return out
+
+
+def _aplicar_afectado(base: dict, ov: dict | None) -> dict:
+    """Parámetros de una cohorte con sus variaciones propias (porta, efectividad, mix,
+    ajuste de comisiones, bonos, legajos, costos variables). Los planes se mezclan por nombre."""
+    if not ov:
+        return base
+    pm = {**base}
+    for k, v in ov.items():
+        if k == "costos":
+            pm["costos"] = {**base["costos"], **v}
+        elif k == "planes" and isinstance(v, list):
+            por_plan = {str(x.get("plan")): x for x in v if isinstance(x, dict)}
+            pm["planes"] = [{**pl, **{kk: vv for kk, vv in por_plan.get(str(pl.get("plan")), {}).items() if kk != "plan"}}
+                            for pl in base["planes"]]
+        else:
+            pm[k] = v
+    return pm
+
+
+def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
+                  meses_afectados: dict | None = None) -> dict[str, Any]:
     """Balance de 12 o 18 meses con estructura FIJA seteada en el mes 1.
 
     - El mes 1 define objetivo CO, tarifas, zafra, escalas y la estructura
@@ -513,7 +558,10 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
     m1 = simular_facturacion({**base, "_sin_breakeven": True})
     headcount = m1["costos"]["headcount"]
 
-    cohortes = [simular_facturacion({**base, "ventas": v, "_sin_breakeven": True}) for v in ventas]
+    # Meses afectados: cohortes con variaciones propias (la estructura sigue fija).
+    afectados = _normalizar_afectados(meses_afectados, h)
+    cohortes = [simular_facturacion({**_aplicar_afectado(base, afectados.get(t)), "ventas": v, "_sin_breakeven": True})
+                for t, v in enumerate(ventas)]
 
     meses: list[dict] = []
     acumulado = 0.0
@@ -527,6 +575,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
             "cumplimiento_pct": c["derivados"]["cumplimiento_pct"],
             "escalon_productividad": (c["derivados"]["escalon_productividad"] or {}).get("desde_pct"),
             "monto_bono_productividad": c["derivados"]["monto_bono_productividad"],
+            "afectado": t in afectados, "variaciones": afectados.get(t, {}),
         }
         for k in _FLUJOS:
             fila[k] = 0.0
@@ -539,7 +588,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         fila["ajustes"] = sum(fila[k] for k in _FLUJOS)
         fila["ingreso_neto"] = fila["facturacion_bruta"] + fila["ajustes"]
         # Costos del mes: estructura fija del mes 1 + variables de las ventas del mes.
-        costos_t, _ = _costos_y_margen(base["costos"], ventas[t], c["mes0"], c["bruto_mes0"],
+        costos_t, _ = _costos_y_margen(c["parametros"]["costos"], ventas[t], c["mes0"], c["bruto_mes0"],
                                        c["neto_6"], c["neto_12"], headcount=headcount,
                                        base_comision=c["costos"]["vendedor"]["base_comision"])
         fila["costos"] = costos_t
@@ -615,6 +664,9 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
     ]
     if anual["meses_negativos"]:
         partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es el mes {anual['peor_mes']} y el mejor el {anual['mejor_mes']}.")
+    if afectados:
+        partes.append(f"{len(afectados)} mes(es) con variaciones propias (porta, efectividad, mix u otros): "
+                      + ", ".join(f"M{t + 1}" for t in sorted(afectados)) + ".")
     if anual["meses_sin_bono_productividad"] and base.get("bonos_activos", True):
         partes.append(f"En {anual['meses_sin_bono_productividad']} mes(es) las ventas quedaron bajo el 90% del objetivo y el bono productividad no se liquidó.")
     final = anual["resultado_con_cola"]
@@ -637,5 +689,6 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
 
     return {
         "parametros": base, "horizonte": h, "ventas_por_mes": [round(v) for v in ventas],
+        "meses_afectados": {str(t + 1): ov for t, ov in sorted(afectados.items())},
         "headcount": headcount, "meses": meses, "anual": anual, "conclusion": " ".join(partes),
     }

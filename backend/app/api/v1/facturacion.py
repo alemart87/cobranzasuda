@@ -226,7 +226,7 @@ async def simulador_anual_run(payload: SimuladorAnualRequest,
     try:
         if payload.horizonte not in (12, 18):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12 o 18 meses.")
-        return simular_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte)
+        return simular_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte, payload.meses_afectados)
     except (TypeError, ValueError, KeyError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 
@@ -274,6 +274,7 @@ def _simulacion_out(s: FacturacionSimulacion, detalle: bool = True) -> dict:
     if detalle:
         base["parametros"] = s.parametros or {}
         base["ventas_por_mes"] = s.ventas_por_mes or []
+        base["meses_afectados"] = s.meses_afectados or {}
     return base
 
 
@@ -295,6 +296,7 @@ async def crear_simulacion(payload: SimulacionCreate, request: Request,
     s = FacturacionSimulacion(
         nombre=payload.nombre.strip(), comentario=(payload.comentario or "").strip() or None,
         horizonte=payload.horizonte, parametros=payload.parametros, ventas_por_mes=payload.ventas_por_mes,
+        meses_afectados=payload.meses_afectados or {},
         marcas=_marcas_limpias(payload.marcas), postits=_postits_con_autor(payload.postits, user),
         resumen=payload.resumen, created_by=user.id, created_by_nombre=user.full_name,
     )
@@ -339,6 +341,8 @@ async def actualizar_simulacion(simulacion_id: str, payload: SimulacionUpdate, r
         if not payload.ventas_por_mes:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Faltan las ventas por mes.")
         s.ventas_por_mes = payload.ventas_por_mes
+    if payload.meses_afectados is not None:
+        s.meses_afectados = payload.meses_afectados
     if payload.marcas is not None:
         s.marcas = _marcas_limpias(payload.marcas)
     if payload.postits is not None:

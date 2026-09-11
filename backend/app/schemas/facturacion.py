@@ -72,6 +72,8 @@ class SimuladorAnualRequest(BaseModel):
     parametros: dict[str, Any] = Field(default_factory=dict)
     ventas_por_mes: List[float] = Field(min_length=1, max_length=18)
     horizonte: int = 12                   # 12 o 18 meses
+    # Meses afectados: {"7": {"porta_pct": 30, "efectividad_pct": 85, ...}} — variaciones propias de ese mes.
+    meses_afectados: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class SimulacionCreate(BaseModel):
@@ -81,6 +83,7 @@ class SimulacionCreate(BaseModel):
     horizonte: int = 12
     parametros: dict[str, Any] = Field(default_factory=dict)
     ventas_por_mes: List[float] = Field(min_length=1, max_length=18)
+    meses_afectados: dict[str, dict[str, Any]] = Field(default_factory=dict)
     marcas: List[dict[str, Any]] = Field(default_factory=list)
     postits: List[dict[str, Any]] = Field(default_factory=list)
     resumen: dict[str, Any] = Field(default_factory=dict)
@@ -92,6 +95,7 @@ class SimulacionUpdate(BaseModel):
     horizonte: Optional[int] = None
     parametros: Optional[dict[str, Any]] = None
     ventas_por_mes: Optional[List[float]] = Field(default=None, max_length=18)
+    meses_afectados: Optional[dict[str, dict[str, Any]]] = None
     marcas: Optional[List[dict[str, Any]]] = None
     postits: Optional[List[dict[str, Any]]] = None
     resumen: Optional[dict[str, Any]] = None
