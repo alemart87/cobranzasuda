@@ -98,6 +98,8 @@ REQUIRED_COLUMNS: list[tuple[str, str, str]] = [
     ("agent_messages", "reasoning_tokens", "INTEGER NOT NULL DEFAULT 0"),
     ("agent_messages", "total_tokens", "INTEGER NOT NULL DEFAULT 0"),
     ("agent_messages", "cost_usd", "NUMERIC(12,6) NOT NULL DEFAULT 0"),
+    # simulaciones guardadas (Facturación): meses afectados (por si la tabla ya existía)
+    ("facturacion_simulaciones", "meses_afectados", "JSON NOT NULL DEFAULT '{}'"),
 ]
 
 

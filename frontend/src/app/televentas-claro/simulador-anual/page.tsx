@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
+import { Afectados, MesAfectadoEditor, ResumenAfectados, describirVariaciones } from "@/components/facturacion/MesAfectado";
 import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
 import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
@@ -31,6 +32,15 @@ export default function SimuladorAnualPage() {
   const [actual, setActual] = useState<any | null>(null);
   const [marcas, setMarcas] = useState<Marca[]>([]);
   const [postits, setPostits] = useState<Postit[]>([]);
+  const [barra, setBarra] = useState(false);          // barra lateral de registro (se abre en pantallas anchas)
+  // Meses afectados: variaciones propias de un mes (porta, efectividad, mix, costos variables…).
+  const [afectados, setAfectados] = useState<Afectados>({});
+  const [editandoMes, setEditandoMes] = useState<number | null>(null);
+  const esAfectado = (mes: number) => !!afectados[String(mes)];
+  const aplicarAfectado = (meses: number[], ov: any) =>
+    setAfectados((prev) => { const n = { ...prev }; for (const m of meses) n[String(m)] = JSON.parse(JSON.stringify(ov)); return n; });
+  const quitarAfectado = (mes: number) => setAfectados((prev) => { const n = { ...prev }; delete n[String(mes)]; return n; });
+  useEffect(() => { setBarra(window.innerWidth >= 1280); }, []);
   const esMarcado = (key: string) => marcas.some((m) => m.key === key);
   const toggleMarca = (key: string, label: string) =>
     setMarcas((prev) => (prev.some((m) => m.key === key) ? prev.filter((m) => m.key !== key) : [...prev, { key, label }]));
@@ -41,18 +51,18 @@ export default function SimuladorAnualPage() {
     }).catch((e) => setError(e.message));
   }, []);
 
-  const simular = useCallback((params: any, vpm: number[], h: number) => {
+  const simular = useCallback((params: any, vpm: number[], h: number, af: Afectados) => {
     apiFetch<any>("/api/v1/facturacion/simulador/anual", {
-      method: "POST", body: JSON.stringify({ parametros: params, ventas_por_mes: vpm, horizonte: h }),
+      method: "POST", body: JSON.stringify({ parametros: params, ventas_por_mes: vpm, horizonte: h, meses_afectados: af }),
     }).then((d) => { setRes(d); setError(null); }).catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => {
     if (!seteado || !p || ventas.length !== horizonte) return;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => simular(p, ventas, horizonte), 250);
+    timer.current = setTimeout(() => simular(p, ventas, horizonte, afectados), 250);
     return () => clearTimeout(timer.current);
-  }, [seteado, p, ventas, horizonte, simular]);
+  }, [seteado, p, ventas, horizonte, afectados, simular]);
 
   const setear = () => {
     const v1 = Number(p.ventas) || 0;
@@ -85,7 +95,7 @@ export default function SimuladorAnualPage() {
   const hc = res?.headcount;
 
   const getSnapshot = (): Snapshot => ({
-    parametros: p, ventas_por_mes: ventas, horizonte,
+    parametros: p, ventas_por_mes: ventas, horizonte, meses_afectados: afectados,
     resumen: a ? {
       ventas: a.ventas, facturacion_bruta: a.facturacion_bruta, ingreso_neto: a.ingreso_neto, costos: a.costos,
       resultado: a.resultado, margen_pct: a.margen_pct, resultado_con_cola: a.resultado_con_cola,
@@ -99,6 +109,7 @@ export default function SimuladorAnualPage() {
     const v = (s.ventas_por_mes || []).map(Number);
     while (v.length < h) v.push(v[v.length - 1] ?? Number(s.parametros?.ventas) ?? 0);
     setVentas(v.slice(0, h));
+    setAfectados(s.meses_afectados ?? {});
     setMarcas(s.marcas ?? []);
     setPostits(s.postits ?? []);
     setSeteado(true);
@@ -126,6 +137,9 @@ export default function SimuladorAnualPage() {
         <div className="flex flex-wrap items-center gap-3">
           <span className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate no-print">Horizonte</span>
           <HorizonteToggle />
+          <button onClick={() => setBarra(!barra)} className={`no-print px-3 py-1.5 rounded-md text-xs font-bold border ${barra ? "bg-brand-ink text-white border-brand-ink" : "border-brand-border text-brand-graphite hover:border-brand-ink"}`}>
+            {barra ? "Ocultar registro ›" : "‹ Registro del trabajo"}
+          </button>
           <PrintButton label="Imprimir / Guardar PDF" />
         </div>
       </div>
@@ -133,13 +147,23 @@ export default function SimuladorAnualPage() {
       {error && <p className="text-sm text-brand-primary mb-4">{error}</p>}
       {!p && !error && <div className="text-brand-slate">Cargando variables de negocio…</div>}
 
-      {/* ===== Lienzo de trabajo: todo lo de abajo; los post-its flotan sobre él ===== */}
-      <div className="relative">
-      <PostitsLienzo postits={postits} setPostits={setPostits} marcas={marcas} />
+      {/* ===== Barra lateral de registro (se muestra / oculta) ===== */}
       {p && (
-        <RegistroSimulaciones listo={seteado && !!res} getSnapshot={getSnapshot} onAbrir={abrirSimulacion}
+        <RegistroSimulaciones abierta={barra} setAbierta={setBarra} listo={seteado && !!res} getSnapshot={getSnapshot} onAbrir={abrirSimulacion}
           actual={actual} setActual={setActual} marcas={marcas} setMarcas={setMarcas} postits={postits} setPostits={setPostits} />
       )}
+      {actual && (
+        <div className="print-only card p-4 mb-4">
+          <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate">Simulación guardada</div>
+          <div className="font-display text-xl text-brand-ink uppercase">{actual.nombre}</div>
+          {actual.comentario && <p className="text-sm text-brand-ink mt-1 whitespace-pre-line">{actual.comentario}</p>}
+          <div className="text-[11px] text-brand-slate mt-1">Guardada por {actual.created_by_nombre || "—"} el {new Date(actual.created_at).toLocaleDateString("es-PY")}{marcas.length ? ` · marcados: ${marcas.map((m) => m.label).join(", ")}` : ""}</div>
+        </div>
+      )}
+
+      {/* ===== Lienzo de trabajo: los post-its flotan sobre él; deja lugar a la barra cuando está abierta ===== */}
+      <div className={`relative transition-[padding] ${barra ? "xl:pr-[384px]" : ""}`}>
+      <PostitsLienzo postits={postits} setPostits={setPostits} marcas={marcas} />
 
       {/* ===== Paso 1: setear el mes 1 ===== */}
       {p && !seteado && (
@@ -186,10 +210,17 @@ export default function SimuladorAnualPage() {
             <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate mb-2">Ventas efectivas por mes</div>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-12 gap-2">
               {ventas.map((v, i) => (
-                <label key={i} className={`text-[10px] ${i === 0 ? "text-brand-primary font-bold" : "text-brand-slate"} ${esMarcado(`mes:${i + 1}`) ? "rounded ring-2 ring-amber-400 ring-offset-1 bg-amber-50" : ""}`}>
+                <label key={i} className={`text-[10px] ${i === 0 ? "text-brand-primary font-bold" : "text-brand-slate"} ${esMarcado(`mes:${i + 1}`) ? "rounded ring-2 ring-amber-400 ring-offset-1 bg-amber-50" : ""} ${esAfectado(i + 1) ? "rounded ring-2 ring-brand-purple ring-offset-1 bg-brand-purple/5" : ""}`}
+                  title={esAfectado(i + 1) ? describirVariaciones(afectados[String(i + 1)], p).join(" · ") : undefined}>
                   <span className="flex items-center justify-between gap-1">
-                    <span>Mes {i + 1}{i === 0 ? " (seteado)" : ""}</span>
-                    <Pin marcado={esMarcado(`mes:${i + 1}`)} onClick={() => toggleMarca(`mes:${i + 1}`, `Mes ${i + 1} (${formatInt(v)} ventas)`)} className="!w-5 !h-5 !text-[10px]" />
+                    <span>Mes {i + 1}{i === 0 ? " (seteado)" : ""}{esAfectado(i + 1) && <span className="ml-1 px-1 rounded bg-brand-purple text-white text-[9px] font-bold">afectado</span>}</span>
+                    <span className="flex items-center gap-0.5">
+                      {i > 0 && (
+                        <button type="button" onClick={() => setEditandoMes(i + 1)} title="Editar este mes: variaciones propias (porta, efectividad, mix…)"
+                          className={`no-print inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] leading-none ${esAfectado(i + 1) ? "bg-brand-purple text-white" : "border border-brand-border text-brand-slate opacity-40 hover:opacity-100 hover:border-brand-purple hover:text-brand-purple"}`}>✎</button>
+                      )}
+                      <Pin marcado={esMarcado(`mes:${i + 1}`)} onClick={() => toggleMarca(`mes:${i + 1}`, `Mes ${i + 1} (${formatInt(v)} ventas)`)} className="!w-5 !h-5 !text-[10px]" />
+                    </span>
                   </span>
                   <input type="number" step={10} value={v} disabled={i === 0} onChange={(e) => setVenta(i, Number(e.target.value))}
                     className={`input !py-1 !px-1.5 text-sm text-right w-full ${i === 0 ? "bg-brand-bg-soft" : ""}`} />
@@ -200,8 +231,18 @@ export default function SimuladorAnualPage() {
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : prev[0])))} className="text-[11px] text-brand-primary font-semibold hover:underline">Igualar todos al mes 1</button>
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(1.02, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Crecer 2% mensual</button>
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(0.98, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Caer 2% mensual</button>
+              <span className="text-[11px] text-brand-slate ml-auto">✎ sobre un mes = variaciones propias de ese mes (menos porta, otra efectividad, otro mix…)</span>
             </div>
           </section>
+
+          <ResumenAfectados afectados={afectados} base={p} ventas={ventas} onEditar={(m) => setEditandoMes(m)} onQuitar={quitarAfectado} />
+          {editandoMes != null && (
+            <MesAfectadoEditor mes={editandoMes} horizonte={horizonte} base={p} ventas={ventas[editandoMes - 1] ?? 0}
+              actual={afectados[String(editandoMes)]}
+              onAplicar={(meses, ov) => { aplicarAfectado(meses, ov); setEditandoMes(null); }}
+              onQuitar={(m) => { quitarAfectado(m); setEditandoMes(null); }}
+              onCerrar={() => setEditandoMes(null)} />
+          )}
 
           <div className={`flex flex-wrap items-center justify-between gap-3 rounded-md border-2 px-4 py-3 ${p.bonos_activos === false ? "border-brand-ink bg-brand-ink text-white" : "border-brand-border bg-white"}`}>
             <div>
@@ -386,8 +427,10 @@ export default function SimuladorAnualPage() {
                     <tr className="text-[9px] uppercase tracking-wider2 text-brand-slate">
                       <th className="px-3 py-2 text-left sticky left-0 bg-white">Concepto</th>
                       {meses.map((m: any) => (
-                        <th key={m.mes} className={`px-2 py-2 text-right ${esMarcado(`mes:${m.mes}`) ? "bg-amber-100 text-brand-ink" : ""}`}>
+                        <th key={m.mes} className={`px-2 py-2 text-right ${esMarcado(`mes:${m.mes}`) ? "bg-amber-100 text-brand-ink" : ""} ${m.afectado ? "text-brand-purple" : ""}`}
+                          title={m.afectado ? `Mes afectado: ${describirVariaciones(m.variaciones, p).join(" · ")}` : undefined}>
                           <span className="inline-flex items-center gap-1 justify-end">
+                            {m.afectado && <span className="w-1.5 h-1.5 rounded-full bg-brand-purple" />}
                             <Pin marcado={esMarcado(`mes:${m.mes}`)} onClick={() => toggleMarca(`mes:${m.mes}`, `Mes ${m.mes} (${formatInt(m.ventas)} ventas)`)} className="!w-4 !h-4 !text-[9px]" />
                             M{m.mes}
                           </span>

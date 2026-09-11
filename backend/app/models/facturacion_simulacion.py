@@ -30,6 +30,7 @@ class FacturacionSimulacion(Base):
     horizonte: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
     parametros: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
     ventas_por_mes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    meses_afectados: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)  # {"7": {variaciones}}
     marcas: Mapped[list] = mapped_column(JSON, nullable=False, default=list)     # [{key, label}]
     postits: Mapped[list] = mapped_column(JSON, nullable=False, default=list)    # [{id, texto, color, item, autor, fecha}]
     resumen: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)    # foto de anual al guardar

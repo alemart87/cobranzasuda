@@ -224,3 +224,34 @@ def test_subgerencia_comercial_en_analisis():
     a1 = simular_anual({"costos": {"subgerencia_salario": 8_000_000}}, [1900] * 12)["anual"]
     assert abs((a1["costos_fijos_mes"] - a0["costos_fijos_mes"]) - esperado) <= 3
     assert abs((a1["costos"] - a0["costos"]) - esperado * 12) <= 40
+
+
+def test_meses_afectados_en_la_anual():
+    """Un mes afectado usa sus propias variaciones (porta, efectividad, mix, costos variables);
+    el resto del año y la estructura no cambian."""
+    from app.services.analyzers.facturacion_simulador import simular_anual
+    base = simular_anual({"objetivo_co": 1750}, [1900] * 12)
+    con = simular_anual({"objetivo_co": 1750}, [1900] * 12, 12, {
+        "7": {"porta_pct": 20, "efectividad_pct": 79, "costos": {"operativo_por_venta": 20000, "ventas_por_vendedor": 5}},
+        "1": {"porta_pct": 0},      # el mes 1 no es afectable: es la base
+        "99": {"porta_pct": 0},     # fuera del horizonte: se ignora
+    })
+    assert list(con["meses_afectados"].keys()) == ["7"]
+    assert "ventas_por_vendedor" not in con["meses_afectados"]["7"]["costos"]   # la estructura no se pisa
+    m7b, m7c = base["meses"][6], con["meses"][6]
+    assert m7c["afectado"] and not base["meses"][6]["afectado"]
+    assert m7c["portabilidad"] < m7b["portabilidad"]                 # menos porta → menos plus
+    assert m7c["bono_efectividad"] == 0 < m7b["bono_efectividad"]    # 79% pierde el bono efectividad
+    assert m7c["costos"]["operativos"] == 1900 * 20000
+    assert m7c["costos"]["headcount"] == m7b["costos"]["headcount"]  # estructura fija
+    # los demás meses del mes 0 no cambian (los ajustes posteriores de la cohorte 7 sí, más adelante)
+    for t in range(6):
+        assert con["meses"][t]["facturacion_bruta"] == base["meses"][t]["facturacion_bruta"]
+        assert con["meses"][t]["resultado"] == base["meses"][t]["resultado"]
+    assert con["anual"]["resultado"] < base["anual"]["resultado"]
+    assert "M7" in con["conclusion"]
+    # mix de planes por nombre
+    mix = simular_anual({"objetivo_co": 1750}, [1900] * 12, 12,
+                        {"3": {"planes": [{"plan": "CG15G", "mix_pct": 90}, {"plan": "C200X", "mix_pct": 10},
+                                          {"plan": "CG30G", "mix_pct": 0}, {"plan": "CG50B", "mix_pct": 0}, {"plan": "C100X", "mix_pct": 0}]}})
+    assert mix["meses"][2]["activaciones_cuota1"] != base["meses"][2]["activaciones_cuota1"]
