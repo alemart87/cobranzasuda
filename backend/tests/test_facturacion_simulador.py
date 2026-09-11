@@ -155,3 +155,22 @@ def test_simulacion_a_18_meses():
     # a 18 meses queda menos cola pendiente que a 12 (más flujos entran en el período)
     assert abs(r18["anual"]["cola_post_12"]["total"]) <= abs(r12["anual"]["cola_post_12"]["total"]) + 1
     assert "18 meses simulados" in r18["conclusion"]
+
+
+def test_ajuste_de_comisiones():
+    base = simular_facturacion({"ventas": 1900, "objetivo_co": 1750})
+    mas5 = simular_facturacion({"ventas": 1900, "objetivo_co": 1750, "ajuste_comisiones_pct": 5})
+    d0, d5 = base["derivados"], mas5["derivados"]
+    # cuota 1, cuota 2 y porta suben 5%; el residual y los bonos no
+    assert d5["cuota1_ponderada"] == round(d0["cuota1_ponderada"] * 1.05)
+    assert d5["cuota2_ponderada"] == round(d0["cuota2_ponderada"] * 1.05)
+    assert d5["porta_plus_ponderado"] == round(d0["porta_plus_ponderado"] * 1.05)
+    assert d5["residual_por_linea"] == d0["residual_por_linea"]
+    assert mas5["mes0"]["bono_productividad"] == base["mes0"]["bono_productividad"]
+    assert mas5["mes0"]["activaciones_cuota1"] == round(base["mes0"]["activaciones_cuota1"] * 1.05)
+    assert mas5["neto_6"] > base["neto_6"] and "ajuste de comisiones del +5.0%" in mas5["conclusion"]
+    # también aplica en la simulación anual (cohortes)
+    from app.services.analyzers.facturacion_simulador import simular_anual
+    a0 = simular_anual({"objetivo_co": 1750}, [1900] * 12)
+    a5 = simular_anual({"objetivo_co": 1750, "ajuste_comisiones_pct": 5}, [1900] * 12)
+    assert a5["anual"]["facturacion_bruta"] > a0["anual"]["facturacion_bruta"]

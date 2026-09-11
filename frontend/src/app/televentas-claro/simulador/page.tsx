@@ -106,10 +106,30 @@ export default function SimuladorFacturacionPage() {
                   </button>
                 </div>
 
+
+                <div className="rounded-md border-2 border-brand-primary bg-brand-primary/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-primary">Ajuste de comisiones</div>
+                    <div className="text-sm font-semibold text-brand-ink">
+                      {Number(p.ajuste_comisiones_pct || 0) === 0
+                        ? "Sin ajuste — cuota 1, cuota 2 y plus de portabilidad según tarifa vigente"
+                        : `Cuota 1, cuota 2 y plus de portabilidad ${Number(p.ajuste_comisiones_pct) > 0 ? "mejoran" : "bajan"} ${Math.abs(Number(p.ajuste_comisiones_pct))}%`}
+                    </div>
+                    <div className="text-[11px] text-brand-slate">Simula una renegociación de comisiones con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados.</div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm no-print">
+                    <span className="text-brand-graphite">Ajuste</span>
+                    <input type="number" step={0.5} value={p.ajuste_comisiones_pct ?? 0}
+                      onChange={(e) => setP((prev: any) => ({ ...prev, ajuste_comisiones_pct: Number(e.target.value) }))}
+                      className="input max-w-[90px] !py-1.5 text-right font-bold text-brand-primary" />
+                    <span className="text-brand-graphite">%</span>
+                  </label>
+                </div>
+
                 <div className="print-only card p-4">
                   <h3 className="text-sm font-semibold text-brand-ink mb-2">Supuestos de la simulación</h3>
                   <p className="text-xs text-brand-graphite leading-relaxed">
-                    Ventas <b>{formatInt(p.ventas)}</b> · efectividad <b>{p.efectividad_pct}%</b> · objetivo CO <b>{formatInt(p.objetivo_co)}</b> ·
+                    Ventas <b>{formatInt(p.ventas)}</b> · ajuste de comisiones <b>{p.ajuste_comisiones_pct ?? 0}%</b> · efectividad <b>{p.efectividad_pct}%</b> · objetivo CO <b>{formatInt(p.objetivo_co)}</b> ·
                     portabilidad <b>{p.porta_pct}%</b> · mix {p.planes.map((pl: any) => `${pl.plan} ${pl.mix_pct}%`).join(", ")} ·
                     residual <b>{p.residual_pct}%</b> × {p.pct_abono_acreditado}% del abono × {p.residual_meses} meses · chargeback <b>{p.chargeback_meses} meses</b> ·
                     zafra {p.zafra_pct.map((z: number) => `${z}`).join(" / ")}

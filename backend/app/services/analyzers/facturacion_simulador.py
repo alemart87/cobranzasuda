@@ -43,6 +43,7 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "objetivo_co": 1750,            # objetivo mensual de líneas CO (lo comunica Claro)
     "pct_estado_a": 99.5,           # activaciones en estado A (no S/P/C) al liquidar
     "bonos_activos": True,          # False = simular SIN bonos (productividad y efectividad en 0)
+    "ajuste_comisiones_pct": 0.0,   # ajuste negociado sobre cuota 1, cuota 2 y plus de portabilidad (+5 = mejora 5%)
     # ---- tarifas por plan (Gs sin IVA) y mix ----
     "planes": [
         {"plan": "CG15G", "mix_pct": 68.0, "cuota1": 204545, "cuota2": 34091, "porta_plus": 218182, "abono": 170455},
@@ -138,6 +139,9 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     def w(key: str) -> float:
         return sum(float(pl.get(key) or 0) * float(pl["mix_pct"]) / mix_total for pl in planes)
     cuota1_w, cuota2_w, porta_w, abono_w = w("cuota1"), w("cuota2"), w("porta_plus"), w("abono")
+    # Ajuste de comisiones negociado: escala cuota 1, cuota 2 y porta (el residual y los bonos no cambian).
+    ajuste = 1 + float(p.get("ajuste_comisiones_pct") or 0) / 100.0
+    cuota1_w, cuota2_w, porta_w = cuota1_w * ajuste, cuota2_w * ajuste, porta_w * ajuste
     residual_linea = abono_w * float(p["pct_abono_acreditado"]) / 100.0 * float(p["residual_pct"]) / 100.0
 
     bonos_activos = bool(p.get("bonos_activos", True))
@@ -248,6 +252,10 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         f"a 6 meses, con las caídas descontadas, {gs(margen['meses6'])} ({margen['pct_6']}%)"
         + (f"; punto de equilibrio a 6 meses: {margen['breakeven_ventas_6']:,.0f} ventas." if margen.get("breakeven_ventas_6") else ".")
     )
+    if float(p.get("ajuste_comisiones_pct") or 0):
+        aj = float(p["ajuste_comisiones_pct"])
+        partes.append(f"Con un ajuste de comisiones del {aj:+.1f}% sobre cuota 1, cuota 2 y portabilidad "
+                      f"(cuota 1 ponderada {gs(cuota1_w)}).")
     if not bonos_activos:
         partes.append("SIMULACIÓN SIN BONOS: los bonos de productividad y efectividad están desactivados por el usuario "
                       "— este es el resultado que sostiene el negocio si Claro no los liquida.")
@@ -300,6 +308,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
             "activaciones": round(act), "activaciones_estado_a": round(act_a), "bonos_activos": bonos_activos,
             "cumplimiento_pct": round(cumplimiento, 2), "monto_bono_productividad": monto_prod,
             "escalon_productividad": esc_prod, "monto_bono_efectividad": monto_efect, "escalon_efectividad": esc_efect,
+            "ajuste_comisiones_pct": float(p.get("ajuste_comisiones_pct") or 0),
             "cuota1_ponderada": round(cuota1_w), "cuota2_ponderada": round(cuota2_w),
             "porta_plus_ponderado": round(porta_w), "residual_por_linea": round(residual_linea),
             "clawback_por_linea": round(clawback_linea_base),
