@@ -245,6 +245,8 @@ def _postits_con_autor(postits: list[dict], user: CurrentUser) -> list[dict]:
             "item": pi.get("item") or None,                 # key de una marca (opcional)
             "autor": pi.get("autor") or user.full_name,
             "fecha": pi.get("fecha") or datetime.utcnow().isoformat(),
+            # Posición en el lienzo de trabajo (px desde el borde superior izquierdo).
+            "x": float(pi.get("x") or 0), "y": float(pi.get("y") or 0),
         })
     return out
 

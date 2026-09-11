@@ -8,7 +8,7 @@ import { formatGs, formatInt } from "@/lib/format";
  *  guardadas con nombre y comentario, ítems marcados y post-its. */
 
 export type Marca = { key: string; label: string };
-export type Postit = { id?: string; texto: string; color: string; item?: string | null; autor?: string; fecha?: string };
+export type Postit = { id?: string; texto: string; color: string; item?: string | null; autor?: string; fecha?: string; x?: number; y?: number };
 export type Snapshot = { parametros: any; ventas_por_mes: number[]; horizonte: number; resumen: any };
 
 export const COLORES_POSTIT: Record<string, { label: string; bg: string; border: string }> = {
@@ -145,7 +145,9 @@ export function RegistroSimulaciones({ listo, getSnapshot, onAbrir, actual, setA
 
   const agregarPostit = () => {
     if (!piTexto.trim()) return;
-    setPostits([...postits, { texto: piTexto.trim(), color: piColor, item: piItem || null }]);
+    // Nace en el lienzo, escalonado para que no se tapen; después se arrastra a donde haga falta.
+    const n = postits.length;
+    setPostits([...postits, { texto: piTexto.trim(), color: piColor, item: piItem || null, x: 24 + (n % 6) * 36, y: 150 + (n % 6) * 28 }]);
     setPiTexto(""); setPiItem("");
   };
   const quitarPostit = (i: number) => setPostits(postits.filter((_, j) => j !== i));
@@ -274,23 +276,20 @@ export function RegistroSimulaciones({ listo, getSnapshot, onAbrir, actual, setA
                 </div>
               </div>
               {postits.length === 0 ? (
-                <p className="text-sm text-brand-slate">Sin post-its.</p>
+                <p className="text-sm text-brand-slate">Sin post-its. Los que pegues quedan flotando sobre el lienzo: arrastralos desde su franja de color y soltalos donde quieras.</p>
               ) : (
-                <div className="grid sm:grid-cols-2 gap-3">
+                <ul className="space-y-1">
                   {postits.map((pi, i) => {
                     const c = COLORES_POSTIT[pi.color] ?? COLORES_POSTIT.amarillo;
-                    const item = pi.item ? marcas.find((m) => m.key === pi.item) : null;
                     return (
-                      <div key={pi.id ?? i} className="relative rounded-sm shadow-md p-3 text-[13px] text-brand-ink leading-snug"
-                        style={{ background: c.bg, borderTop: `6px solid ${c.border}`, transform: `rotate(${i % 2 ? 0.6 : -0.6}deg)` }}>
-                        <button onClick={() => quitarPostit(i)} className="no-print absolute top-1 right-1.5 text-[11px] text-brand-ink/40 hover:text-brand-primary" title="Quitar post-it">✕</button>
-                        {item && <div className="text-[10px] font-bold text-brand-ink/60 mb-1">📌 {item.label}</div>}
-                        <p className="whitespace-pre-line pr-3">{pi.texto}</p>
-                        <div className="text-[10px] text-brand-ink/50 mt-2">{pi.autor || "sin guardar"}{pi.fecha ? ` · ${fecha(pi.fecha)}` : ""}</div>
-                      </div>
+                      <li key={pi.id ?? i} className="flex items-start gap-2 text-[12px] text-brand-ink">
+                        <span className="mt-1 w-3 h-3 rounded-sm shrink-0" style={{ background: c.bg, border: `1px solid ${c.border}` }} />
+                        <span className="flex-1 line-clamp-2">{pi.texto}</span>
+                        <button onClick={() => quitarPostit(i)} className="no-print text-[11px] text-brand-slate hover:text-brand-primary" title="Quitar post-it">✕</button>
+                      </li>
                     );
                   })}
-                </div>
+                </ul>
               )}
               {!actual && postits.length + marcas.length > 0 && (
                 <p className="no-print text-[11px] text-brand-orange mt-2">Las marcas y los post-its quedan guardados al guardar la simulación.</p>
