@@ -249,9 +249,31 @@ def test_meses_afectados_en_la_anual():
         assert con["meses"][t]["facturacion_bruta"] == base["meses"][t]["facturacion_bruta"]
         assert con["meses"][t]["resultado"] == base["meses"][t]["resultado"]
     assert con["anual"]["resultado"] < base["anual"]["resultado"]
-    assert "M7" in con["conclusion"]
+    assert "Mes 7" in con["conclusion"]
     # mix de planes por nombre
     mix = simular_anual({"objetivo_co": 1750}, [1900] * 12, 12,
                         {"3": {"planes": [{"plan": "CG15G", "mix_pct": 90}, {"plan": "C200X", "mix_pct": 10},
                                           {"plan": "CG30G", "mix_pct": 0}, {"plan": "CG50B", "mix_pct": 0}, {"plan": "C100X", "mix_pct": 0}]}})
     assert mix["meses"][2]["activaciones_cuota1"] != base["meses"][2]["activaciones_cuota1"]
+
+
+def test_bono_adicional_y_nombres_de_meses():
+    """Bono adicional a mano: entra a la facturación del mes (y al peso de bonos), no se devuelve;
+    por defecto es 0. Nombres de meses editables en la anual."""
+    from app.services.analyzers.facturacion_simulador import simular_anual
+    base = simular_facturacion({"ventas": 1900})
+    assert base["mes0"]["bono_adicional"] == 0
+    con = simular_facturacion({"ventas": 1900, "bono_adicional": 25_000_000})
+    assert con["mes0"]["bono_adicional"] == 25_000_000
+    assert con["bruto_mes0"] == base["bruto_mes0"] + 25_000_000
+    assert con["bonos"]["mes0"] == base["bonos"]["mes0"] + 25_000_000
+    assert con["neto_12"] - base["neto_12"] == 25_000_000            # no se devuelve ni se recalcula
+    # comisión del vendedor: la base incluye el bono adicional (como los demás bonos)
+    assert con["costos"]["vendedor"]["base_comision"] == base["costos"]["vendedor"]["base_comision"] + 25_000_000
+    # anual: por mes, y nombres
+    a = simular_anual({}, [1900] * 12, 12, None, [0, 10_000_000, 0], ["Oct 2026", "Nov 2026"])
+    assert a["meses"][1]["bono_adicional"] == 10_000_000 and a["meses"][0]["bono_adicional"] == 0
+    assert a["anual"]["bonos_adicionales"] == 10_000_000
+    assert a["nombres_meses"][:3] == ["Oct 2026", "Nov 2026", "Mes 3"]
+    assert a["meses"][1]["nombre"] == "Nov 2026"
+    assert "bono adicional" in a["conclusion"]

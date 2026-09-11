@@ -9,6 +9,7 @@ import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
 import { Afectados, MesAfectadoEditor, ResumenAfectados, describirVariaciones } from "@/components/facturacion/MesAfectado";
 import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
+import { NumeroInput } from "@/components/facturacion/NumeroInput";
 import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { Lectura } from "@/components/televentas/Lectura";
@@ -25,6 +26,11 @@ export default function SimuladorAnualPage() {
   const [seteado, setSeteado] = useState(false);
   const [horizonte, setHorizonte] = useState<12 | 18>(12);
   const [ventas, setVentas] = useState<number[]>([]);
+  const [nombres, setNombres] = useState<string[]>([]);       // nombres editables de los meses ("Octubre 2026")
+  const [bonosAd, setBonosAd] = useState<number[]>([]);       // bono adicional a mano (Gs) por mes
+  const [mostrarBonosAd, setMostrarBonosAd] = useState(false);
+  const nombreMes = (i: number) => (nombres[i] || "").trim() || `Mes ${i + 1}`;
+  const nombreCorto = (i: number) => { const n = nombreMes(i); return n.length > 12 ? n.slice(0, 11) + "…" : n; };
   const [res, setRes] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const timer = useRef<any>(null);
@@ -51,22 +57,24 @@ export default function SimuladorAnualPage() {
     }).catch((e) => setError(e.message));
   }, []);
 
-  const simular = useCallback((params: any, vpm: number[], h: number, af: Afectados) => {
+  const simular = useCallback((params: any, vpm: number[], h: number, af: Afectados, bad: number[], nm: string[]) => {
     apiFetch<any>("/api/v1/facturacion/simulador/anual", {
-      method: "POST", body: JSON.stringify({ parametros: params, ventas_por_mes: vpm, horizonte: h, meses_afectados: af }),
+      method: "POST", body: JSON.stringify({ parametros: params, ventas_por_mes: vpm, horizonte: h, meses_afectados: af, bonos_adicionales_por_mes: bad, nombres_meses: nm }),
     }).then((d) => { setRes(d); setError(null); }).catch((e) => setError(e.message));
   }, []);
 
   useEffect(() => {
     if (!seteado || !p || ventas.length !== horizonte) return;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => simular(p, ventas, horizonte, afectados), 250);
+    timer.current = setTimeout(() => simular(p, ventas, horizonte, afectados, bonosAd, nombres), 250);
     return () => clearTimeout(timer.current);
-  }, [seteado, p, ventas, horizonte, afectados, simular]);
+  }, [seteado, p, ventas, horizonte, afectados, bonosAd, nombres, simular]);
 
   const setear = () => {
     const v1 = Number(p.ventas) || 0;
     setVentas([v1, ...Array(horizonte - 1).fill(v1)]);
+    setBonosAd((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? 0));
+    setNombres((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? ""));
     setSeteado(true);
   };
   const cambiarHorizonte = (h: 12 | 18) => {
@@ -76,7 +84,11 @@ export default function SimuladorAnualPage() {
       const base = prev[prev.length - 1] ?? prev[0];
       return h > prev.length ? [...prev, ...Array(h - prev.length).fill(base)] : prev.slice(0, h);
     });
+    setBonosAd((prev) => Array.from({ length: h }, (_, i) => prev[i] ?? 0));
+    setNombres((prev) => Array.from({ length: h }, (_, i) => prev[i] ?? ""));
   };
+  const setNombre = (i: number, v: string) => setNombres((prev) => prev.map((x, j) => (j === i ? v.slice(0, 40) : x)));
+  const setBonoAd = (i: number, v: number) => setBonosAd((prev) => prev.map((x, j) => (j === i ? Math.max(v, 0) : x)));
   const HorizonteToggle = () => (
     <div className="inline-flex rounded-md border border-brand-border overflow-hidden no-print">
       {([12, 18] as const).map((h) => (
@@ -95,7 +107,7 @@ export default function SimuladorAnualPage() {
   const hc = res?.headcount;
 
   const getSnapshot = (): Snapshot => ({
-    parametros: p, ventas_por_mes: ventas, horizonte, meses_afectados: afectados,
+    parametros: p, ventas_por_mes: ventas, horizonte, meses_afectados: afectados, bonos_adicionales_por_mes: bonosAd, nombres_meses: nombres,
     resumen: a ? {
       ventas: a.ventas, facturacion_bruta: a.facturacion_bruta, ingreso_neto: a.ingreso_neto, costos: a.costos,
       resultado: a.resultado, margen_pct: a.margen_pct, resultado_con_cola: a.resultado_con_cola,
@@ -110,6 +122,9 @@ export default function SimuladorAnualPage() {
     while (v.length < h) v.push(v[v.length - 1] ?? Number(s.parametros?.ventas) ?? 0);
     setVentas(v.slice(0, h));
     setAfectados(s.meses_afectados ?? {});
+    setBonosAd(Array.from({ length: h }, (_, i) => Number(s.bonos_adicionales_por_mes?.[i] ?? 0)));
+    setNombres(Array.from({ length: h }, (_, i) => String(s.nombres_meses?.[i] ?? "")));
+    setMostrarBonosAd((s.bonos_adicionales_por_mes ?? []).some((x: number) => Number(x) > 0));
     setMarcas(s.marcas ?? []);
     setPostits(s.postits ?? []);
     setSeteado(true);
@@ -213,16 +228,22 @@ export default function SimuladorAnualPage() {
                 <label key={i} className={`text-[10px] ${i === 0 ? "text-brand-primary font-bold" : "text-brand-slate"} ${esMarcado(`mes:${i + 1}`) ? "rounded ring-2 ring-amber-400 ring-offset-1 bg-amber-50" : ""} ${esAfectado(i + 1) ? "rounded ring-2 ring-brand-purple ring-offset-1 bg-brand-purple/5" : ""}`}
                   title={esAfectado(i + 1) ? describirVariaciones(afectados[String(i + 1)], p).join(" · ") : undefined}>
                   <span className="flex items-center justify-between gap-1">
-                    <span>Mes {i + 1}{i === 0 ? " (seteado)" : ""}{esAfectado(i + 1) && <span className="ml-1 px-1 rounded bg-brand-purple text-white text-[9px] font-bold">afectado</span>}</span>
+                    <span className="flex items-center gap-1 min-w-0">
+                      <input value={nombres[i] ?? ""} placeholder={`Mes ${i + 1}`} onChange={(e) => setNombre(i, e.target.value)} title="Nombre del mes (editable)"
+                        className="no-print min-w-0 w-full bg-transparent border-b border-dashed border-brand-border focus:border-brand-primary outline-none text-[10px] font-semibold text-inherit placeholder:text-brand-slate/70" />
+                      <span className="print-only">{nombreMes(i)}</span>
+                      {i === 0 && <span className="shrink-0">(seteado)</span>}
+                      {esAfectado(i + 1) && <span className="shrink-0 px-1 rounded bg-brand-purple text-white text-[9px] font-bold">afectado</span>}
+                    </span>
                     <span className="flex items-center gap-0.5">
                       {i > 0 && (
                         <button type="button" onClick={() => setEditandoMes(i + 1)} title="Editar este mes: variaciones propias (porta, efectividad, mix…)"
                           className={`no-print inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] leading-none ${esAfectado(i + 1) ? "bg-brand-purple text-white" : "border border-brand-border text-brand-slate opacity-40 hover:opacity-100 hover:border-brand-purple hover:text-brand-purple"}`}>✎</button>
                       )}
-                      <Pin marcado={esMarcado(`mes:${i + 1}`)} onClick={() => toggleMarca(`mes:${i + 1}`, `Mes ${i + 1} (${formatInt(v)} ventas)`)} className="!w-5 !h-5 !text-[10px]" />
+                      <Pin marcado={esMarcado(`mes:${i + 1}`)} onClick={() => toggleMarca(`mes:${i + 1}`, `${nombreMes(i)} (${formatInt(v)} ventas)`)} className="!w-5 !h-5 !text-[10px]" />
                     </span>
                   </span>
-                  <input type="number" step={10} value={v} disabled={i === 0} onChange={(e) => setVenta(i, Number(e.target.value))}
+                  <NumeroInput step={10} min={0} value={v} disabled={i === 0} onChange={(n) => setVenta(i, n)}
                     className={`input !py-1 !px-1.5 text-sm text-right w-full ${i === 0 ? "bg-brand-bg-soft" : ""}`} />
                 </label>
               ))}
@@ -233,11 +254,42 @@ export default function SimuladorAnualPage() {
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(0.98, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Caer 2% mensual</button>
               <span className="text-[11px] text-brand-slate ml-auto">✎ sobre un mes = variaciones propias de ese mes (menos porta, otra efectividad, otro mix…)</span>
             </div>
+
+            {/* ===== Bono adicional a mano, por mes ===== */}
+            <div className="mt-4 rounded-md border-2 border-brand-orange bg-brand-orange/5 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-orange">Bono adicional (a mano)</div>
+                  <div className="text-[11px] text-brand-graphite">Gs por mes: campañas, premios o acuerdos puntuales con Claro. Se factura en el mes, no se devuelve. Por defecto 0.
+                    {bonosAd.some((x) => x > 0) && <b className="ml-1 text-brand-orange">Total {formatGs(bonosAd.reduce((s, x) => s + x, 0))}</b>}</div>
+                </div>
+                <div className="no-print flex items-center gap-2">
+                  {bonosAd.some((x) => x > 0) && <button onClick={() => setBonosAd(bonosAd.map(() => 0))} className="text-[11px] text-brand-slate hover:text-brand-primary">Poner todo en 0</button>}
+                  <button onClick={() => setMostrarBonosAd(!mostrarBonosAd)} className="px-3 py-1 rounded text-[11px] font-bold bg-brand-orange text-white hover:bg-brand-orange/90">
+                    {mostrarBonosAd ? "Ocultar" : "Cargar bono por mes"}
+                  </button>
+                </div>
+              </div>
+              {(mostrarBonosAd || bonosAd.some((x) => x > 0)) && (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-12 gap-2 mt-3">
+                  {bonosAd.map((b, i) => (
+                    <label key={i} className={`text-[10px] ${b > 0 ? "text-brand-orange font-bold" : "text-brand-slate"}`}>
+                      <span className="block truncate" title={nombreMes(i)}>{nombreCorto(i)}</span>
+                      <NumeroInput step={1000000} min={0} value={b} onChange={(n) => setBonoAd(i, n)} placeholder="0"
+                        className={`input !py-1 !px-1.5 text-sm text-right w-full ${b > 0 ? "border-brand-orange" : ""}`} />
+                    </label>
+                  ))}
+                  <div className="no-print col-span-full flex gap-3 text-[11px]">
+                    <button onClick={() => setBonosAd(bonosAd.map((x, i) => (i === 0 ? x : bonosAd[0])))} className="text-brand-orange font-semibold hover:underline">Igualar todos al mes 1</button>
+                  </div>
+                </div>
+              )}
+            </div>
           </section>
 
-          <ResumenAfectados afectados={afectados} base={p} ventas={ventas} onEditar={(m) => setEditandoMes(m)} onQuitar={quitarAfectado} />
+          <ResumenAfectados afectados={afectados} base={p} ventas={ventas} nombres={nombres.map((_, i) => nombreMes(i))} onEditar={(m) => setEditandoMes(m)} onQuitar={quitarAfectado} />
           {editandoMes != null && (
-            <MesAfectadoEditor mes={editandoMes} horizonte={horizonte} base={p} ventas={ventas[editandoMes - 1] ?? 0}
+            <MesAfectadoEditor mes={editandoMes} nombre={nombreMes(editandoMes - 1)} nombres={nombres.map((_, i) => nombreMes(i))} horizonte={horizonte} base={p} ventas={ventas[editandoMes - 1] ?? 0}
               actual={afectados[String(editandoMes)]}
               onAplicar={(meses, ov) => { aplicarAfectado(meses, ov); setEditandoMes(null); }}
               onQuitar={(m) => { quitarAfectado(m); setEditandoMes(null); }}
@@ -368,10 +420,10 @@ export default function SimuladorAnualPage() {
                   <ResponsiveContainer width="100%" height={260}>
                     <ComposedChart data={meses} margin={{ top: 8, right: 12 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => `M${v}`} />
+                      <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
                       <YAxis yAxisId="l" fontSize={10} tickFormatter={M} />
                       <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={M} />
-                      <Tooltip formatter={(v: any) => formatGs(Number(v))} labelFormatter={(l) => `Mes ${l}`} />
+                      <Tooltip formatter={(v: any) => formatGs(Number(v))} labelFormatter={(l) => nombreMes(Number(l) - 1)} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <ReferenceLine yAxisId="l" y={0} stroke="#0F1116" />
                       <Bar yAxisId="l" dataKey="ingreso_neto" name="Ingreso neto" fill="#0EA5E9" fillOpacity={0.6} />
@@ -395,10 +447,10 @@ export default function SimuladorAnualPage() {
                   <ResponsiveContainer width="100%" height={260}>
                     <ComposedChart data={meses.map((m: any) => ({ ...m, capacidad: (hc?.vendedores ?? 0) * Number(p.costos.ventas_por_vendedor) }))} margin={{ top: 8, right: 12 }}>
                       <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => `M${v}`} />
+                      <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
                       <YAxis yAxisId="l" fontSize={10} />
                       <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${v}`} />
-                      <Tooltip labelFormatter={(l) => `Mes ${l}`} />
+                      <Tooltip labelFormatter={(l) => nombreMes(Number(l) - 1)} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar yAxisId="l" dataKey="ventas" name="Ventas">
                         {meses.map((m: any) => <Cell key={m.mes} fill={m.monto_bono_productividad > 0 ? "#0EA5E9" : "#E6332A"} />)}
@@ -431,8 +483,8 @@ export default function SimuladorAnualPage() {
                           title={m.afectado ? `Mes afectado: ${describirVariaciones(m.variaciones, p).join(" · ")}` : undefined}>
                           <span className="inline-flex items-center gap-1 justify-end">
                             {m.afectado && <span className="w-1.5 h-1.5 rounded-full bg-brand-purple" />}
-                            <Pin marcado={esMarcado(`mes:${m.mes}`)} onClick={() => toggleMarca(`mes:${m.mes}`, `Mes ${m.mes} (${formatInt(m.ventas)} ventas)`)} className="!w-4 !h-4 !text-[9px]" />
-                            M{m.mes}
+                            <Pin marcado={esMarcado(`mes:${m.mes}`)} onClick={() => toggleMarca(`mes:${m.mes}`, `${nombreMes(m.mes - 1)} (${formatInt(m.ventas)} ventas)`)} className="!w-4 !h-4 !text-[9px]" />
+                            <span title={nombreMes(m.mes - 1)}>{nombreCorto(m.mes - 1)}</span>
                           </span>
                         </th>
                       ))}
@@ -447,6 +499,7 @@ export default function SimuladorAnualPage() {
                       ["Plus portabilidad", "portabilidad", "gs", "row"],
                       ["Bono productividad", "bono_productividad", "gs", "row"],
                       ["Bono efectividad", "bono_efectividad", "gs", "row"],
+                      ["Bono adicional (a mano)", "bono_adicional", "gs", "row"],
                       ["Facturación bruta", "facturacion_bruta", "gs", "sub"],
                       ["AJUSTES DE COHORTES ANTERIORES", null, null, "sep"],
                       ["+ Residual", "residual", "gs", "row"],
@@ -526,8 +579,8 @@ export default function SimuladorAnualPage() {
                       <tr key={m.mes} className={`border-t border-brand-border ${esMarcado(`mes:${m.mes}`) ? "bg-amber-50" : ""}`}>
                         <td className="px-3 py-1 font-medium">
                           <span className="inline-flex items-center gap-1.5">
-                            <Pin marcado={esMarcado(`mes:${m.mes}`)} onClick={() => toggleMarca(`mes:${m.mes}`, `Mes ${m.mes} (${formatInt(m.ventas)} ventas)`)} className="!w-4 !h-4 !text-[9px]" />
-                            Mes {m.mes}
+                            <Pin marcado={esMarcado(`mes:${m.mes}`)} onClick={() => toggleMarca(`mes:${m.mes}`, `${nombreMes(m.mes - 1)} (${formatInt(m.ventas)} ventas)`)} className="!w-4 !h-4 !text-[9px]" />
+                            {nombreMes(m.mes - 1)}
                           </span>
                         </td>
                         <td className="px-3 py-1 text-right">{formatInt(m.ventas)}</td>

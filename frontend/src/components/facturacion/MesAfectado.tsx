@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatInt } from "@/lib/format";
+import { NumeroInput } from "./NumeroInput";
 
 /** Meses afectados del Simulador Anual: un mes puede comportarse distinto (menos porta,
  *  otra efectividad, otro mix, otro ajuste de comisiones, costos variables). Las
@@ -47,8 +48,9 @@ export function describirVariaciones(ov: Variaciones, base: any): string[] {
   return out;
 }
 
-export function MesAfectadoEditor({ mes, horizonte, base, ventas, actual, onAplicar, onQuitar, onCerrar }: {
+export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, ventas, actual, onAplicar, onQuitar, onCerrar }: {
   mes: number;                              // 1-based (≥ 2)
+  nombre?: string; nombres?: string[];      // nombres editables de los meses
   horizonte: number;
   base: any;                                // parámetros del mes 1
   ventas: number;
@@ -99,7 +101,7 @@ export function MesAfectadoEditor({ mes, horizonte, base, ventas, actual, onApli
         <div className="px-6 pt-5 pb-3 flex flex-wrap items-start justify-between gap-3 border-b border-brand-border">
           <div>
             <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-purple">Mes afectado</div>
-            <h2 className="font-display text-2xl text-brand-ink uppercase">Mes {mes} · {formatInt(ventas)} ventas</h2>
+            <h2 className="font-display text-2xl text-brand-ink uppercase">{nombre || `Mes ${mes}`} · {formatInt(ventas)} ventas</h2>
             <p className="text-xs text-brand-slate mt-1 max-w-xl">
               Este mes se comporta distinto. Lo que cargues acá pisa la base solo para las ventas de este mes: su facturación,
               sus bonos y sus ajustes posteriores (cuota 2, residual, caídas) se calculan con estas variaciones. La estructura
@@ -128,8 +130,8 @@ export function MesAfectadoEditor({ mes, horizonte, base, ventas, actual, onApli
                       </button>
                     ) : (
                       <span className="flex items-center gap-1">
-                        <input type="number" step={c.step ?? 1} disabled={!activo} value={activo ? v : b ?? ""}
-                          onChange={(e) => setCampo(c, Number(e.target.value))}
+                        <NumeroInput step={c.step ?? 1} disabled={!activo} value={Number(activo ? v : b ?? 0)}
+                          onChange={(n) => setCampo(c, n)}
                           className={`input max-w-[96px] !py-1 text-sm text-right ${activo ? "border-brand-purple font-bold text-brand-purple" : "opacity-50"}`} />
                         {c.suffix && <span className="text-xs text-brand-slate w-3">{c.suffix}</span>}
                       </span>
@@ -162,7 +164,7 @@ export function MesAfectadoEditor({ mes, horizonte, base, ventas, actual, onApli
               {Array.from({ length: horizonte - 1 }, (_, i) => i + 2).filter((m) => m !== mes).map((m) => (
                 <button key={m} onClick={() => setOtros((o) => (o.includes(m) ? o.filter((x) => x !== m) : [...o, m]))}
                   className={`px-2 py-0.5 rounded text-[11px] font-bold border ${otros.includes(m) ? "bg-brand-purple text-white border-brand-purple" : "border-brand-border text-brand-graphite hover:border-brand-purple"}`}>
-                  M{m}
+                  {nombres?.[m - 1] || `M${m}`}
                 </button>
               ))}
             </div>
@@ -170,9 +172,9 @@ export function MesAfectadoEditor({ mes, horizonte, base, ventas, actual, onApli
         </div>
 
         <div className="px-6 py-4 border-t border-brand-border flex flex-wrap items-center justify-between gap-2 bg-brand-bg-soft">
-          <div className="text-xs text-brand-slate">{cantidad} variación(es){otros.length ? ` · se aplican a M${mes} y ${otros.map((m) => `M${m}`).join(", ")}` : ""}</div>
+          <div className="text-xs text-brand-slate">{cantidad} variación(es){otros.length ? ` · se aplican a ${nombre || `M${mes}`} y ${otros.map((m) => nombres?.[m - 1] || `M${m}`).join(", ")}` : ""}</div>
           <div className="flex gap-2">
-            {actual && <button onClick={() => onQuitar(mes)} className="px-3 py-1.5 rounded text-xs font-bold text-brand-primary hover:bg-brand-primary/10">Quitar variaciones de M{mes}</button>}
+            {actual && <button onClick={() => onQuitar(mes)} className="px-3 py-1.5 rounded text-xs font-bold text-brand-primary hover:bg-brand-primary/10">Quitar variaciones de {nombre || `M${mes}`}</button>}
             <button onClick={onCerrar} className="px-3 py-1.5 rounded text-xs text-brand-slate hover:text-brand-ink">Cancelar</button>
             <button onClick={() => onAplicar([mes, ...otros], armar())} disabled={cantidad === 0 || (mixOn && Math.abs(mixTotal - 100) > 0.01)}
               className="btn-primary !bg-brand-purple !py-1.5 !px-4 text-sm disabled:opacity-50">
@@ -186,8 +188,8 @@ export function MesAfectadoEditor({ mes, horizonte, base, ventas, actual, onApli
 }
 
 /** Resumen visible (e imprimible) de los meses afectados y sus variaciones. */
-export function ResumenAfectados({ afectados, base, ventas, onEditar, onQuitar }: {
-  afectados: Afectados; base: any; ventas: number[];
+export function ResumenAfectados({ afectados, base, ventas, nombres, onEditar, onQuitar }: {
+  afectados: Afectados; base: any; ventas: number[]; nombres?: string[];
   onEditar: (mes: number) => void; onQuitar: (mes: number) => void;
 }) {
   const meses = Object.keys(afectados).map(Number).sort((a, b) => a - b);
@@ -202,7 +204,7 @@ export function ResumenAfectados({ afectados, base, ventas, onEditar, onQuitar }
         {meses.map((m) => (
           <div key={m} className="rounded-md border border-brand-purple/30 bg-brand-purple/5 px-3 py-2">
             <div className="flex items-baseline justify-between gap-2">
-              <div className="text-sm font-bold text-brand-ink">Mes {m} <span className="font-normal text-brand-slate text-xs">· {formatInt(ventas[m - 1] ?? 0)} ventas</span></div>
+              <div className="text-sm font-bold text-brand-ink">{nombres?.[m - 1] || `Mes ${m}`} <span className="font-normal text-brand-slate text-xs">· {formatInt(ventas[m - 1] ?? 0)} ventas</span></div>
               <div className="no-print flex gap-2 text-[11px] font-semibold">
                 <button onClick={() => onEditar(m)} className="text-brand-ink hover:text-brand-purple hover:underline">Editar</button>
                 <button onClick={() => onQuitar(m)} className="text-brand-primary hover:underline">Quitar</button>

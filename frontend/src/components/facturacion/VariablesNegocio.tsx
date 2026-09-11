@@ -1,6 +1,7 @@
 "use client";
 
 import { formatGs } from "@/lib/format";
+import { NumeroInput } from "./NumeroInput";
 
 function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hint?: string; abierto?: boolean; children: React.ReactNode }) {
   return (
@@ -21,8 +22,7 @@ function Campo({ label, hint, value, onChange, step = 1, suffix }: { label: stri
         {hint && <span className="block text-[10px] text-brand-slate">{hint}</span>}
       </span>
       <span className="flex items-center gap-1">
-        <input type="number" step={step} value={value} onChange={(e) => onChange(Number(e.target.value))}
-          className="input max-w-[120px] !py-1 text-sm text-right" />
+        <NumeroInput step={step} value={value} onChange={onChange} className="input max-w-[120px] !py-1 text-sm text-right" />
         {suffix && <span className="text-xs text-brand-slate w-4">{suffix}</span>}
       </span>
     </label>
@@ -55,6 +55,14 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="Objetivo CO (Claro)" hint="objetivo mensual de líneas para el bono productividad" value={p.objetivo_co} onChange={(v) => set("objetivo_co", v)} step={10} />
               <Campo label="Líneas en estado A" hint="activaciones que suman para el bono" value={p.pct_estado_a} onChange={(v) => set("pct_estado_a", v)} step={0.5} suffix="%" />
               <Campo label="Portabilidad" hint="% de activaciones con portación" value={p.porta_pct} onChange={(v) => set("porta_pct", v)} step={1} suffix="%" />
+              <label className="flex items-center gap-3 rounded-md border-2 border-brand-orange bg-brand-orange/5 px-2 py-1.5">
+                <span className="flex-1">
+                  <span className="block text-sm font-bold text-brand-orange">Bono adicional (a mano)</span>
+                  <span className="block text-[10px] text-brand-orange/80">Gs totales del mes: campañas, premios o acuerdos puntuales · 0 = sin bono · se factura en el mes y no se devuelve</span>
+                </span>
+                <NumeroInput step={1000000} min={0} value={Number(p.bono_adicional ?? 0)} onChange={(v) => set("bono_adicional", v)}
+                  className="input max-w-[130px] !py-1 text-sm text-right font-bold text-brand-orange border-brand-orange" />
+              </label>
             </Grupo>
 
             <Grupo titulo="Tarifas por plan y mix" hint={`mix ${mixTotal.toFixed(1)}%`}>
@@ -67,7 +75,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
                     <tr key={pl.plan}>
                       <td className="font-semibold text-brand-ink py-0.5">{pl.plan}</td>
                       {(["mix_pct", "cuota1", "cuota2", "porta_plus", "abono"] as const).map((k) => (
-                        <td key={k}><input type="number" value={pl[k]} onChange={(e) => setPlan(i, k, Number(e.target.value))} className="input !py-0.5 !px-1 text-[11px] text-right w-full" /></td>
+                        <td key={k}><NumeroInput value={Number(pl[k] ?? 0)} onChange={(n) => setPlan(i, k, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" /></td>
                       ))}
                     </tr>
                   ))}
@@ -92,9 +100,9 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               {p.escala_productividad.map((e: any, i: number) => (
                 <div key={i} className="flex items-center gap-2 text-sm">
                   <span className="text-brand-slate w-8">≥</span>
-                  <input type="number" value={e.desde_pct} onChange={(ev) => setEscala("escala_productividad", i, "desde_pct", Number(ev.target.value))} className="input !py-0.5 text-sm text-right w-20" /><span className="text-xs">%</span>
+                  <NumeroInput value={Number(e.desde_pct)} onChange={(n) => setEscala("escala_productividad", i, "desde_pct", n)} className="input !py-0.5 text-sm text-right w-20" /><span className="text-xs">%</span>
                   <span className="text-brand-slate">→</span>
-                  <input type="number" step={1000} value={e.monto} onChange={(ev) => setEscala("escala_productividad", i, "monto", Number(ev.target.value))} className="input !py-0.5 text-sm text-right w-28" /><span className="text-xs">Gs/línea</span>
+                  <NumeroInput step={1000} value={Number(e.monto)} onChange={(n) => setEscala("escala_productividad", i, "monto", n)} className="input !py-0.5 text-sm text-right w-28" /><span className="text-xs">Gs/línea</span>
                 </div>
               ))}
               <Campo label="Mes del recálculo" hint="líneas no activas al día 180" value={p.recalculo_productividad_mes} onChange={(v) => set("recalculo_productividad_mes", v)} />
@@ -105,9 +113,9 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               {p.escala_efectividad.map((e: any, i: number) => (
                 <div key={i} className="flex items-center gap-2 text-sm">
                   <span className="text-brand-slate w-8">≥</span>
-                  <input type="number" value={e.desde_pct} onChange={(ev) => setEscala("escala_efectividad", i, "desde_pct", Number(ev.target.value))} className="input !py-0.5 text-sm text-right w-20" /><span className="text-xs">%</span>
+                  <NumeroInput value={Number(e.desde_pct)} onChange={(n) => setEscala("escala_efectividad", i, "desde_pct", n)} className="input !py-0.5 text-sm text-right w-20" /><span className="text-xs">%</span>
                   <span className="text-brand-slate">→</span>
-                  <input type="number" step={1000} value={e.monto} onChange={(ev) => setEscala("escala_efectividad", i, "monto", Number(ev.target.value))} className="input !py-0.5 text-sm text-right w-28" /><span className="text-xs">Gs/venta</span>
+                  <NumeroInput step={1000} value={Number(e.monto)} onChange={(n) => setEscala("escala_efectividad", i, "monto", n)} className="input !py-0.5 text-sm text-right w-28" /><span className="text-xs">Gs/venta</span>
                 </div>
               ))}
             </Grupo>
@@ -117,7 +125,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <div className="grid grid-cols-4 gap-1.5">
                 {p.zafra_pct.map((z: number, i: number) => (
                   <label key={i} className="text-[10px] text-brand-slate">M{i}
-                    <input type="number" step={0.5} value={z} onChange={(e) => setZafra(i, Number(e.target.value))} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
+                    <NumeroInput step={0.5} value={Number(z)} onChange={(n) => setZafra(i, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
                   </label>
                 ))}
               </div>
@@ -162,7 +170,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
                   <span className="block text-sm font-bold text-brand-primary">SubGerencia Comercial</span>
                   <span className="block text-[10px] text-brand-primary/80">en análisis · salario mensual, 0 = no incorporada · suma IPS y aguinaldo</span>
                 </span>
-                <input type="number" step={100000} value={p.costos.subgerencia_salario ?? 0} onChange={(e) => setC("subgerencia_salario", Number(e.target.value))}
+                <NumeroInput step={100000} min={0} value={Number(p.costos.subgerencia_salario ?? 0)} onChange={(v) => setC("subgerencia_salario", v)}
                   className="input max-w-[120px] !py-1 text-sm text-right font-bold text-brand-primary border-brand-primary" />
               </label>
               <Campo label="IPS" hint="sobre todos los costos de RRHH" value={p.costos.ips_pct} onChange={(v) => setC("ips_pct", v)} step={0.5} suffix="%" />

@@ -18,9 +18,10 @@ const MES0_LABEL: Record<string, string> = {
   portabilidad: "Plus portabilidad",
   bono_productividad: "Bono productividad",
   bono_efectividad: "Bono efectividad",
+  bono_adicional: "Bono adicional (a mano)",
 };
 const MES0_COLOR: Record<string, string> = {
-  activaciones_cuota1: "#0F1116", portabilidad: "#0EA5E9", bono_productividad: "#E6332A", bono_efectividad: "#F39200",
+  activaciones_cuota1: "#0F1116", portabilidad: "#0EA5E9", bono_productividad: "#E6332A", bono_efectividad: "#F39200", bono_adicional: "#662483",
 };
 const M = (v: number) => `${Math.round(v / 1e6)}M`;
 
@@ -233,6 +234,7 @@ export default function SimuladorFacturacionPage() {
                     { label: "Plus portabilidad", v: [res.mes0.portabilidad, res.mes0.portabilidad, res.mes0.portabilidad], tipo: "ingreso" },
                     { label: "Bono productividad", v: [res.mes0.bono_productividad, res.mes0.bono_productividad, res.mes0.bono_productividad], tipo: "ingreso" },
                     { label: "Bono efectividad", v: [res.mes0.bono_efectividad, res.mes0.bono_efectividad, res.mes0.bono_efectividad], tipo: "ingreso" },
+                    ...(res.mes0.bono_adicional > 0 ? [{ label: "Bono adicional (a mano)", v: [res.mes0.bono_adicional, res.mes0.bono_adicional, res.mes0.bono_adicional] as [number, number, number], tipo: "ingreso" as const }] : []),
                     { label: "Facturación bruta", v: [r0, r0, r0], tipo: "sub" },
                     { label: "AJUSTES POSTERIORES — chargeback, cuota 2 y residual", v: [0, 0, 0], tipo: "head" },
                     { label: "+ Residual cobrado", v: [0, sumM("residual", 6), sumM("residual", 12)], tipo: "ajuste" },
