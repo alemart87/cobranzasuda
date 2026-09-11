@@ -6,6 +6,7 @@ Flujo: subir .txt -> cola (parse aislado) -> reporte (borrador) -> publicar -> c
 from __future__ import annotations
 
 import hashlib
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -19,11 +20,12 @@ from ...core.config import settings
 from ...core.database import get_db
 from ...jobs.facturacion_queue import signal_facturacion_queue
 from ...models.facturacion_report import FacturacionReport
+from ...models.facturacion_simulacion import FacturacionSimulacion
 from ...models.facturacion_upload import FacturacionUpload
 from ...schemas.facturacion import (
     CompareRequest, CompareResponse, FacturacionReportDetail, FacturacionReportList,
     FacturacionReportSummary, FacturacionUploadList, FacturacionUploadRead, PublishRequest,
-    SimuladorAnualRequest, SimuladorRequest,
+    SimulacionCreate, SimulacionUpdate, SimuladorAnualRequest, SimuladorRequest,
 )
 from ...services.analyzers.facturacion_compare import compare_facturacion
 from ...services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, simular_anual, simular_facturacion
@@ -227,6 +229,143 @@ async def simulador_anual_run(payload: SimuladorAnualRequest,
         return simular_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte)
     except (TypeError, ValueError, KeyError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
+
+
+# ============================ SIMULACIONES GUARDADAS (registro del trabajo) ============================
+def _postits_con_autor(postits: list[dict], user: CurrentUser) -> list[dict]:
+    """Los post-its nuevos (sin id/autor/fecha) quedan firmados por quien los carga."""
+    out: list[dict] = []
+    for pi in postits or []:
+        if not isinstance(pi, dict) or not str(pi.get("texto") or "").strip():
+            continue
+        out.append({
+            "id": pi.get("id") or str(uuid.uuid4()),
+            "texto": str(pi["texto"]).strip()[:2000],
+            "color": pi.get("color") or "amarillo",
+            "item": pi.get("item") or None,                 # key de una marca (opcional)
+            "autor": pi.get("autor") or user.full_name,
+            "fecha": pi.get("fecha") or datetime.utcnow().isoformat(),
+        })
+    return out
+
+
+def _marcas_limpias(marcas: list[dict]) -> list[dict]:
+    vistos: set[str] = set()
+    out: list[dict] = []
+    for m in marcas or []:
+        if not isinstance(m, dict) or not m.get("key") or m["key"] in vistos:
+            continue
+        vistos.add(m["key"])
+        out.append({"key": str(m["key"])[:80], "label": str(m.get("label") or m["key"])[:160]})
+    return out
+
+
+def _simulacion_out(s: FacturacionSimulacion, detalle: bool = True) -> dict:
+    base = {
+        "id": s.id, "nombre": s.nombre, "comentario": s.comentario, "horizonte": s.horizonte,
+        "resumen": s.resumen or {}, "marcas": s.marcas or [], "postits": s.postits or [],
+        "created_by": s.created_by, "created_by_nombre": s.created_by_nombre,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "updated_by_nombre": s.updated_by_nombre,
+        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+    }
+    if detalle:
+        base["parametros"] = s.parametros or {}
+        base["ventas_por_mes"] = s.ventas_por_mes or []
+    return base
+
+
+@router.get("/simulaciones")
+async def listar_simulaciones(user: CurrentUser = Depends(require_facturacion_access),
+                              db: AsyncSession = Depends(get_db)) -> dict:
+    rows = (await db.execute(
+        select(FacturacionSimulacion).order_by(FacturacionSimulacion.created_at.desc()).limit(200)
+    )).scalars().all()
+    return {"simulaciones": [_simulacion_out(s, detalle=False) for s in rows]}
+
+
+@router.post("/simulaciones", status_code=status.HTTP_201_CREATED)
+async def crear_simulacion(payload: SimulacionCreate, request: Request,
+                           user: CurrentUser = Depends(require_facturacion_access),
+                           db: AsyncSession = Depends(get_db)) -> dict:
+    if payload.horizonte not in (12, 18):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12 o 18 meses.")
+    s = FacturacionSimulacion(
+        nombre=payload.nombre.strip(), comentario=(payload.comentario or "").strip() or None,
+        horizonte=payload.horizonte, parametros=payload.parametros, ventas_por_mes=payload.ventas_por_mes,
+        marcas=_marcas_limpias(payload.marcas), postits=_postits_con_autor(payload.postits, user),
+        resumen=payload.resumen, created_by=user.id, created_by_nombre=user.full_name,
+    )
+    db.add(s)
+    await db.commit()
+    await db.refresh(s)
+    await record_action(db, user_id=user.id, action="create_facturacion_simulacion",
+                        resource_type="facturacion_simulacion", resource_id=s.id,
+                        ip=client_ip(request), extra={"nombre": s.nombre, "horizonte": s.horizonte})
+    return _simulacion_out(s)
+
+
+@router.get("/simulaciones/{simulacion_id}")
+async def obtener_simulacion(simulacion_id: str, user: CurrentUser = Depends(require_facturacion_access),
+                             db: AsyncSession = Depends(get_db)) -> dict:
+    s = await db.get(FacturacionSimulacion, simulacion_id)
+    if not s:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Simulación no encontrada")
+    return _simulacion_out(s)
+
+
+@router.patch("/simulaciones/{simulacion_id}")
+async def actualizar_simulacion(simulacion_id: str, payload: SimulacionUpdate, request: Request,
+                                user: CurrentUser = Depends(require_facturacion_access),
+                                db: AsyncSession = Depends(get_db)) -> dict:
+    s = await db.get(FacturacionSimulacion, simulacion_id)
+    if not s:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Simulación no encontrada")
+    if payload.nombre is not None:
+        if not payload.nombre.strip():
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "La simulación necesita un nombre.")
+        s.nombre = payload.nombre.strip()
+    if payload.comentario is not None:
+        s.comentario = payload.comentario.strip() or None
+    if payload.horizonte is not None:
+        if payload.horizonte not in (12, 18):
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12 o 18 meses.")
+        s.horizonte = payload.horizonte
+    if payload.parametros is not None:
+        s.parametros = payload.parametros
+    if payload.ventas_por_mes is not None:
+        if not payload.ventas_por_mes:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Faltan las ventas por mes.")
+        s.ventas_por_mes = payload.ventas_por_mes
+    if payload.marcas is not None:
+        s.marcas = _marcas_limpias(payload.marcas)
+    if payload.postits is not None:
+        s.postits = _postits_con_autor(payload.postits, user)
+    if payload.resumen is not None:
+        s.resumen = payload.resumen
+    s.updated_by_nombre = user.full_name
+    await db.commit()
+    await db.refresh(s)
+    await record_action(db, user_id=user.id, action="update_facturacion_simulacion",
+                        resource_type="facturacion_simulacion", resource_id=s.id,
+                        ip=client_ip(request),
+                        extra={"campos": [k for k, v in payload.model_dump().items() if v is not None]})
+    return _simulacion_out(s)
+
+
+@router.delete("/simulaciones/{simulacion_id}")
+async def borrar_simulacion(simulacion_id: str, request: Request,
+                            user: CurrentUser = Depends(require_facturacion_access),
+                            db: AsyncSession = Depends(get_db)) -> dict:
+    s = await db.get(FacturacionSimulacion, simulacion_id)
+    if not s:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Simulación no encontrada")
+    await db.delete(s)
+    await db.commit()
+    await record_action(db, user_id=user.id, action="delete_facturacion_simulacion",
+                        resource_type="facturacion_simulacion", resource_id=simulacion_id,
+                        ip=client_ip(request), extra={"nombre": s.nombre})
+    return {"status": "deleted", "id": simulacion_id}
 
 
 # ============================ COMPARE ============================
