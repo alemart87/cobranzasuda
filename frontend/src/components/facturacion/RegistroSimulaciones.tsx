@@ -10,7 +10,7 @@ import { formatGs, formatInt } from "@/lib/format";
 
 export type Marca = { key: string; label: string };
 export type Postit = { id?: string; texto: string; color: string; item?: string | null; autor?: string; fecha?: string; x?: number; y?: number };
-export type Snapshot = { parametros: any; ventas_por_mes: number[]; horizonte: number; meses_afectados: Record<string, any>; resumen: any };
+export type Snapshot = { parametros: any; ventas_por_mes: number[]; horizonte: number; meses_afectados: Record<string, any>; bonos_adicionales_por_mes: number[]; nombres_meses: string[]; resumen: any };
 
 export const COLORES_POSTIT: Record<string, { label: string; bg: string; border: string }> = {
   amarillo: { label: "Amarillo", bg: "#FEF3C7", border: "#F59E0B" },
@@ -165,6 +165,8 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
     JSON.stringify(snap.parametros) !== JSON.stringify(actual.parametros)
     || JSON.stringify(snap.ventas_por_mes) !== JSON.stringify(actual.ventas_por_mes)
     || JSON.stringify(snap.meses_afectados ?? {}) !== JSON.stringify(actual.meses_afectados ?? {})
+    || JSON.stringify(snap.bonos_adicionales_por_mes ?? []) !== JSON.stringify((actual.bonos_adicionales_por_mes ?? []).map(Number))
+    || JSON.stringify(snap.nombres_meses ?? []) !== JSON.stringify(actual.nombres_meses ?? [])
     || snap.horizonte !== actual.horizonte);
 
   const abrirForm = (tipo: "nueva" | "editar") => {
@@ -203,7 +205,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
           </div>
           <button onClick={() => setAbierta(false)} title="Ocultar barra" className="shrink-0 text-white/70 hover:text-white text-lg leading-none">›</button>
         </div>
-        {sinGuardar && <div className="mt-2 text-[10px] font-bold px-2 py-1 rounded bg-brand-orange text-white">Cambios sin guardar en variables, ventas o meses afectados</div>}
+        {sinGuardar && <div className="mt-2 text-[10px] font-bold px-2 py-1 rounded bg-brand-orange text-white">Cambios sin guardar (variables, ventas, nombres, bonos o meses afectados)</div>}
         <div className="mt-2 flex flex-wrap gap-1.5">
           {actual ? (
             <>

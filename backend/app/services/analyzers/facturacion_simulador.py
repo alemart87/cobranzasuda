@@ -43,6 +43,7 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "objetivo_co": 1750,            # objetivo mensual de líneas CO (lo comunica Claro)
     "pct_estado_a": 99.5,           # activaciones en estado A (no S/P/C) al liquidar
     "bonos_activos": True,          # False = simular SIN bonos (productividad y efectividad en 0)
+    "bono_adicional": 0.0,          # BONO ADICIONAL a mano (Gs totales del mes): campañas, premios o acuerdos puntuales
     "ajuste_comisiones_pct": 0.0,   # ajuste negociado sobre cuota 1, cuota 2 y plus de portabilidad (+5 = mejora 5%)
     # ---- tarifas por plan (Gs sin IVA) y mix ----
     "planes": [
@@ -158,6 +159,8 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         "portabilidad": act * porta * porta_w,
         "bono_productividad": act_a * monto_prod,
         "bono_efectividad": act * monto_efect,
+        # Bono adicional cargado a mano: se factura en el mes, no se devuelve ni se recalcula.
+        "bono_adicional": max(float(p.get("bono_adicional") or 0), 0),
     }
     bruto_mes0 = sum(mes0.values())
 
@@ -203,7 +206,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     neto_12 = meses[12]["acumulado"]
 
     # ---- peso de los bonos sobre la facturación neta ----
-    bonos_mes0 = mes0["bono_productividad"] + mes0["bono_efectividad"]
+    bonos_mes0 = mes0["bono_productividad"] + mes0["bono_efectividad"] + mes0["bono_adicional"]
     bonos_devueltos_6 = sum(m["clawback_bonos"] + m["recalculo_productividad"] for m in meses[1:7])
     bonos_netos_6 = bonos_mes0 + bonos_devueltos_6
     sin_bonos_mes0 = bruto_mes0 - bonos_mes0
@@ -235,7 +238,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     # ---- COSTOS de la estructura y MARGEN (evaluación del negocio, foco a 6 meses) ----
     # Base de la comisión del vendedor: facturación con tarifa SIN ajuste (con o sin bonos según config).
     mes0_sin_ajuste = act * cuota1_base + act * porta * porta_base
-    base_comision_vendedor = (mes0_sin_ajuste + mes0["bono_productividad"] + mes0["bono_efectividad"]
+    base_comision_vendedor = (mes0_sin_ajuste + mes0["bono_productividad"] + mes0["bono_efectividad"] + mes0["bono_adicional"]
                               if p["costos"].get("comision_incluye_bonos", True) else mes0_sin_ajuste)
     costos, margen = _costos_y_margen(p["costos"], act, mes0, bruto_mes0, neto_6, neto_12,
                                       base_comision=base_comision_vendedor)
@@ -535,7 +538,8 @@ def _aplicar_afectado(base: dict, ov: dict | None) -> dict:
 
 
 def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
-                  meses_afectados: dict | None = None) -> dict[str, Any]:
+                  meses_afectados: dict | None = None, bonos_adicionales_por_mes: list[float] | None = None,
+                  nombres_meses: list[str] | None = None) -> dict[str, Any]:
     """Balance de 12 o 18 meses con estructura FIJA seteada en el mes 1.
 
     - El mes 1 define objetivo CO, tarifas, zafra, escalas y la estructura
@@ -560,7 +564,14 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
 
     # Meses afectados: cohortes con variaciones propias (la estructura sigue fija).
     afectados = _normalizar_afectados(meses_afectados, h)
-    cohortes = [simular_facturacion({**_aplicar_afectado(base, afectados.get(t)), "ventas": v, "_sin_breakeven": True})
+    # Bono adicional a mano por mes (Gs) y nombres de los meses (editables; vacío = "Mes N").
+    bonos_ad = [max(float(x or 0), 0) for x in (bonos_adicionales_por_mes or [])][:h]
+    bonos_ad += [0.0] * (h - len(bonos_ad))
+    nombres = [str(x or "").strip()[:40] for x in (nombres_meses or [])][:h]
+    nombres += [""] * (h - len(nombres))
+    nombres = [nm or f"Mes {t + 1}" for t, nm in enumerate(nombres)]
+    cohortes = [simular_facturacion({**_aplicar_afectado(base, afectados.get(t)), "ventas": v,
+                                     "bono_adicional": bonos_ad[t], "_sin_breakeven": True})
                 for t, v in enumerate(ventas)]
 
     meses: list[dict] = []
@@ -568,9 +579,10 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
     for t in range(h):
         c = cohortes[t]
         fila: dict[str, Any] = {
-            "mes": t + 1, "ventas": round(ventas[t]),
+            "mes": t + 1, "nombre": nombres[t], "ventas": round(ventas[t]),
             "activaciones_cuota1": c["mes0"]["activaciones_cuota1"], "portabilidad": c["mes0"]["portabilidad"],
             "bono_productividad": c["mes0"]["bono_productividad"], "bono_efectividad": c["mes0"]["bono_efectividad"],
+            "bono_adicional": c["mes0"]["bono_adicional"],
             "facturacion_bruta": c["bruto_mes0"],
             "cumplimiento_pct": c["derivados"]["cumplimiento_pct"],
             "escalon_productividad": (c["derivados"]["escalon_productividad"] or {}).get("desde_pct"),
@@ -629,7 +641,8 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "costos": round(tot("costo_total")),
         "resultado": round(tot("resultado")),
         "margen_pct": round(tot("resultado") / tot("ingreso_neto") * 100, 1) if tot("ingreso_neto") else 0.0,
-        "bonos": round(tot("bono_productividad") + tot("bono_efectividad")),
+        "bonos": round(tot("bono_productividad") + tot("bono_efectividad") + tot("bono_adicional")),
+        "bonos_adicionales": round(tot("bono_adicional")),
         "devolucion_bonos": round(tot("clawback_bonos") + tot("recalculo_productividad")),
         "costos_fijos_mes": round(sum(m1["costos"]["rrhh"][k] for k in ("operadores_salario", "supervisores", "coordinadores", "backoffice", "controllers", "subgerencia"))
                                   * (1 + float(base["costos"]["ips_pct"]) / 100) * (13 / 12 if base["costos"].get("aguinaldo", True) else 1)
@@ -663,10 +676,12 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         f"Resultado del período {gs(anual['resultado'])} ({anual['margen_pct']}%).",
     ]
     if anual["meses_negativos"]:
-        partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es el mes {anual['peor_mes']} y el mejor el {anual['mejor_mes']}.")
+        partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es {nombres[anual['peor_mes'] - 1]} y el mejor {nombres[anual['mejor_mes'] - 1]}.")
     if afectados:
         partes.append(f"{len(afectados)} mes(es) con variaciones propias (porta, efectividad, mix u otros): "
-                      + ", ".join(f"M{t + 1}" for t in sorted(afectados)) + ".")
+                      + ", ".join(nombres[t] for t in sorted(afectados)) + ".")
+    if anual["bonos_adicionales"]:
+        partes.append(f"Incluye {gs(anual['bonos_adicionales'])} de bono adicional cargado a mano.")
     if anual["meses_sin_bono_productividad"] and base.get("bonos_activos", True):
         partes.append(f"En {anual['meses_sin_bono_productividad']} mes(es) las ventas quedaron bajo el 90% del objetivo y el bono productividad no se liquidó.")
     final = anual["resultado_con_cola"]
@@ -690,5 +705,6 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
     return {
         "parametros": base, "horizonte": h, "ventas_por_mes": [round(v) for v in ventas],
         "meses_afectados": {str(t + 1): ov for t, ov in sorted(afectados.items())},
+        "bonos_adicionales_por_mes": [round(x) for x in bonos_ad], "nombres_meses": nombres,
         "headcount": headcount, "meses": meses, "anual": anual, "conclusion": " ".join(partes),
     }

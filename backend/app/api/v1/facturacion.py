@@ -226,7 +226,8 @@ async def simulador_anual_run(payload: SimuladorAnualRequest,
     try:
         if payload.horizonte not in (12, 18):
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12 o 18 meses.")
-        return simular_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte, payload.meses_afectados)
+        return simular_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte, payload.meses_afectados,
+                             payload.bonos_adicionales_por_mes, payload.nombres_meses)
     except (TypeError, ValueError, KeyError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 
@@ -275,6 +276,8 @@ def _simulacion_out(s: FacturacionSimulacion, detalle: bool = True) -> dict:
         base["parametros"] = s.parametros or {}
         base["ventas_por_mes"] = s.ventas_por_mes or []
         base["meses_afectados"] = s.meses_afectados or {}
+        base["bonos_adicionales_por_mes"] = s.bonos_adicionales_por_mes or []
+        base["nombres_meses"] = s.nombres_meses or []
     return base
 
 
@@ -297,6 +300,7 @@ async def crear_simulacion(payload: SimulacionCreate, request: Request,
         nombre=payload.nombre.strip(), comentario=(payload.comentario or "").strip() or None,
         horizonte=payload.horizonte, parametros=payload.parametros, ventas_por_mes=payload.ventas_por_mes,
         meses_afectados=payload.meses_afectados or {},
+        bonos_adicionales_por_mes=payload.bonos_adicionales_por_mes or [], nombres_meses=payload.nombres_meses or [],
         marcas=_marcas_limpias(payload.marcas), postits=_postits_con_autor(payload.postits, user),
         resumen=payload.resumen, created_by=user.id, created_by_nombre=user.full_name,
     )
@@ -343,6 +347,10 @@ async def actualizar_simulacion(simulacion_id: str, payload: SimulacionUpdate, r
         s.ventas_por_mes = payload.ventas_por_mes
     if payload.meses_afectados is not None:
         s.meses_afectados = payload.meses_afectados
+    if payload.bonos_adicionales_por_mes is not None:
+        s.bonos_adicionales_por_mes = payload.bonos_adicionales_por_mes
+    if payload.nombres_meses is not None:
+        s.nombres_meses = [str(x or "")[:40] for x in payload.nombres_meses]
     if payload.marcas is not None:
         s.marcas = _marcas_limpias(payload.marcas)
     if payload.postits is not None:
