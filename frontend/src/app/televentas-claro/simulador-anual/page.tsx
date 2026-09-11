@@ -168,7 +168,7 @@ export default function SimuladorAnualPage() {
       {/* ===== Barra lateral de registro (se muestra / oculta) ===== */}
       {p && (
         <RegistroSimulaciones abierta={barra} setAbierta={setBarra} listo={seteado && !!res} getSnapshot={getSnapshot} onAbrir={abrirSimulacion}
-          actual={actual} setActual={setActual} marcas={marcas} setMarcas={setMarcas} postits={postits} setPostits={setPostits} notas={notas} setNotas={setNotas} />
+          actual={actual} setActual={setActual} marcas={marcas} setMarcas={setMarcas} postits={postits} setPostits={setPostits} notas={notas} setNotas={setNotas} nombresMeses={ventas.map((_, i) => nombreMes(i))} />
       )}
       {actual && (
         <div className="print-only card p-4 mb-4">
@@ -291,7 +291,7 @@ export default function SimuladorAnualPage() {
 
           <ResumenAfectados afectados={afectados} base={p} ventas={ventas} nombres={nombres.map((_, i) => nombreMes(i))} onEditar={(m) => setEditandoMes(m)} onQuitar={quitarAfectado} />
 
-          <NotasSimulacion notas={notas} setNotas={setNotas} nombres={ventas.map((_, i) => nombreMes(i))} guardaSola={!!actual} />
+          <NotasSimulacion notas={notas} setNotas={setNotas} nombres={ventas.map((_, i) => nombreMes(i))} guardaSola={!!actual} soloImpresion />
           {editandoMes != null && (
             <MesAfectadoEditor mes={editandoMes} nombre={nombreMes(editandoMes - 1)} nombres={nombres.map((_, i) => nombreMes(i))} horizonte={horizonte} base={p} ventas={ventas[editandoMes - 1] ?? 0}
               actual={afectados[String(editandoMes)]}
