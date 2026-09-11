@@ -35,6 +35,7 @@ class FacturacionSimulacion(Base):
     nombres_meses: Mapped[list] = mapped_column(JSON, nullable=False, default=list)             # nombres editables
     marcas: Mapped[list] = mapped_column(JSON, nullable=False, default=list)     # [{key, label}]
     postits: Mapped[list] = mapped_column(JSON, nullable=False, default=list)    # [{id, texto, color, item, autor, fecha}]
+    notas: Mapped[list] = mapped_column(JSON, nullable=False, default=list)      # [{id, texto, tipo, mes, autor, fecha}]
     resumen: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)    # foto de anual al guardar
 
     created_by: Mapped[str] = mapped_column(String(64), nullable=False)

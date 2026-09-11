@@ -79,6 +79,19 @@ async def test_registro_de_simulaciones():
         r = await ac.patch(f"/api/v1/facturacion/simulaciones/{sid}", headers=h, json={"nombre": "  "})
         assert r.status_code == 400
 
+        # notas y comentarios: nueva firmada, edición registra quién/cuándo, tipo inválido → observación
+        r = await ac.patch(f"/api/v1/facturacion/simulaciones/{sid}", headers=h, json={
+            "notas": [{"texto": "Supuesto: zafra promedio 2025", "tipo": "supuesto", "mes": "7"}, {"texto": "x", "tipo": "otro"}]})
+        assert r.status_code == 200, r.text
+        n = r.json()["notas"]
+        assert len(n) == 2 and n[0]["autor"] and n[0]["fecha"] and n[0]["mes"] == 7 and n[0]["editada_por"] is None
+        assert n[1]["tipo"] == "observacion" and n[1]["mes"] is None
+        n[0]["texto"] = "Supuesto: zafra promedio 2025 (revisado)"
+        r = await ac.patch(f"/api/v1/facturacion/simulaciones/{sid}", headers=h, json={"notas": n})
+        n2 = r.json()["notas"]
+        assert n2[0]["editada_por"] and n2[0]["editada_el"] and n2[0]["fecha"] == n[0]["fecha"]
+        assert n2[1]["editada_por"] is None
+
         # eliminar
         assert (await ac.delete(f"/api/v1/facturacion/simulaciones/{sid}", headers=h)).status_code == 200
         assert (await ac.get(f"/api/v1/facturacion/simulaciones/{sid}", headers=h)).status_code == 404

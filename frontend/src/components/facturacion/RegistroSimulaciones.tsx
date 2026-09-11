@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
+import type { Nota } from "./NotasSimulacion";
 
 /** Barra lateral "Registro del trabajo" del Simulador Anual (Televentas Claro):
  *  simulación abierta, ítems marcados, post-its y simulaciones guardadas.
@@ -58,7 +59,7 @@ function Seccion({ titulo, extra, abierta = true, children }: { titulo: string; 
   );
 }
 
-export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, onAbrir, actual, setActual, marcas, setMarcas, postits, setPostits }: {
+export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, onAbrir, actual, setActual, marcas, setMarcas, postits, setPostits, notas, setNotas }: {
   abierta: boolean; setAbierta: (v: boolean) => void;
   listo: boolean;                                   // hay simulación en pantalla para guardar
   getSnapshot: () => Snapshot;
@@ -67,6 +68,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
   setActual: (s: any | null) => void;
   marcas: Marca[]; setMarcas: (m: Marca[]) => void;
   postits: Postit[]; setPostits: (p: Postit[]) => void;
+  notas: Nota[]; setNotas: (n: Nota[]) => void;
 }) {
   const [lista, setLista] = useState<any[]>([]);
   const [filtro, setFiltro] = useState("");
@@ -90,22 +92,27 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
     try { const r = await fn(); if (exito) aviso(exito); return r; } catch (e: any) { setError(e.message || "No se pudo guardar."); return null; }
   };
 
-  // Marcas y post-its de una simulación abierta se persisten solos.
+  // Marcas, post-its y notas de una simulación abierta se persisten solos.
   useEffect(() => {
     if (!actual) { skipSync.current = false; return; }
     if (skipSync.current) { skipSync.current = false; return; }
     const t = setTimeout(() => {
-      apiFetch<any>(`/api/v1/facturacion/simulaciones/${actual.id}`, { method: "PATCH", body: JSON.stringify({ marcas, postits }) })
+      apiFetch<any>(`/api/v1/facturacion/simulaciones/${actual.id}`, { method: "PATCH", body: JSON.stringify({ marcas, postits, notas }) })
         .then((s) => {
-          if (JSON.stringify(s.postits ?? []) !== JSON.stringify(postits)) { skipSync.current = true; setPostits(s.postits ?? []); }
-          setActual({ ...actual, marcas: s.marcas, postits: s.postits, updated_at: s.updated_at, updated_by_nombre: s.updated_by_nombre });
+          // El servidor firma lo nuevo (id, autor, fecha): reasignar solo si cambió, y saltar el próximo disparo.
+          const cambioPostits = JSON.stringify(s.postits ?? []) !== JSON.stringify(postits);
+          const cambioNotas = JSON.stringify(s.notas ?? []) !== JSON.stringify(notas);
+          if (cambioPostits || cambioNotas) skipSync.current = true;
+          if (cambioPostits) setPostits(s.postits ?? []);
+          if (cambioNotas) setNotas(s.notas ?? []);
+          setActual({ ...actual, marcas: s.marcas, postits: s.postits, notas: s.notas, updated_at: s.updated_at, updated_by_nombre: s.updated_by_nombre });
           cargarLista();
         })
         .catch((e) => setError(e.message));
     }, 400);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [marcas, postits]);
+  }, [marcas, postits, notas]);
 
   const abrir = async (id: string) => {
     const s = await run(() => apiFetch<any>(`/api/v1/facturacion/simulaciones/${id}`));
@@ -116,24 +123,24 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
     setForm(null);
     aviso(`"${s.nombre}" abierta.`);
   };
-  const cerrar = () => { skipSync.current = true; setActual(null); setMarcas([]); setPostits([]); setForm(null); };
+  const cerrar = () => { skipSync.current = true; setActual(null); setMarcas([]); setPostits([]); setNotas([]); setForm(null); };
 
   const guardarNueva = async () => {
     if (!nombre.trim()) return;
     setGuardando(true);
     const s = await run(() => apiFetch<any>("/api/v1/facturacion/simulaciones", {
-      method: "POST", body: JSON.stringify({ nombre: nombre.trim(), comentario: comentario.trim() || null, ...getSnapshot(), marcas, postits }),
+      method: "POST", body: JSON.stringify({ nombre: nombre.trim(), comentario: comentario.trim() || null, ...getSnapshot(), marcas, postits, notas }),
     }), "Simulación guardada.");
     setGuardando(false);
     if (!s) return;
     skipSync.current = true;
-    setActual(s); setPostits(s.postits ?? []); setForm(null); cargarLista();
+    setActual(s); setPostits(s.postits ?? []); setNotas(s.notas ?? []); setForm(null); cargarLista();
   };
   const guardarCambios = async () => {
     if (!actual) return;
     setGuardando(true);
     const s = await run(() => apiFetch<any>(`/api/v1/facturacion/simulaciones/${actual.id}`, {
-      method: "PATCH", body: JSON.stringify({ ...getSnapshot(), marcas, postits }),
+      method: "PATCH", body: JSON.stringify({ ...getSnapshot(), marcas, postits, notas }),
     }), "Cambios guardados.");
     setGuardando(false);
     if (s) { setActual(s); cargarLista(); }
@@ -197,7 +204,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
             <div className="font-display text-base uppercase leading-tight truncate" title={actual?.nombre}>{actual ? actual.nombre : "Simulación sin guardar"}</div>
             {actual ? (
               <div className="text-[10px] text-white/70 leading-snug mt-0.5">
-                {actual.created_by_nombre || "—"} · {fecha(actual.created_at)}{actual.updated_at && <> · editada {fecha(actual.updated_at)}</>} · {actual.horizonte} m
+                {actual.created_by_nombre || "—"} · {fecha(actual.created_at)}{actual.updated_at && <> · editada {fecha(actual.updated_at)}</>} · {actual.horizonte} m · {notas.length} nota(s)
               </div>
             ) : (
               <div className="text-[10px] text-white/60 mt-0.5">{listo ? "Lista para guardar" : "Seteá el mes 1 para poder guardar"}</div>
@@ -314,7 +321,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
                       <span>{s.horizonte} m</span>
                       {r.ventas != null && <span>· {formatInt(r.ventas)} ventas</span>}
                       {fin != null && <span className={`font-mono font-bold ${fin < 0 ? "text-brand-primary" : "text-emerald-700"}`}>· {formatGs(fin)}</span>}
-                      <span>· {(s.marcas ?? []).length} 📌 · {(s.postits ?? []).length} 📝</span>
+                      <span>· {(s.marcas ?? []).length} 📌 · {(s.postits ?? []).length} 📝 · {(s.notas ?? []).length} notas</span>
                       <span>· {fecha(s.created_at)}{s.created_by_nombre ? ` · ${s.created_by_nombre}` : ""}</span>
                     </div>
                     {!activa && <button onClick={() => abrir(s.id)} className="mt-1 text-[11px] font-bold text-brand-primary hover:underline">Abrir</button>}

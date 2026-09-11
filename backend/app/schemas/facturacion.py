@@ -90,6 +90,7 @@ class SimulacionCreate(BaseModel):
     nombres_meses: List[str] = Field(default_factory=list)                 # nombres editables de los meses
     marcas: List[dict[str, Any]] = Field(default_factory=list)
     postits: List[dict[str, Any]] = Field(default_factory=list)
+    notas: List[dict[str, Any]] = Field(default_factory=list)      # notas y comentarios sobre la simulación
     resumen: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -104,6 +105,7 @@ class SimulacionUpdate(BaseModel):
     nombres_meses: Optional[List[str]] = None
     marcas: Optional[List[dict[str, Any]]] = None
     postits: Optional[List[dict[str, Any]]] = None
+    notas: Optional[List[dict[str, Any]]] = None
     resumen: Optional[dict[str, Any]] = None
 
 
