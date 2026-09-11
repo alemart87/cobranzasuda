@@ -180,6 +180,13 @@ class CompromisoUpdate(BaseModel):
     estado: Optional[str] = None          # pendiente | en_proceso | cumplido
     nota: Optional[str] = None
     descripcion: Optional[str] = None
+    responsable: Optional[str] = None     # "Voicenter" | "Sudameris"
+
+
+class ReunionSemanalUpsert(BaseModel):
+    """Conclusión de la reunión semanal: una por semana, se crea o se reemplaza."""
+    semana: str
+    conclusion: str
 
 
 class EficienciaRequest(BaseModel):
