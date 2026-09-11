@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
+import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
 import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { Lectura } from "@/components/televentas/Lectura";
@@ -132,6 +133,9 @@ export default function SimuladorAnualPage() {
       {error && <p className="text-sm text-brand-primary mb-4">{error}</p>}
       {!p && !error && <div className="text-brand-slate">Cargando variables de negocio…</div>}
 
+      {/* ===== Lienzo de trabajo: todo lo de abajo; los post-its flotan sobre él ===== */}
+      <div className="relative">
+      <PostitsLienzo postits={postits} setPostits={setPostits} marcas={marcas} />
       {p && (
         <RegistroSimulaciones listo={seteado && !!res} getSnapshot={getSnapshot} onAbrir={abrirSimulacion}
           actual={actual} setActual={setActual} marcas={marcas} setMarcas={setMarcas} postits={postits} setPostits={setPostits} />
@@ -381,7 +385,14 @@ export default function SimuladorAnualPage() {
                   <thead className="border-b border-brand-border">
                     <tr className="text-[9px] uppercase tracking-wider2 text-brand-slate">
                       <th className="px-3 py-2 text-left sticky left-0 bg-white">Concepto</th>
-                      {meses.map((m: any) => <th key={m.mes} className="px-2 py-2 text-right">M{m.mes}</th>)}
+                      {meses.map((m: any) => (
+                        <th key={m.mes} className={`px-2 py-2 text-right ${esMarcado(`mes:${m.mes}`) ? "bg-amber-100 text-brand-ink" : ""}`}>
+                          <span className="inline-flex items-center gap-1 justify-end">
+                            <Pin marcado={esMarcado(`mes:${m.mes}`)} onClick={() => toggleMarca(`mes:${m.mes}`, `Mes ${m.mes} (${formatInt(m.ventas)} ventas)`)} className="!w-4 !h-4 !text-[9px]" />
+                            M{m.mes}
+                          </span>
+                        </th>
+                      ))}
                       <th className="px-3 py-2 text-right bg-brand-primary/5 text-brand-primary">Total</th>
                     </tr>
                   </thead>
@@ -435,7 +446,7 @@ export default function SimuladorAnualPage() {
                             </span>
                           </td>
                           {meses.map((m: any) => (
-                            <td key={m.mes} className={`px-2 py-1 text-right font-mono whitespace-nowrap ${tipo !== "total" && tipo !== "sep" && val(m) < 0 ? "text-brand-primary" : ""}`}>
+                            <td key={m.mes} className={`px-2 py-1 text-right font-mono whitespace-nowrap ${tipo !== "total" && tipo !== "sep" && val(m) < 0 ? "text-brand-primary" : ""} ${esMarcado(`mes:${m.mes}`) && tipo !== "total" ? "bg-amber-50" : ""}`}>
                               {tipo === "sep" ? "" : f(key === "margen_pct" ? m.margen_pct : val(m))}
                             </td>
                           ))}
@@ -469,8 +480,13 @@ export default function SimuladorAnualPage() {
                   </thead>
                   <tbody>
                     {meses.map((m: any) => (
-                      <tr key={m.mes} className="border-t border-brand-border">
-                        <td className="px-3 py-1 font-medium">Mes {m.mes}</td>
+                      <tr key={m.mes} className={`border-t border-brand-border ${esMarcado(`mes:${m.mes}`) ? "bg-amber-50" : ""}`}>
+                        <td className="px-3 py-1 font-medium">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Pin marcado={esMarcado(`mes:${m.mes}`)} onClick={() => toggleMarca(`mes:${m.mes}`, `Mes ${m.mes} (${formatInt(m.ventas)} ventas)`)} className="!w-4 !h-4 !text-[9px]" />
+                            Mes {m.mes}
+                          </span>
+                        </td>
                         <td className="px-3 py-1 text-right">{formatInt(m.ventas)}</td>
                         <td className="px-3 py-1 text-right font-mono">{m.cumplimiento_pct}%</td>
                         <td className="px-3 py-1 text-center">
@@ -490,6 +506,7 @@ export default function SimuladorAnualPage() {
           )}
         </div>
       )}
+      </div>
     </AppShell>
   );
 }

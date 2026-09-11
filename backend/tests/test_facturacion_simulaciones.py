@@ -39,7 +39,7 @@ async def test_registro_de_simulaciones():
             "nombre": "Escenario base 1.700", "comentario": "Sin ajuste de comisiones",
             "horizonte": 18, "parametros": {"ventas": 1700}, "ventas_por_mes": [1700] * 18,
             "marcas": [{"key": "kpi:resultado", "label": "Resultado a 18 meses"}, {"key": "kpi:resultado", "label": "dup"}],
-            "postits": [{"texto": "Revisar zafra con Claro", "color": "amarillo", "item": "kpi:resultado"}],
+            "postits": [{"texto": "Revisar zafra con Claro", "color": "amarillo", "item": "kpi:resultado", "x": 120, "y": 340.5}],
             "resumen": {"resultado_con_cola": 468131274},
         })
         assert r.status_code == 201, r.text
@@ -48,6 +48,7 @@ async def test_registro_de_simulaciones():
         assert s["nombre"] == "Escenario base 1.700" and s["horizonte"] == 18
         assert len(s["marcas"]) == 1                       # la duplicada se descarta
         assert s["postits"][0]["autor"] and s["postits"][0]["fecha"] and s["postits"][0]["id"]
+        assert (s["postits"][0]["x"], s["postits"][0]["y"]) == (120.0, 340.5)   # posición en el lienzo
         assert s["created_by_nombre"]
 
         # horizonte inválido
