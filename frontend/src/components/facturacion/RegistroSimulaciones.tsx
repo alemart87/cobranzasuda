@@ -235,7 +235,11 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
           <div className="shrink-0 flex items-center gap-1">
             <button onClick={() => setVerGuardadas(true)} title="Ver, abrir o eliminar simulaciones guardadas"
               className="px-2 py-1 rounded text-[10px] font-bold bg-white/15 hover:bg-white/25 whitespace-nowrap">Guardadas · {lista.length}</button>
-            <button onClick={() => setAbierta(false)} title="Ocultar barra" className="w-9 h-9 -mr-2 flex items-center justify-center rounded-md text-white/80 hover:text-white hover:bg-white/10 text-2xl leading-none">›</button>
+            <button onClick={() => setAbierta(false)} title="Ocultar barra y ver la proyección"
+              className="h-9 -mr-1 px-2.5 flex items-center justify-center gap-1 rounded-md text-white hover:bg-white/10 sm:text-white/80 sm:hover:text-white">
+              <span className="sm:hidden text-xs font-bold">✕ Cerrar</span>
+              <span className="hidden sm:inline text-2xl leading-none">›</span>
+            </button>
           </div>
         </div>
         {sinGuardar && <div className="mt-2 text-[10px] font-bold px-2 py-1 rounded bg-brand-orange text-white">Cambios sin guardar (variables, ventas, nombres, bonos o meses afectados)</div>}
@@ -246,7 +250,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
               <button onClick={() => abrirForm("nueva")} disabled={!listo} className="px-2.5 py-1 rounded text-[11px] font-bold bg-white/15 hover:bg-white/25 disabled:opacity-40">Guardar como nueva</button>
               <button onClick={() => abrirForm("editar")} className="px-2.5 py-1 rounded text-[11px] font-bold bg-white/15 hover:bg-white/25">Nombre / comentario</button>
               <button onClick={() => eliminar(actual)} className="px-2.5 py-1 rounded text-[11px] font-bold bg-brand-primary hover:bg-brand-primary/90">Eliminar</button>
-              <button onClick={cerrar} className="px-2 py-1 text-[11px] text-white/70 hover:text-white">Cerrar</button>
+              <button onClick={cerrar} title="Quitar la simulación guardada de pantalla (no la borra)" className="px-2 py-1 text-[11px] text-white/70 hover:text-white">Cerrar simulación</button>
             </>
           ) : (
             <>
@@ -418,6 +422,11 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
           </div>
         </div>
       )}
+
+      {/* Celular: salida siempre a mano para volver a la proyección */}
+      <div className="sm:hidden shrink-0 border-t border-brand-border bg-white p-3" style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+        <button onClick={() => setAbierta(false)} className="btn-primary w-full !py-3 text-base">Ver la proyección ›</button>
+      </div>
     </aside>
     </>
   );
