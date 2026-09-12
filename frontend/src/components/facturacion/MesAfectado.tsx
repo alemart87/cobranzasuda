@@ -188,18 +188,24 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
 }
 
 /** Resumen visible (e imprimible) de los meses afectados y sus variaciones. */
-export function ResumenAfectados({ afectados, base, ventas, nombres, onEditar, onQuitar }: {
+export function ResumenAfectados({ afectados, base, ventas, nombres, onEditar, onQuitar, sinCard }: {
   afectados: Afectados; base: any; ventas: number[]; nombres?: string[];
-  onEditar: (mes: number) => void; onQuitar: (mes: number) => void;
+  onEditar: (mes: number) => void; onQuitar: (mes: number) => void; sinCard?: boolean;
 }) {
   const meses = Object.keys(afectados).map(Number).sort((a, b) => a - b);
-  if (!meses.length) return null;
+  if (!meses.length && !sinCard) return null;
+  const Wrapper = sinCard ? "div" : "section";
   return (
-    <section className="card p-4 border-l-4 border-brand-purple">
-      <div className="flex items-baseline justify-between gap-2 mb-2">
-        <h2 className="text-[11px] uppercase tracking-wider2 text-brand-purple font-bold">Meses afectados · {meses.length}</h2>
-        <span className="text-[11px] text-brand-slate">cada uno se liquida con sus propias variaciones; el resto del año sigue la base</span>
-      </div>
+    <Wrapper className={sinCard ? "" : "card p-4 border-l-4 border-brand-purple"}>
+      {!sinCard && (
+        <div className="flex items-baseline justify-between gap-2 mb-2">
+          <h2 className="text-[11px] uppercase tracking-wider2 text-brand-purple font-bold">Meses afectados · {meses.length}</h2>
+          <span className="text-[11px] text-brand-slate">cada uno se liquida con sus propias variaciones; el resto del año sigue la base</span>
+        </div>
+      )}
+      {!meses.length && (
+        <p className="text-sm text-brand-slate">Ningún mes con variaciones propias. Usá el ✎ sobre un mes de la grilla para cargarle otra portabilidad, efectividad, mix, ajuste de comisiones o costos variables; acá queda el detalle de cada uno.</p>
+      )}
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-2">
         {meses.map((m) => (
           <div key={m} className="rounded-md border border-brand-purple/30 bg-brand-purple/5 px-3 py-2">
@@ -216,6 +222,6 @@ export function ResumenAfectados({ afectados, base, ventas, nombres, onEditar, o
           </div>
         ))}
       </div>
-    </section>
+    </Wrapper>
   );
 }
