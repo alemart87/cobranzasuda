@@ -325,7 +325,7 @@ export default function SimuladorAnualPage() {
                   ? "Sin ajuste — cuota 1, cuota 2 y plus de portabilidad según tarifa vigente"
                   : `Cuota 1, cuota 2 y plus de portabilidad ${Number(p.ajuste_comisiones_pct) > 0 ? "mejoran" : "bajan"} ${Math.abs(Number(p.ajuste_comisiones_pct))}%`}
               </div>
-              <div className="text-[11px] text-brand-slate">Simula una renegociación con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados. La comisión de los vendedores se calcula sobre la tarifa SIN ajuste: la mejora es íntegramente margen de Voicenter.</div>
+              <div className="text-[11px] text-brand-slate">Simula una renegociación con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados. La comisión y el plus de los vendedores son montos fijos por venta y no cambian con el ajuste: la mejora es íntegramente margen de Voicenter.</div>
             </div>
             <label className="flex items-center gap-2 text-sm no-print">
               <span className="text-brand-graphite">Ajuste</span>
@@ -536,7 +536,8 @@ export default function SimuladorAnualPage() {
                       ["INGRESO NETO LIQUIDADO", "ingreso_neto", "gs", "total"],
                       ["COSTOS", null, null, "sep"],
                       ["Estructura fija (salarios, cargas, premios logística)", "_fijo", "gs", "row"],
-                      ["Comisiones de vendedores", "_comisiones", "gs", "row"],
+                      ["Comisiones de vendedores (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
+                      ["Plus de vendedores (sin cargas)", "_plus", "gs", "row"],
                       ["Logística de entregas", "_logistica", "gs", "row"],
                       ["Operativos", "_operativos", "gs", "row"],
                       ["TOTAL COSTOS", "costo_total", "gs", "sub"],
@@ -546,8 +547,9 @@ export default function SimuladorAnualPage() {
                     ] as Array<[string, string | null, string | null, string]>).map(([label, key, fmt, tipo]) => {
                       const val = (m: any): number => {
                         if (!key) return 0;
-                        if (key === "_fijo") return m.costo_total - m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0)) - m.costos.logistica_entregas - m.costos.operativos;
+                        if (key === "_fijo") return m.costo_total - m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0)) - (m.costos.plus_vendedores ?? 0) - m.costos.logistica_entregas - m.costos.operativos;
                         if (key === "_comisiones") return m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0));
+                        if (key === "_plus") return m.costos.plus_vendedores ?? 0;
                         if (key === "_logistica") return m.costos.logistica_entregas;
                         if (key === "_operativos") return m.costos.operativos;
                         return Number(m[key] ?? 0);

@@ -89,8 +89,9 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
         "coordinadores": 1,
         "controllers": 2,
         "salario_hora": 14635, "horas_dia": 7, "dias_mes": 23,   # operador: 14.635 × 7 h × 23 días
-        "comision_vendedores_pct": 25.0,    # % sobre las comisiones facturadas
-        "comision_incluye_bonos": True,     # base = facturación del mes (con bonos) o solo comisiones
+        # Remuneración variable del VENDEDOR, como MONTO por venta (no como % de la facturación):
+        "comision_por_venta": 102000,       # comisión por venta (promedio real): paga IPS y aguinaldo
+        "plus_por_venta": 32000,            # plus por venta: NO paga IPS ni aguinaldo
         "supervisor_salario": 4180000, "supervisor_premio": 1500000,
         "coordinador_salario": 6000000, "coordinador_premio": 2500000,
         "backoffice_salario": 3044000,
@@ -239,12 +240,8 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     dist_efect = _distancias(p["escala_efectividad"], efect, 0, "pts")  # se mide en puntos de efectividad
 
     # ---- COSTOS de la estructura y MARGEN (evaluación del negocio, foco a 6 meses) ----
-    # Base de la comisión del vendedor: facturación con tarifa SIN ajuste (con o sin bonos según config).
-    mes0_sin_ajuste = act * cuota1_base + act * porta * porta_base
-    base_comision_vendedor = (mes0_sin_ajuste + mes0["bono_productividad"] + mes0["bono_efectividad"] + mes0["bono_adicional"]
-                              if p["costos"].get("comision_incluye_bonos", True) else mes0_sin_ajuste)
-    costos, margen = _costos_y_margen(p["costos"], act, mes0, bruto_mes0, neto_6, neto_12,
-                                      base_comision=base_comision_vendedor)
+    # La comisión y el plus del vendedor son montos por venta: no dependen de la tarifa ni del ajuste.
+    costos, margen = _costos_y_margen(p["costos"], act, mes0, bruto_mes0, neto_6, neto_12)
     if not p.get("_sin_breakeven"):
         margen["breakeven_ventas_6"] = _breakeven(p)
 
@@ -270,7 +267,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     if float(p.get("ajuste_comisiones_pct") or 0):
         aj = float(p["ajuste_comisiones_pct"])
         partes.append(f"Con un ajuste de comisiones del {aj:+.1f}% sobre cuota 1, cuota 2 y portabilidad "
-                      f"(cuota 1 ponderada {gs(cuota1_w)}); la comisión de los vendedores se mantiene sobre la tarifa "
+                      f"(cuota 1 ponderada {gs(cuota1_w)}); la comisión de los vendedores es un monto por venta y no cambia con la tarifa "
                       f"sin ajuste, así que la mejora es íntegramente margen de Voicenter.")
     if not bonos_activos:
         partes.append("SIMULACIÓN SIN BONOS: los bonos de productividad y efectividad están desactivados por el usuario "
@@ -382,8 +379,7 @@ def _cierre_cohorte(p: dict, meses: list[dict], bruto_mes0: float, neto_6: float
 
 
 def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
-                     neto_6: float, neto_12: float, headcount: dict | None = None,
-                     base_comision: float | None = None) -> tuple[dict, dict]:
+                     neto_6: float, neto_12: float, headcount: dict | None = None) -> tuple[dict, dict]:
     """Costos mensuales de la estructura para `act` ventas y margen contra lo facturado
     (mes 0) y contra lo que realmente queda a 6 y 12 meses. Con `headcount` la
     estructura queda FIJA (simulación anual: se setea en el mes 1) y solo varían
@@ -400,11 +396,11 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
         controllers = int(c["controllers"] or 0)
 
     salario_operador = float(c["salario_hora"]) * float(c["horas_dia"]) * float(c["dias_mes"])
-    if base_comision is None:
-        base_comision = bruto_mes0 if c.get("comision_incluye_bonos", True) else (mes0["activaciones_cuota1"] + mes0["portabilidad"])
+    comision_venta = max(float(c.get("comision_por_venta") or 0), 0)   # con IPS y aguinaldo
+    plus_venta = max(float(c.get("plus_por_venta") or 0), 0)           # sin cargas sociales
     rrhh = {
         "operadores_salario": vendedores * salario_operador,
-        "operadores_comisiones": base_comision * float(c["comision_vendedores_pct"]) / 100.0,
+        "operadores_comisiones": act * comision_venta,
         "supervisores": supervisores * (float(c["supervisor_salario"]) + float(c["supervisor_premio"])),
         "coordinadores": coordinadores * (float(c["coordinador_salario"]) + float(c["coordinador_premio"])),
         "backoffice": backoffice * float(c["backoffice_salario"]),
@@ -417,14 +413,18 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
     ips = rrhh_base * float(c["ips_pct"]) / 100.0
     # Cargas sociales: IPS sobre todo el costo de RRHH; aguinaldo = 1/12 del RRHH por mes (sin IPS).
     aguinaldo = rrhh_base / 12.0 if c.get("aguinaldo", True) else 0.0
+    # Plus por venta del vendedor: fuera del RRHH porque NO paga IPS ni aguinaldo.
+    plus_vendedores = act * plus_venta
     interior = min(max(float(c["logistica_interior_pct"]), 0), 100) / 100.0
     logistica_entregas = act * (interior * float(c["logistica_interior"]) + (1 - interior) * float(c["logistica_central"]))
     logistica_premios = float(c["logistica_premios"])
     operativos = act * float(c["operativo_por_venta"])
     # Total sobre componentes redondeados: la tabla de costos debe ser aditiva al guaraní.
-    rrhh_base, ips, aguinaldo = round(rrhh_base), round(ips), round(aguinaldo)
+    rrhh_base, ips, aguinaldo, plus_vendedores = round(rrhh_base), round(ips), round(aguinaldo), round(plus_vendedores)
     logistica_entregas, logistica_premios, operativos = round(logistica_entregas), round(logistica_premios), round(operativos)
-    total = rrhh_base + ips + aguinaldo + logistica_entregas + logistica_premios + operativos
+    total = rrhh_base + ips + aguinaldo + plus_vendedores + logistica_entregas + logistica_premios + operativos
+    carga = 1 + float(c["ips_pct"]) / 100.0 + (1 / 12 if c.get("aguinaldo", True) else 0)
+    variable_vendedores = rrhh["operadores_comisiones"] + plus_vendedores          # comisión + plus (sin cargas)
 
     costos = {
         "headcount": {"vendedores": vendedores, "supervisores": supervisores, "backoffice": backoffice,
@@ -434,23 +434,30 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
         "rrhh": {k: round(v) for k, v in rrhh.items()},
         "rrhh_base": round(rrhh_base), "ips": round(ips), "aguinaldo": round(aguinaldo),
         "rrhh_total": round(rrhh_base + ips + aguinaldo),
+        "plus_vendedores": plus_vendedores,
         "logistica_entregas": round(logistica_entregas), "logistica_premios": round(logistica_premios),
         "operativos": round(operativos),
         "total": round(total),
         "costo_por_venta": round(total / act) if act else 0,
         "facturacion_por_venta": round(bruto_mes0 / act) if act else 0,
         "neto_6_por_venta": round(neto_6 / act) if act else 0,
-        # Remuneración del vendedor: qué se paga en comisión, en promedio, por vendedor y por venta.
+        # Remuneración del vendedor: comisión por venta (con cargas) + plus por venta (sin cargas).
         "vendedor": {
             "salario_fijo": round(salario_operador),
+            "comision_por_venta": round(comision_venta), "plus_por_venta": round(plus_venta),
+            "variable_por_venta": round(comision_venta + plus_venta),
+            "comision_con_cargas_por_venta": round(comision_venta * carga + plus_venta),   # costo real por venta para Voicenter
             "comision_promedio": round(rrhh["operadores_comisiones"] / vendedores) if vendedores else 0,
-            "comision_por_venta": round(rrhh["operadores_comisiones"] / act) if act else 0,
-            "ingreso_promedio": round(salario_operador + (rrhh["operadores_comisiones"] / vendedores if vendedores else 0)),
+            "plus_promedio": round(plus_vendedores / vendedores) if vendedores else 0,
+            "ingreso_promedio": round(salario_operador + (variable_vendedores / vendedores if vendedores else 0)),
             "ventas_promedio": round(act / vendedores, 1) if vendedores else 0,
-            "base_comision": round(base_comision), "base_por_venta": round(base_comision / act) if act else 0,
-            "pct_comision_sobre_ingreso": round(
-                (rrhh["operadores_comisiones"] / vendedores) / (salario_operador + rrhh["operadores_comisiones"] / vendedores) * 100, 1
-            ) if vendedores and (salario_operador + rrhh["operadores_comisiones"] / vendedores) else 0.0,
+            "pct_variable_sobre_ingreso": round(
+                (variable_vendedores / vendedores) / (salario_operador + variable_vendedores / vendedores) * 100, 1
+            ) if vendedores and (salario_operador + variable_vendedores / vendedores) else 0.0,
+            # Referencia: cuánto pesan comisión + plus sobre lo facturado (no es un parámetro, es un indicador).
+            "peso_sobre_facturacion_pct": round(variable_vendedores / bruto_mes0 * 100, 1) if bruto_mes0 else 0.0,
+            "peso_sobre_neto_6_pct": round(variable_vendedores / neto_6 * 100, 1) if neto_6 else 0.0,
+            "peso_sobre_neto_12_pct": round(variable_vendedores / neto_12 * 100, 1) if neto_12 else 0.0,
         },
     }
     margen = {
@@ -499,7 +506,7 @@ HORIZONTES = (12, 18)
 
 # Claves que un "mes afectado" NO puede pisar: las ventas van aparte y la estructura queda fija al mes 1.
 _NO_AFECTABLES = {"ventas", "_sin_breakeven", "costos"}
-_COSTOS_AFECTABLES = {"comision_vendedores_pct", "comision_incluye_bonos", "logistica_central",
+_COSTOS_AFECTABLES = {"comision_por_venta", "plus_por_venta", "logistica_central",
                       "logistica_interior", "logistica_interior_pct", "operativo_por_venta"}
 
 
@@ -610,8 +617,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         fila["ingreso_neto"] = fila["facturacion_bruta"] + fila["ajustes"]
         # Costos del mes: estructura fija del mes 1 + variables de las ventas del mes.
         costos_t, _ = _costos_y_margen(c["parametros"]["costos"], ventas[t], c["mes0"], c["bruto_mes0"],
-                                       c["neto_6"], c["neto_12"], headcount=headcount,
-                                       base_comision=c["costos"]["vendedor"]["base_comision"])
+                                       c["neto_6"], c["neto_12"], headcount=headcount)
         fila["costos"] = costos_t
         fila["costo_total"] = costos_t["total"]
         fila["resultado"] = fila["ingreso_neto"] - costos_t["total"]

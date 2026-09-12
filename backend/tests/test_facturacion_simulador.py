@@ -65,22 +65,24 @@ def test_costos_estructura_y_margen():
                               "coordinadores": 1, "controllers": 2, "subgerencia": 0, "total": 116}
     assert c["salario_operador_mes"] == round(14635 * 7 * 23)
     assert c["rrhh"]["operadores_salario"] == round(95 * 14635 * 7 * 23)
-    assert c["rrhh"]["operadores_comisiones"] == round(r["bruto_mes0"] * 0.25)
+    assert c["rrhh"]["operadores_comisiones"] == 1900 * 102000      # comisión por venta: paga IPS y aguinaldo
+    assert c["plus_vendedores"] == 1900 * 32000                       # plus por venta: sin cargas
     assert c["rrhh"]["supervisores"] == 7 * (4180000 + 1500000)
     assert c["rrhh"]["controllers"] == 2 * (3600000 + 750000)
     assert c["ips"] == round(c["rrhh_base"] * 0.165)
     assert c["aguinaldo"] == round(c["rrhh_base"] / 12)          # aguinaldo sobre RRHH, sin IPS
     assert c["logistica_entregas"] == round(1900 * (0.6 * 80000 + 0.4 * 55000))
     assert c["operativos"] == 1900 * 12500
-    assert c["total"] == c["rrhh_base"] + c["ips"] + c["aguinaldo"] + c["logistica_entregas"] + c["logistica_premios"] + c["operativos"]
+    assert c["total"] == c["rrhh_base"] + c["ips"] + c["aguinaldo"] + c["plus_vendedores"] + c["logistica_entregas"] + c["logistica_premios"] + c["operativos"]
+    assert c["rrhh_base"] == sum(c["rrhh"].values())                  # el plus NO está en la base de IPS/aguinaldo
     assert m["mes0"] == r["bruto_mes0"] - c["total"]
     assert m["meses6"] == r["neto_6"] - c["total"]
     # con la estructura por defecto el negocio no cierra a 6 meses → alerta y sin punto de equilibrio
     assert m["meses6"] < 0 and m.get("breakeven_ventas_6") is None
     assert r["recomendaciones"][0]["severidad"] == "alert"
-    # variables editables: más ventas por vendedor y comisión sin bonos mejoran el margen
+    # variables editables: más ventas por vendedor y menor comisión por venta mejoran el margen
     mejor = simular_facturacion({"ventas": 1900, "objetivo_co": 1750,
-                                 "costos": {"ventas_por_vendedor": 30, "comision_incluye_bonos": False}})
+                                 "costos": {"ventas_por_vendedor": 30, "comision_por_venta": 90000}})
     assert mejor["costos"]["headcount"]["vendedores"] == 64
     assert mejor["margen"]["meses6"] > m["meses6"]
 
@@ -111,9 +113,12 @@ def test_remuneracion_promedio_del_vendedor():
     r = simular_facturacion({"ventas": 1900, "objetivo_co": 1750})
     c = r["costos"]; v = c["vendedor"]
     assert v["salario_fijo"] == c["salario_operador_mes"]
-    assert v["comision_promedio"] == round(c["rrhh"]["operadores_comisiones"] / 95)
-    assert v["comision_por_venta"] == round(c["rrhh"]["operadores_comisiones"] / 1900)
-    assert v["ingreso_promedio"] == round(c["salario_operador_mes"] + c["rrhh"]["operadores_comisiones"] / 95)
+    assert v["comision_por_venta"] == 102000 and v["plus_por_venta"] == 32000 and v["variable_por_venta"] == 134000
+    assert v["comision_promedio"] == round(1900 * 102000 / 95) and v["plus_promedio"] == round(1900 * 32000 / 95)
+    assert v["ingreso_promedio"] == round(c["salario_operador_mes"] + 1900 * 134000 / 95)
+    assert v["comision_con_cargas_por_venta"] == round(102000 * (1 + 0.165 + 1 / 12) + 32000)
+    # referencia: peso de comisión + plus sobre lo facturado (indicador, no parámetro)
+    assert v["peso_sobre_facturacion_pct"] == round(1900 * 134000 / r["bruto_mes0"] * 100, 1)
     assert v["ventas_promedio"] == 20.0
 
 
@@ -269,7 +274,7 @@ def test_bono_adicional_y_nombres_de_meses():
     assert con["bonos"]["mes0"] == base["bonos"]["mes0"] + 25_000_000
     assert con["neto_12"] - base["neto_12"] == 25_000_000            # no se devuelve ni se recalcula
     # comisión del vendedor: la base incluye el bono adicional (como los demás bonos)
-    assert con["costos"]["vendedor"]["base_comision"] == base["costos"]["vendedor"]["base_comision"] + 25_000_000
+    assert con["costos"]["rrhh"]["operadores_comisiones"] == base["costos"]["rrhh"]["operadores_comisiones"]   # el vendedor cobra por venta, no por bono
     # anual: por mes, y nombres
     a = simular_anual({}, [1900] * 12, 12, None, [0, 10_000_000, 0], ["Oct 2026", "Nov 2026"])
     assert a["meses"][1]["bono_adicional"] == 10_000_000 and a["meses"][0]["bono_adicional"] == 0

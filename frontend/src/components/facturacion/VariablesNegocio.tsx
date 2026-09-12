@@ -154,11 +154,10 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="Salario por hora" value={p.costos.salario_hora} onChange={(v) => setC("salario_hora", v)} step={100} />
               <Campo label="Horas por día" value={p.costos.horas_dia} onChange={(v) => setC("horas_dia", v)} step={0.5} />
               <Campo label="Días por mes" value={p.costos.dias_mes} onChange={(v) => setC("dias_mes", v)} />
-              <Campo label="Comisión de vendedores" hint="% sobre las comisiones facturadas" value={p.costos.comision_vendedores_pct} onChange={(v) => setC("comision_vendedores_pct", v)} step={1} suffix="%" />
-              <label className="flex items-center gap-2 text-sm text-brand-ink">
-                <input type="checkbox" checked={!!p.costos.comision_incluye_bonos} onChange={(e) => setC("comision_incluye_bonos", e.target.checked)} className="accent-brand-primary" />
-                La base de la comisión incluye los bonos
-              </label>
+              <div className="border-t border-brand-border pt-2 text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Variable del vendedor (monto por venta)</div>
+              <Campo label="Comisión por venta" hint="Gs por venta · paga IPS y aguinaldo (promedio real 102.000)" value={Number(p.costos.comision_por_venta ?? 0)} onChange={(v) => setC("comision_por_venta", v)} step={1000} />
+              <Campo label="Plus por venta" hint="Gs por venta · NO paga IPS ni aguinaldo (32.000)" value={Number(p.costos.plus_por_venta ?? 0)} onChange={(v) => setC("plus_por_venta", v)} step={1000} />
+              <p className="text-[10px] text-brand-slate">Se cargan como montos, no como % de la facturación. El peso de comisión + plus sobre lo facturado se muestra en los resultados solo como referencia.</p>
               <div className="border-t border-brand-border pt-2 text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Salarios mensuales</div>
               <Campo label="Supervisor" hint="salario" value={p.costos.supervisor_salario} onChange={(v) => setC("supervisor_salario", v)} step={10000} />
               <Campo label="Supervisor — premio" value={p.costos.supervisor_premio} onChange={(v) => setC("supervisor_premio", v)} step={10000} />
