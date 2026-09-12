@@ -118,7 +118,7 @@ export default function SimuladorFacturacionPage() {
                         ? "Sin ajuste — cuota 1, cuota 2 y plus de portabilidad según tarifa vigente"
                         : `Cuota 1, cuota 2 y plus de portabilidad ${Number(p.ajuste_comisiones_pct) > 0 ? "mejoran" : "bajan"} ${Math.abs(Number(p.ajuste_comisiones_pct))}%`}
                     </div>
-                    <div className="text-[11px] text-brand-slate">Simula una renegociación con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados. La comisión de los vendedores se calcula sobre la tarifa SIN ajuste: la mejora es íntegramente margen de Voicenter.</div>
+                    <div className="text-[11px] text-brand-slate">Simula una renegociación con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados. La comisión y el plus de los vendedores son montos fijos por venta y no cambian con el ajuste: la mejora es íntegramente margen de Voicenter.</div>
                   </div>
                   <label className="flex items-center gap-2 text-sm no-print">
                     <span className="text-brand-graphite">Ajuste</span>
@@ -246,7 +246,7 @@ export default function SimuladorFacturacionPage() {
                     { label: "INGRESO NETO", v: [r0, r6, r12], tipo: "total" },
                     { label: "COSTOS DE LA ESTRUCTURA", v: [0, 0, 0], tipo: "head" },
                     { label: `Operadores — salario (${c.headcount.vendedores} × ${formatGs(c.salario_operador_mes)})`, v: [c.rrhh.operadores_salario, c.rrhh.operadores_salario, c.rrhh.operadores_salario], tipo: "costo" },
-                    { label: `Operadores — comisiones ${p.costos.comision_vendedores_pct}%`, v: [c.rrhh.operadores_comisiones, c.rrhh.operadores_comisiones, c.rrhh.operadores_comisiones], tipo: "costo" },
+                    { label: `Vendedores — comisión por venta (${formatInt(d.activaciones)} × ${formatGs(c.vendedor.comision_por_venta)}, con IPS y aguinaldo)`, v: [c.rrhh.operadores_comisiones, c.rrhh.operadores_comisiones, c.rrhh.operadores_comisiones], tipo: "costo" },
                     { label: `Supervisores (${c.headcount.supervisores})`, v: [c.rrhh.supervisores, c.rrhh.supervisores, c.rrhh.supervisores], tipo: "costo" },
                     { label: `Coordinación (${c.headcount.coordinadores})`, v: [c.rrhh.coordinadores, c.rrhh.coordinadores, c.rrhh.coordinadores], tipo: "costo" },
                     { label: `Backoffice (${c.headcount.backoffice})`, v: [c.rrhh.backoffice, c.rrhh.backoffice, c.rrhh.backoffice], tipo: "costo" },
@@ -254,6 +254,7 @@ export default function SimuladorFacturacionPage() {
                     ...(c.rrhh.subgerencia > 0 ? [{ label: "SubGerencia Comercial (1) — en análisis", v: [c.rrhh.subgerencia, c.rrhh.subgerencia, c.rrhh.subgerencia] as [number, number, number], tipo: "costo" as const }] : []),
                     { label: `IPS ${p.costos.ips_pct}%`, v: [c.ips, c.ips, c.ips], tipo: "costo" },
                     { label: "Previsión de aguinaldo (÷ 12)", v: [c.aguinaldo, c.aguinaldo, c.aguinaldo], tipo: "costo" },
+                    { label: `Vendedores — plus por venta (${formatInt(d.activaciones)} × ${formatGs(c.vendedor.plus_por_venta)}, sin cargas)`, v: [c.plus_vendedores, c.plus_vendedores, c.plus_vendedores], tipo: "costo" },
                     { label: "Logística — entregas", v: [c.logistica_entregas, c.logistica_entregas, c.logistica_entregas], tipo: "costo" },
                     { label: "Logística — premios", v: [c.logistica_premios, c.logistica_premios, c.logistica_premios], tipo: "costo" },
                     { label: "Costos operativos", v: [c.operativos, c.operativos, c.operativos], tipo: "costo" },
@@ -344,20 +345,27 @@ export default function SimuladorFacturacionPage() {
                             <div className="text-[10px] text-brand-slate">{formatGs(p.costos.salario_hora)} × {p.costos.horas_dia} h × {p.costos.dias_mes} días</div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-brand-slate">Comisión promedio (mes)</div>
-                            <div className="font-display text-xl text-brand-primary">{formatGs(res.costos.vendedor.comision_promedio)}</div>
-                            <div className="text-[10px] text-brand-slate">{p.costos.comision_vendedores_pct}% sobre {formatGs(res.costos.vendedor.base_comision)} (tarifa sin ajuste) ÷ {res.costos.headcount.vendedores} vendedores</div>
+                            <div className="text-[10px] text-brand-slate">Comisión + plus por venta</div>
+                            <div className="font-display text-xl text-brand-primary">{formatGs(res.costos.vendedor.variable_por_venta)}</div>
+                            <div className="text-[10px] text-brand-slate">{formatGs(res.costos.vendedor.comision_por_venta)} comisión (con IPS y aguinaldo) + {formatGs(res.costos.vendedor.plus_por_venta)} plus (sin cargas) · costo real {formatGs(res.costos.vendedor.comision_con_cargas_por_venta)}/venta</div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-brand-slate">Comisión por venta promedio</div>
-                            <div className="font-display text-xl text-brand-ink">{formatGs(res.costos.vendedor.comision_por_venta)}</div>
-                            <div className="text-[10px] text-brand-slate">{p.costos.comision_vendedores_pct}% de {formatGs(res.costos.vendedor.base_por_venta)} facturados por venta</div>
+                            <div className="text-[10px] text-brand-slate">Variable promedio (mes)</div>
+                            <div className="font-display text-xl text-brand-ink">{formatGs(res.costos.vendedor.comision_promedio + res.costos.vendedor.plus_promedio)}</div>
+                            <div className="text-[10px] text-brand-slate">{formatGs(res.costos.vendedor.comision_promedio)} comisión + {formatGs(res.costos.vendedor.plus_promedio)} plus · {res.costos.vendedor.ventas_promedio} ventas/vendedor</div>
                           </div>
                           <div>
                             <div className="text-[10px] text-brand-slate">Ingreso total promedio (mes)</div>
                             <div className="font-display text-xl text-brand-ink">{formatGs(res.costos.vendedor.ingreso_promedio)}</div>
-                            <div className="text-[10px] text-brand-slate">fijo + comisión · {res.costos.vendedor.pct_comision_sobre_ingreso}% variable · {res.costos.vendedor.ventas_promedio} ventas/vendedor</div>
+                            <div className="text-[10px] text-brand-slate">fijo + comisión + plus · {res.costos.vendedor.pct_variable_sobre_ingreso}% variable</div>
                           </div>
+                        </div>
+                        <div className="mt-3 rounded-md border border-dashed border-brand-border bg-white px-3 py-2 text-[11px] text-brand-graphite">
+                          <b className="text-brand-ink">Referencia · peso de comisión + plus sobre la facturación:</b>{" "}
+                          <span className="font-mono font-bold text-brand-primary">{res.costos.vendedor.peso_sobre_facturacion_pct}%</span> del mes ·{" "}
+                          <span className="font-mono font-bold">{res.costos.vendedor.peso_sobre_neto_6_pct}%</span> de lo que queda a 6 meses ·{" "}
+                          <span className="font-mono font-bold">{res.costos.vendedor.peso_sobre_neto_12_pct}%</span> a 12 meses.
+                          No es un parámetro: la remuneración se carga como monto por venta y este % solo sirve para comparar.
                         </div>
                       </div>
                     )}
@@ -576,7 +584,7 @@ export default function SimuladorFacturacionPage() {
                     <p><b>Bono efectividad (1891)</b>: por venta entregada (activación cuota 1) según la efectividad de entregas; escala por tramos (bajo el mínimo, 0). Se descuenta en las líneas penalizadas.</p>
                     <p><b>Cuota 2</b>: al mes +3, líneas activas al día 90 (zafra M3); legajo incompleto cobra el 50%; legajo no presentado descuenta la cuota 1.</p>
                     <p><b>Residual</b>: {p.residual_pct}% del abono acreditado ({p.pct_abono_acreditado}% del abono del plan) por línea activa, durante {p.residual_meses} liquidaciones.</p>
-                    <p><b>Costos</b>: vendedores = ventas ÷ ventas por vendedor; 1 supervisor cada {p.costos.supervisor_cada_vendedores} vendedores; 1 backoffice cada {p.costos.backoffice_cada_ventas} ventas; operador {formatGs(p.costos.salario_hora)}/h × {p.costos.horas_dia} h × {p.costos.dias_mes} días; comisión {p.costos.comision_vendedores_pct}% de las comisiones facturadas; IPS {p.costos.ips_pct}% sobre todo el RRHH y aguinaldo = RRHH ÷ 12 por mes (sin IPS); logística {formatGs(p.costos.logistica_central)} Central / {formatGs(p.costos.logistica_interior)} Interior ({p.costos.logistica_interior_pct}% Interior) + premios fijos; {formatGs(p.costos.operativo_por_venta)} operativos por venta. Margen = facturación que queda − costo de la estructura del mes.</p>
+                    <p><b>Costos</b>: vendedores = ventas ÷ ventas por vendedor; 1 supervisor cada {p.costos.supervisor_cada_vendedores} vendedores; 1 backoffice cada {p.costos.backoffice_cada_ventas} ventas; operador {formatGs(p.costos.salario_hora)}/h × {p.costos.horas_dia} h × {p.costos.dias_mes} días; comisión al vendedor {formatGs(p.costos.comision_por_venta)} por venta (con IPS y aguinaldo) + plus {formatGs(p.costos.plus_por_venta)} por venta (sin cargas); IPS {p.costos.ips_pct}% sobre todo el RRHH y aguinaldo = RRHH ÷ 12 por mes (sin IPS); logística {formatGs(p.costos.logistica_central)} Central / {formatGs(p.costos.logistica_interior)} Interior ({p.costos.logistica_interior_pct}% Interior) + premios fijos; {formatGs(p.costos.operativo_por_venta)} operativos por venta. Margen = facturación que queda − costo de la estructura del mes.</p>
                     <p><b>Chargeback</b>: las líneas que caen dentro de los {p.chargeback_meses} meses (según la zafra) devuelven cuota 1{p.clawback_incluye_residual ? " + un residual" : ""}, el plus de portabilidad y el bono efectividad, neto del recupero por reconexión.</p>
                   </div>
                 </section>
