@@ -575,7 +575,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                 for t, v in enumerate(ventas)]
 
     meses: list[dict] = []
-    acumulado = 0.0
+    acumulado = 0
     for t in range(h):
         c = cohortes[t]
         fila: dict[str, Any] = {
@@ -597,6 +597,11 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                 continue
             for k in _FLUJOS:
                 fila[k] += cohortes[m]["meses"][edad][k]
+        # Redondeo aditivo: cada flujo se redondea y todo lo demás se deriva de los redondeados,
+        # así facturación + ajustes = ingreso neto, − costos = resultado, y el acumulado suma exacto.
+        for k in _FLUJOS:
+            fila[k] = round(fila[k])
+        fila["facturacion_bruta"] = round(fila["facturacion_bruta"])
         fila["ajustes"] = sum(fila[k] for k in _FLUJOS)
         fila["ingreso_neto"] = fila["facturacion_bruta"] + fila["ajustes"]
         # Costos del mes: estructura fija del mes 1 + variables de las ventas del mes.
@@ -605,15 +610,14 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                                        base_comision=c["costos"]["vendedor"]["base_comision"])
         fila["costos"] = costos_t
         fila["costo_total"] = costos_t["total"]
-        fila["resultado"] = round(fila["ingreso_neto"] - costos_t["total"])
+        fila["resultado"] = fila["ingreso_neto"] - costos_t["total"]
         fila["margen_pct"] = round(fila["resultado"] / fila["ingreso_neto"] * 100, 1) if fila["ingreso_neto"] else 0.0
         acumulado += fila["resultado"]
-        fila["acumulado"] = round(acumulado)
+        fila["acumulado"] = acumulado
+        fila["acumulado_anterior"] = acumulado - fila["resultado"]
         fila["ventas_por_vendedor"] = round(ventas[t] / headcount["vendedores"], 1) if headcount["vendedores"] else 0
         # Líneas activas: después de los 12 meses la cohorte se mantiene en su último nivel de zafra.
         fila["lineas_activas"] = round(sum(cohortes[m]["meses"][min(t - m, 12)]["lineas_activas"] for m in range(t + 1)))
-        for k in ("facturacion_bruta", "ajustes", "ingreso_neto", *_FLUJOS):
-            fila[k] = round(fila[k])
         meses.append(fila)
 
     # Cola después del horizonte: flujos de las cohortes que caen fuera de él.
@@ -624,6 +628,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                 continue
             for k in _FLUJOS:
                 cola[k] += cohortes[m]["meses"][edad][k]
+    cola = {k: round(v) for k, v in cola.items()}
     cola_total = sum(cola.values())
     cola_cobros = sum(v for v in cola.values() if v > 0)
     cola_devoluciones = sum(v for v in cola.values() if v < 0)
@@ -649,8 +654,8 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                                   + float(base["costos"]["logistica_premios"])),
         "horizonte": h,
         "cola_post_12": {
-            **{k: round(v) for k, v in cola.items()}, "total": round(cola_total),
-            "cobros": round(cola_cobros), "devoluciones": round(cola_devoluciones),
+            **cola, "total": cola_total,
+            "cobros": cola_cobros, "devoluciones": cola_devoluciones,
             # Última cohorte (mes h): sus caídas terminan h + chargeback; su residual, h + residual_meses.
             "ultimo_mes_caidas": h + chb, "ultimo_mes_residual": h + res_meses,
         },

@@ -277,3 +277,27 @@ def test_bono_adicional_y_nombres_de_meses():
     assert a["nombres_meses"][:3] == ["Oct 2026", "Nov 2026", "Mes 3"]
     assert a["meses"][1]["nombre"] == "Nov 2026"
     assert "bono adicional" in a["conclusion"]
+
+
+def test_anual_es_aditiva_al_guarani():
+    """Todos los puentes cierran exacto: bruta + ajustes = neto; neto − costos = resultado;
+    acumulado suma exacto; cola = cobros + devoluciones; final = resultado + cola."""
+    from app.services.analyzers.facturacion_simulador import _FLUJOS, simular_anual
+    r = simular_anual({"objetivo_co": 1750}, [1900, 1500, 1900, 2100, 1900, 1700] * 3, 18, {"6": {"porta_pct": 20}}, [0, 0, 15_000_000])
+    acum = 0
+    for m in r["meses"]:
+        assert sum(m[k] for k in _FLUJOS) == m["ajustes"]
+        assert m["facturacion_bruta"] + m["ajustes"] == m["ingreso_neto"]
+        assert m["ingreso_neto"] - m["costo_total"] == m["resultado"]
+        assert m["acumulado_anterior"] == acum
+        acum += m["resultado"]
+        assert m["acumulado"] == acum
+        assert all(float(m[k]).is_integer() for k in ("facturacion_bruta", "ajustes", "ingreso_neto", "resultado", "acumulado", *_FLUJOS))
+    a = r["anual"]
+    assert a["resultado"] == acum
+    assert a["facturacion_bruta"] + a["ajustes"] == a["ingreso_neto"]
+    assert a["ingreso_neto"] - a["costos"] == a["resultado"]
+    assert a["cobros_periodo"] + a["devoluciones_periodo"] == a["ajustes"]
+    c = a["cola_post_12"]
+    assert c["cobros"] + c["devoluciones"] == c["total"] == sum(c[k] for k in _FLUJOS)
+    assert a["resultado"] + c["total"] == a["resultado_con_cola"] == a["veredicto"]["resultado_final"]
