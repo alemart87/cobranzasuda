@@ -9,6 +9,7 @@ import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { Bloque } from "@/components/facturacion/Bloque";
 import { HistoriaNegocio } from "@/components/facturacion/HistoriaNegocio";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
+import { ObservacionConceptosEERR } from "@/components/facturacion/ConceptosLiquidacion";
 import { Afectados, MesAfectadoEditor, ResumenAfectados, describirVariaciones } from "@/components/facturacion/MesAfectado";
 import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
 import { Nota, NotasSimulacion } from "@/components/facturacion/NotasSimulacion";
@@ -585,6 +586,7 @@ export default function SimuladorAnualPage() {
                     variables siguen a las ventas. La columna "Total" es el balance del período; la cola posterior (residual por
                     cobrar y devoluciones pendientes de las últimas cohortes) se informa aparte en los KPIs.
                   </Lectura>
+                  <ObservacionConceptosEERR />
                 </div>
               </section>
 
