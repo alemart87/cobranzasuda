@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { Bloque } from "@/components/facturacion/Bloque";
+import { HistoriaNegocio } from "@/components/facturacion/HistoriaNegocio";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
 import { Afectados, MesAfectadoEditor, ResumenAfectados, describirVariaciones } from "@/components/facturacion/MesAfectado";
 import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
@@ -359,6 +360,10 @@ export default function SimuladorAnualPage() {
                   <Marcable key={key} marcado={esMarcado(key)} onToggle={() => toggleMarca(key, label)}>{card}</Marcable>
                 ))}
               </div>
+              </Bloque>
+
+              <Bloque titulo="Historia del negocio · línea de tiempo animada" abierto accent="primary" hint="dale play: el gráfico se construye mes a mes con sus hitos y alertas">
+                <HistoriaNegocio res={res} p={p} nombre={nombreMes} />
               </Bloque>
 
               {a.veredicto && (() => {
