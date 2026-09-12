@@ -545,8 +545,8 @@ export default function SimuladorAnualPage() {
                     ] as Array<[string, string | null, string | null, string]>).map(([label, key, fmt, tipo]) => {
                       const val = (m: any): number => {
                         if (!key) return 0;
-                        if (key === "_fijo") return m.costo_total - m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100) * (p.costos.aguinaldo ? 13 / 12 : 1) - m.costos.logistica_entregas - m.costos.operativos;
-                        if (key === "_comisiones") return m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100) * (p.costos.aguinaldo ? 13 / 12 : 1);
+                        if (key === "_fijo") return m.costo_total - m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0)) - m.costos.logistica_entregas - m.costos.operativos;
+                        if (key === "_comisiones") return m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0));
                         if (key === "_logistica") return m.costos.logistica_entregas;
                         if (key === "_operativos") return m.costos.operativos;
                         return Number(m[key] ?? 0);

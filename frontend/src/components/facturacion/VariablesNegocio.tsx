@@ -176,7 +176,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="IPS" hint="sobre todos los costos de RRHH" value={p.costos.ips_pct} onChange={(v) => setC("ips_pct", v)} step={0.5} suffix="%" />
               <label className="flex items-center gap-2 text-sm text-brand-ink">
                 <input type="checkbox" checked={!!p.costos.aguinaldo} onChange={(e) => setC("aguinaldo", e.target.checked)} className="accent-brand-primary" />
-                Previsión de aguinaldo: (RRHH + IPS) ÷ 12
+                Previsión de aguinaldo: RRHH ÷ 12 por mes (sin IPS)
               </label>
               <div className="border-t border-brand-border pt-2 text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Logística y operativos</div>
               <Campo label="Entrega en Central" hint="Gs por venta" value={p.costos.logistica_central} onChange={(v) => setC("logistica_central", v)} step={1000} />
