@@ -1,6 +1,7 @@
 "use client";
 
 import { formatGs } from "@/lib/format";
+import { ObservacionRecupero } from "./ConceptosLiquidacion";
 import { NumeroInput } from "./NumeroInput";
 
 function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hint?: string; abierto?: boolean; children: React.ReactNode }) {
@@ -135,7 +136,8 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
             <Grupo titulo="Chargeback y recuperos">
               <Campo label="Meses de chargeback" hint="ventana de devolución (180 días)" value={p.chargeback_meses} onChange={(v) => set("chargeback_meses", v)} />
               <Campo label="Caídas penalizables" hint="% de caídas dentro del chargeback que Claro descuenta" value={p.pct_caidas_penalizables} onChange={(v) => set("pct_caidas_penalizables", v)} step={5} suffix="%" />
-              <Campo label="Recupero por reconexión" hint="% de los descuentos que se recupera" value={p.recupero_pct} onChange={(v) => set("recupero_pct", v)} step={5} suffix="%" />
+              <Campo label="Recupero por reconexión" hint="% de los descuentos que Claro devuelve después (real: 10,5%)" value={p.recupero_pct} onChange={(v) => set("recupero_pct", v)} step={0.5} suffix="%" />
+              <ObservacionRecupero />
               <label className="flex items-center gap-2 text-sm text-brand-ink">
                 <input type="checkbox" checked={!!p.clawback_incluye_residual} onChange={(e) => set("clawback_incluye_residual", e.target.checked)} className="accent-brand-primary" />
                 La suspensión penalizable descuenta cuota 1 + un residual (214.431)

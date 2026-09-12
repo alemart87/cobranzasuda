@@ -9,6 +9,7 @@ import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { Lectura } from "@/components/televentas/Lectura";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
+import { ObservacionConceptosEERR } from "@/components/facturacion/ConceptosLiquidacion";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
@@ -303,6 +304,7 @@ export default function SimuladorFacturacionPage() {
                           resultado. En el mes 0 casi siempre da positivo porque todavía no se devolvió nada; la columna de 6 meses ya descontó las
                           caídas del chargeback y es el margen real del negocio. La de 12 suma el residual completo.
                         </Lectura>
+                        <ObservacionConceptosEERR />
                       </div>
                     </section>
                   );
