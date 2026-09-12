@@ -88,6 +88,14 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
   const cargarLista = () => apiFetch<any>("/api/v1/facturacion/simulaciones").then((d) => setLista(d.simulaciones ?? [])).catch(() => setLista([]));
   useEffect(() => { cargarLista(); }, []);
 
+  // En el celular la barra ocupa toda la pantalla: bloquear el scroll de fondo mientras está abierta.
+  useEffect(() => {
+    if (!abierta || !window.matchMedia("(max-width: 639px)").matches) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, [abierta]);
+
   const aviso = (msg: string) => { setOk(msg); setTimeout(() => setOk(null), 2500); };
   const run = async (fn: () => Promise<any>, exito?: string) => {
     setError(null);
@@ -190,15 +198,26 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
   // Pestaña para reabrir la barra cuando está oculta.
   if (!abierta) {
     return (
-      <button onClick={() => setAbierta(true)} title="Mostrar el registro del trabajo"
-        className="no-print fixed right-0 top-1/2 -translate-y-1/2 z-50 rounded-l-md bg-brand-ink text-white shadow-lg px-2 py-4 [writing-mode:vertical-rl] rotate-180 text-[11px] font-bold uppercase tracking-wider2 hover:bg-brand-graphite">
-        Registro del trabajo{actual ? ` · ${actual.nombre}` : ""}{sinGuardar ? " · sin guardar" : ""}
-      </button>
+      <>
+        <button onClick={() => setAbierta(true)} title="Mostrar el registro del trabajo"
+          className="no-print hidden sm:block fixed right-0 top-1/2 -translate-y-1/2 z-50 rounded-l-md bg-brand-ink text-white shadow-lg px-2 py-4 [writing-mode:vertical-rl] rotate-180 text-[11px] font-bold uppercase tracking-wider2 hover:bg-brand-graphite">
+          Registro del trabajo{actual ? ` · ${actual.nombre}` : ""}{sinGuardar ? " · sin guardar" : ""}
+        </button>
+        <button onClick={() => setAbierta(true)} title="Registro del trabajo"
+          className="no-print sm:hidden fixed bottom-4 right-4 z-50 rounded-full bg-brand-ink text-white shadow-xl pl-3 pr-4 py-3 text-xs font-bold flex items-center gap-2">
+          <span className="text-base leading-none">📋</span> Registro
+          {sinGuardar && <span className="w-2.5 h-2.5 rounded-full bg-brand-orange" title="cambios sin guardar" />}
+          {(marcas.length + postits.length + notas.length) > 0 && <span className="px-1.5 py-0.5 rounded-full bg-white/20 text-[10px]">{marcas.length + postits.length + notas.length}</span>}
+        </button>
+      </>
     );
   }
 
   return (
-    <aside className="no-print fixed right-0 top-0 h-screen z-50 bg-white border-l border-brand-border shadow-2xl flex flex-col" style={{ width: ANCHO_BARRA }}>
+    <>
+      <style>{`@media (max-width: 639px) { .rs-aside input, .rs-aside textarea, .rs-aside select { font-size: 16px; } }`}</style>
+      <div className="no-print sm:hidden fixed inset-0 z-40 bg-brand-ink/40" onClick={() => setAbierta(false)} />
+      <aside className="rs-aside no-print fixed inset-y-0 right-0 z-50 w-full sm:w-[372px] bg-white sm:border-l border-brand-border shadow-2xl flex flex-col" style={{ height: "100dvh" }}>
       {/* ===== Cabecera ===== */}
       <div className="px-4 py-3 bg-brand-ink text-white">
         <div className="flex items-start justify-between gap-2">
@@ -216,7 +235,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
           <div className="shrink-0 flex items-center gap-1">
             <button onClick={() => setVerGuardadas(true)} title="Ver, abrir o eliminar simulaciones guardadas"
               className="px-2 py-1 rounded text-[10px] font-bold bg-white/15 hover:bg-white/25 whitespace-nowrap">Guardadas · {lista.length}</button>
-            <button onClick={() => setAbierta(false)} title="Ocultar barra" className="text-white/70 hover:text-white text-lg leading-none px-1">›</button>
+            <button onClick={() => setAbierta(false)} title="Ocultar barra" className="w-9 h-9 -mr-2 flex items-center justify-center rounded-md text-white/80 hover:text-white hover:bg-white/10 text-2xl leading-none">›</button>
           </div>
         </div>
         {sinGuardar && <div className="mt-2 text-[10px] font-bold px-2 py-1 rounded bg-brand-orange text-white">Cambios sin guardar (variables, ventas, nombres, bonos o meses afectados)</div>}
@@ -316,15 +335,15 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
 
       {/* ===== Diálogo: simulaciones guardadas ===== */}
       {verGuardadas && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-brand-ink/40 p-4" onClick={() => setVerGuardadas(false)}>
-          <div className="w-full max-w-4xl max-h-[85vh] flex flex-col rounded-lg bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[90] flex items-end sm:items-center justify-center bg-brand-ink/40 sm:p-4" onClick={() => setVerGuardadas(false)}>
+          <div className="w-full max-w-4xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col rounded-t-xl sm:rounded-lg bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 pt-4 pb-3 border-b border-brand-border flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate">Registro del trabajo</div>
                 <h2 className="font-display text-xl text-brand-ink uppercase">Simulaciones guardadas · {lista.length}</h2>
               </div>
-              <div className="flex items-center gap-2">
-                <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar por nombre o comentario…" autoFocus className="input !py-1.5 text-sm w-64" />
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <input value={filtro} onChange={(e) => setFiltro(e.target.value)} placeholder="Buscar por nombre o comentario…" className="input !py-1.5 text-base sm:text-sm flex-1 sm:w-64" />
                 <button onClick={() => setVerGuardadas(false)} className="text-brand-slate hover:text-brand-ink text-xl leading-none px-1">✕</button>
               </div>
             </div>
@@ -332,7 +351,31 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
               {lista.length === 0 ? (
                 <p className="p-6 text-sm text-brand-slate">Todavía no hay simulaciones guardadas. Seteá el mes 1, cargá las ventas y usá "Guardar simulación".</p>
               ) : (
-                <table className="w-full text-xs">
+                <>
+                <ul className="md:hidden divide-y divide-brand-border">
+                  {listaFiltrada.map((s) => {
+                    const r = s.resumen || {};
+                    const fin = r.resultado_con_cola ?? r.resultado;
+                    const activa = actual?.id === s.id;
+                    return (
+                      <li key={s.id} className={`px-4 py-3 ${activa ? "bg-amber-50" : ""}`}>
+                        <div className="text-[14px] font-semibold text-brand-ink leading-tight">{s.nombre}{activa && <span className="ml-2 text-[9px] font-bold uppercase text-amber-700">abierta</span>}</div>
+                        {s.comentario && <div className="text-[12px] text-brand-slate line-clamp-2 mt-0.5">{s.comentario}</div>}
+                        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-brand-slate">
+                          <span>{s.horizonte} m</span>
+                          {r.ventas != null && <span>{formatInt(r.ventas)} ventas</span>}
+                          {fin != null && <span className={`font-mono font-bold ${fin < 0 ? "text-brand-primary" : "text-emerald-700"}`}>{formatGs(fin)}</span>}
+                          <span>{fecha(s.created_at)}{s.created_by_nombre ? ` · ${s.created_by_nombre}` : ""}</span>
+                        </div>
+                        <div className="mt-2 flex gap-2">
+                          {!activa && <button onClick={() => abrir(s.id)} className="btn-primary !py-1.5 !px-4 text-sm">Abrir</button>}
+                          <button onClick={() => eliminar(s)} className="px-3 py-1.5 text-sm font-semibold text-brand-slate hover:text-brand-primary">Eliminar</button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <table className="hidden md:table w-full text-xs">
                   <thead className="bg-brand-bg text-[9px] uppercase tracking-wider2 text-brand-slate sticky top-0">
                     <tr>
                       <th className="px-4 py-2 text-left">Nombre</th>
@@ -369,11 +412,13 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
                     })}
                   </tbody>
                 </table>
+                </>
               )}
             </div>
           </div>
         </div>
       )}
     </aside>
+    </>
   );
 }
