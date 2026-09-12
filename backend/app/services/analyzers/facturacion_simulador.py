@@ -94,7 +94,7 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
         "controller_salario": 3600000, "controller_premio": 750000,
         "subgerencia_salario": 0,           # SubGerencia Comercial (en análisis): salario mensual, 0 = no incorporada
         "ips_pct": 16.5,                    # sobre todos los costos de RRHH
-        "aguinaldo": True,                  # previsión: (RRHH + IPS) ÷ 12
+        "aguinaldo": True,                  # previsión mensual: RRHH ÷ 12 (sin IPS)
         "logistica_central": 55000, "logistica_interior": 80000, "logistica_interior_pct": 60.0,
         "logistica_premios": 20000000,      # premios a logística (fijo mensual)
         "operativo_por_venta": 12500,       # costos operativos adicionales por venta
@@ -412,7 +412,8 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
     subgerencia = 1 if rrhh["subgerencia"] > 0 else 0
     rrhh_base = sum(rrhh.values())
     ips = rrhh_base * float(c["ips_pct"]) / 100.0
-    aguinaldo = (rrhh_base + ips) / 12.0 if c.get("aguinaldo", True) else 0.0
+    # Cargas sociales: IPS sobre todo el costo de RRHH; aguinaldo = 1/12 del RRHH por mes (sin IPS).
+    aguinaldo = rrhh_base / 12.0 if c.get("aguinaldo", True) else 0.0
     interior = min(max(float(c["logistica_interior_pct"]), 0), 100) / 100.0
     logistica_entregas = act * (interior * float(c["logistica_interior"]) + (1 - interior) * float(c["logistica_central"]))
     logistica_premios = float(c["logistica_premios"])
@@ -482,7 +483,7 @@ def _ahorro_por_venta_vendedor(p: dict, act: float) -> float:
     c = p["costos"]
     vpv = float(c["ventas_por_vendedor"] or 1)
     sal = float(c["salario_hora"]) * float(c["horas_dia"]) * float(c["dias_mes"])
-    carga = (1 + float(c["ips_pct"]) / 100.0) * (13 / 12 if c.get("aguinaldo", True) else 1)
+    carga = 1 + float(c["ips_pct"]) / 100.0 + (1 / 12 if c.get("aguinaldo", True) else 0)
     return max(0.0, (math.ceil(act / vpv) - math.ceil(act / (vpv + 1))) * sal * carga)
 
 
@@ -650,7 +651,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "bonos_adicionales": round(tot("bono_adicional")),
         "devolucion_bonos": round(tot("clawback_bonos") + tot("recalculo_productividad")),
         "costos_fijos_mes": round(sum(m1["costos"]["rrhh"][k] for k in ("operadores_salario", "supervisores", "coordinadores", "backoffice", "controllers", "subgerencia"))
-                                  * (1 + float(base["costos"]["ips_pct"]) / 100) * (13 / 12 if base["costos"].get("aguinaldo", True) else 1)
+                                  * (1 + float(base["costos"]["ips_pct"]) / 100 + (1 / 12 if base["costos"].get("aguinaldo", True) else 0))
                                   + float(base["costos"]["logistica_premios"])),
         "horizonte": h,
         "cola_post_12": {

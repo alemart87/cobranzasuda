@@ -69,7 +69,7 @@ def test_costos_estructura_y_margen():
     assert c["rrhh"]["supervisores"] == 7 * (4180000 + 1500000)
     assert c["rrhh"]["controllers"] == 2 * (3600000 + 750000)
     assert c["ips"] == round(c["rrhh_base"] * 0.165)
-    assert c["aguinaldo"] == round((c["rrhh_base"] + c["rrhh_base"] * 0.165) / 12)
+    assert c["aguinaldo"] == round(c["rrhh_base"] / 12)          # aguinaldo sobre RRHH, sin IPS
     assert c["logistica_entregas"] == round(1900 * (0.6 * 80000 + 0.4 * 55000))
     assert c["operativos"] == 1900 * 12500
     assert c["total"] == c["rrhh_base"] + c["ips"] + c["aguinaldo"] + c["logistica_entregas"] + c["logistica_premios"] + c["operativos"]
@@ -216,7 +216,7 @@ def test_subgerencia_comercial_en_analisis():
     assert c["rrhh"]["subgerencia"] == 8_000_000 and c["headcount"]["subgerencia"] == 1
     assert c["headcount"]["total"] == base["costos"]["headcount"]["total"] + 1
     ips = 16.5 / 100
-    esperado = 8_000_000 * (1 + ips) * (13 / 12)          # salario + IPS + aguinaldo sobre (salario + IPS)
+    esperado = 8_000_000 * (1 + ips + 1 / 12)             # salario + IPS + aguinaldo (salario ÷ 12)
     assert abs((c["total"] - base["costos"]["total"]) - esperado) <= 3
     assert con["margen"]["meses6"] == base["margen"]["meses6"] - (c["total"] - base["costos"]["total"])
     # en la anual entra en el costo fijo mensual
