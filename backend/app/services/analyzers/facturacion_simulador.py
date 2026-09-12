@@ -76,7 +76,10 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "zafra_pct": list(ZAFRA_DEFAULT),
     "chargeback_meses": 6,
     "pct_caidas_penalizables": 100.0,   # caídas dentro del chargeback que Claro descuenta
-    "recupero_pct": 25.0,               # parte de los descuentos que se recupera por reconexión
+    # Parte de los descuentos del chargeback que Claro devuelve después (reconexiones, reverso del
+    # descuento de portabilidad, recupero de incentivos, reverso de penalización por deuda).
+    # Calibrado con 5 liquidaciones reales: 21,0% · 14,4% · 6,8% · 10,8% · 3,0% → ponderado 10,5%.
+    "recupero_pct": 10.5,
     "clawback_incluye_residual": True,  # suspensión penalizable = cuota 1 + 1 residual (214.431)
     # ---- COSTOS de la estructura (el indicador principal: ventas por vendedor) ----
     "costos": {
