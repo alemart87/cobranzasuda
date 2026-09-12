@@ -96,8 +96,8 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
   const grupos = Array.from(new Set(CAMPOS_AFECTABLES.map((c) => c.grupo)));
 
   return (
-    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-brand-ink/40 p-4 no-print" onClick={onCerrar}>
-      <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-lg bg-white shadow-2xl border-t-8 border-brand-purple" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-brand-ink/40 sm:p-4 no-print" onClick={onCerrar}>
+      <div className="w-full max-w-3xl max-h-[94dvh] sm:max-h-[92vh] overflow-y-auto rounded-t-xl sm:rounded-lg bg-white shadow-2xl border-t-8 border-brand-purple" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 pt-5 pb-3 flex flex-wrap items-start justify-between gap-3 border-b border-brand-border">
           <div>
             <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-purple">Mes afectado</div>

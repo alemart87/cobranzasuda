@@ -342,7 +342,7 @@ export function HistoriaNegocio({ res, p, nombre }: { res: any; p: any; nombre: 
             </div>
 
             {/* ===== Feed de hitos ===== */}
-            <div className="rounded-lg border border-brand-border bg-white flex flex-col max-h-[640px] shadow-sm">
+            <div className="rounded-lg border border-brand-border bg-white flex flex-col max-h-[380px] lg:max-h-[640px] shadow-sm">
               <div className="px-3 py-2 border-b border-brand-border flex items-center justify-between bg-brand-bg-soft rounded-t-lg">
                 <span className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate">Hitos y alertas</span>
                 <span className="text-[11px] font-mono text-brand-slate">{visibles.length} / {hitos.length}</span>
