@@ -6,6 +6,7 @@ import { Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceLine, R
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
+import { Bloque } from "@/components/facturacion/Bloque";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
 import { Afectados, MesAfectadoEditor, ResumenAfectados, describirVariaciones } from "@/components/facturacion/MesAfectado";
 import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
@@ -289,8 +290,6 @@ export default function SimuladorAnualPage() {
             </div>
           </section>
 
-          <ResumenAfectados afectados={afectados} base={p} ventas={ventas} nombres={nombres.map((_, i) => nombreMes(i))} onEditar={(m) => setEditandoMes(m)} onQuitar={quitarAfectado} />
-
           <NotasSimulacion notas={notas} setNotas={setNotas} nombres={ventas.map((_, i) => nombreMes(i))} guardaSola={!!actual} soloImpresion />
           {editandoMes != null && (
             <MesAfectadoEditor mes={editandoMes} nombre={nombreMes(editandoMes - 1)} nombres={nombres.map((_, i) => nombreMes(i))} horizonte={horizonte} base={p} ventas={ventas[editandoMes - 1] ?? 0}
@@ -335,12 +334,18 @@ export default function SimuladorAnualPage() {
             </label>
           </div>
 
+          <Bloque titulo="Detalle de meses y variables" accent="purple" abierto={Object.keys(afectados).length > 0}
+            hint={Object.keys(afectados).length ? `${Object.keys(afectados).length} mes(es) con variaciones propias` : "ningún mes con variaciones"}>
+            <ResumenAfectados afectados={afectados} base={p} ventas={ventas} nombres={nombres.map((_, i) => nombreMes(i))} onEditar={(m) => setEditandoMes(m)} onQuitar={quitarAfectado} sinCard />
+          </Bloque>
+
           {res && a && (
             <>
-              <section className="card p-5 border-l-4 border-brand-ink bg-white">
-                <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-2">Conclusión del período ({horizonte} meses)</h2>
+              <Bloque titulo="Datos generales operativos y financieros" abierto hint={`${horizonte} meses · ${formatInt(a.ventas)} ventas`}>
+              <div className="rounded-md border-l-4 border-brand-ink bg-brand-bg-soft px-4 py-3 mb-4">
+                <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-1">Conclusión del período ({horizonte} meses)</h3>
                 <p className="text-[15px] text-brand-ink leading-relaxed font-medium">{res.conclusion}</p>
-              </section>
+              </div>
 
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
                 {([
@@ -354,6 +359,7 @@ export default function SimuladorAnualPage() {
                   <Marcable key={key} marcado={esMarcado(key)} onToggle={() => toggleMarca(key, label)}>{card}</Marcable>
                 ))}
               </div>
+              </Bloque>
 
               {a.veredicto && (() => {
                 const cola = a.cola_post_12;
@@ -372,8 +378,9 @@ export default function SimuladorAnualPage() {
                 ];
                 return (
                   <>
-                    <ExplicacionCuadros
-                      intro={`Los seis cuadros de arriba, uno por uno, con el valor de esta simulación de ${horizonte} meses.`}
+                    <Bloque titulo="Qué significa cada cuadro" hint="uno por uno, con el valor de esta simulación">
+                    <ExplicacionCuadros sinCard
+                      intro={`Los seis cuadros de "Datos generales", uno por uno, con el valor de esta simulación de ${horizonte} meses.`}
                       items={[
                         { label: `Ventas en ${horizonte} meses`, valor: formatInt(a.ventas), accent: "neutral",
                           queEs: `La suma de las ventas cargadas mes a mes (${formatInt(Math.round(a.ventas / horizonte))} por mes en promedio).`,
@@ -395,7 +402,10 @@ export default function SimuladorAnualPage() {
                           comoLeerlo: "Es la respuesta a “ganamos o perdemos”: cuando ya no queda nada por caer ni por cobrar, este es el número." },
                       ]}
                     />
-                    <VeredictoCierre
+                    </Bloque>
+                    <Bloque titulo={`¿Ganamos o perdemos al final, cuando cayeron todas las caídas de los ${horizonte} meses?`} accent={gana ? "ink" : "primary"}
+                      hint={<span className={`font-bold ${gana ? "text-emerald-700" : "text-brand-primary"}`}>{gana ? "Ganamos" : "Perdemos"} {formatGs(Math.abs(v.resultado_final))}</span>}>
+                    <VeredictoCierre sinCard
                       gana={gana}
                       monto={v.resultado_final}
                       titulo={`¿Ganamos o perdemos al final, cuando cayeron todas las caídas de los ${horizonte} meses?`}
@@ -413,10 +423,12 @@ export default function SimuladorAnualPage() {
                       ]}
                       notas={notas}
                     />
+                    </Bloque>
                   </>
                 );
               })()}
 
+              <Bloque titulo="Gráficos del período" abierto envuelto={false} hint="resultado mes a mes · ventas vs estructura">
               <div className="grid xl:grid-cols-2 gap-6 print:block">
                 <section className="card p-5 print:mb-5">
                   <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Resultado mes a mes</h2>
@@ -472,6 +484,9 @@ export default function SimuladorAnualPage() {
                 </section>
               </div>
 
+              </Bloque>
+
+              <Bloque titulo={`Estado de resultados a ${horizonte} meses (EERR)`} abierto envuelto={false} hint="liquidación mes a mes · estructura fija del mes 1">
               {/* ===== EERR anual ===== */}
               <section className="card overflow-x-auto">
                 <div className="px-4 pt-4">
@@ -568,6 +583,9 @@ export default function SimuladorAnualPage() {
                 </div>
               </section>
 
+              </Bloque>
+
+              <Bloque titulo="Bonos mes a mes" envuelto={false} hint={`bonos del período ${formatGs(a.bonos)}`}>
               {/* Bonos por mes */}
               <section className="card overflow-x-auto">
                 <div className="px-4 pt-4">
@@ -602,6 +620,7 @@ export default function SimuladorAnualPage() {
                   </tbody>
                 </table>
               </section>
+              </Bloque>
             </>
           )}
         </div>

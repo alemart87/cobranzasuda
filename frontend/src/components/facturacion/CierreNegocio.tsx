@@ -22,10 +22,11 @@ const BORDE: Record<NonNullable<CuadroExplicado["accent"]>, string> = {
   ink: "border-brand-ink",
 };
 
-export function ExplicacionCuadros({ titulo, intro, items }: { titulo?: string; intro?: string; items: CuadroExplicado[] }) {
+export function ExplicacionCuadros({ titulo, intro, items, sinCard }: { titulo?: string; intro?: string; items: CuadroExplicado[]; sinCard?: boolean }) {
+  const Wrapper = sinCard ? "div" : "section";
   return (
-    <section className="card p-5">
-      <h2 className="font-display text-lg text-brand-ink uppercase mb-1">{titulo ?? "Qué significa cada cuadro"}</h2>
+    <Wrapper className={sinCard ? "" : "card p-5"}>
+      {!sinCard && <h2 className="font-display text-lg text-brand-ink uppercase mb-1">{titulo ?? "Qué significa cada cuadro"}</h2>}
       {intro && <p className="text-xs text-brand-slate mb-3">{intro}</p>}
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
         {items.map((it) => (
@@ -39,7 +40,7 @@ export function ExplicacionCuadros({ titulo, intro, items }: { titulo?: string; 
           </div>
         ))}
       </div>
-    </section>
+    </Wrapper>
   );
 }
 
@@ -52,19 +53,20 @@ export type PasoPuente = {
 
 /** Veredicto: ¿ganamos o perdemos cuando cayeron todas las caídas? Con el puente
  *  desde lo facturado hasta el resultado final, paso a paso. */
-export function VeredictoCierre({ gana, monto, titulo, respuesta, pasos, notas }: {
+export function VeredictoCierre({ gana, monto, titulo, respuesta, pasos, notas, sinCard }: {
   gana: boolean;
   monto: number;
   titulo: string;
   respuesta: string;
   pasos: PasoPuente[];
   notas: string[];
+  sinCard?: boolean;
 }) {
   return (
-    <section className={`card p-5 border-2 ${gana ? "border-emerald-500 bg-emerald-50/40" : "border-brand-primary bg-brand-primary/5"}`}>
+    <section className={sinCard ? `rounded-md p-4 border-2 ${gana ? "border-emerald-500 bg-emerald-50/40" : "border-brand-primary bg-brand-primary/5"}` : `card p-5 border-2 ${gana ? "border-emerald-500 bg-emerald-50/40" : "border-brand-primary bg-brand-primary/5"}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-[240px] flex-1">
-          <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold">{titulo}</h2>
+          {!sinCard && <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold">{titulo}</h2>}
           <div className={`font-display text-3xl uppercase mt-1 ${gana ? "text-emerald-700" : "text-brand-primary"}`}>
             {gana ? "Ganamos" : "Perdemos"} {formatGs(Math.abs(monto))}
           </div>
