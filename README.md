@@ -243,6 +243,218 @@ cd backend
 
 ---
 
+## 📡 Facturación Televentas Claro — Modelo de liquidación y simuladores
+
+Módulo restringido (superadmin y analistas habilitados; rol `facturacion`). Voicenter vende líneas pospago móvil
+para Claro Paraguay (entidad 300383) y cobra por liquidación mensual. Esta sección documenta **cómo liquida Claro**,
+**cómo lo modelan los simuladores** (mensual y anual) y **con qué datos se calibró** el modelo.
+
+### 1. Cómo liquida Claro
+
+Fuentes: el detalle de liquidación (archivo `.txt` con una fila por línea y concepto) y el *Manual de esquemas y
+conceptos de liquidación* de Claro (canal telemarketing, marzo 2021), cuya lógica de conceptos es la misma que
+aparece en las liquidaciones móviles.
+
+**Reglas generales**
+
+- Las gestiones de un mes se liquidan **al mes siguiente**. La liquidación cierra alrededor del día 15.
+- **Chargeback**: 180 días desde la activación. Dentro de esa ventana Claro descuenta lo que pagó por la línea si la
+  línea cae; fuera de ella ya no descuenta (las filas "fuera de chargeback" existen pero salen en 0).
+- Cada línea tiene su propia historia de conceptos, identificada por `NroCelularGestion` y `Cabecera`.
+
+**Conceptos de la liquidación (nombre exacto), regla y momento**
+
+| Concepto | Regla (manual + lo observado en 7 liquidaciones) | Cuándo |
+|---|---|---|
+| ACTIVACIONES · cuota 1 (*upfront*) | Comisión por instalación: 204.545 (CG15G), 245.455 (CG30G), 272.727 (CG50B / C100X), 436.364 (C200X). | Mes de la venta |
+| ACTIVACIONES · cuota 2 (*diferido*) | 34.091 / 81.818 / 109.091 / 136.364 / 181.818 por plan. Se paga si la línea está activa al día 90 y el legajo está completo; incompleto cobra 50%, no presentado cobra 0. Sale en 0 para las líneas caídas. | ~100 días (mes 3) |
+| ACTIVACION PORTABILIDAD NUMERICA (plus porta) | 218.182 / 245.455 / 327.273 / 409.091 / 545.455 por plan, en las activaciones con portación (90% de las ventas). | Mes de la venta |
+| INCENTIVO PRODUCTIVIDAD (1771) | Por línea en estado A; monto por escala de cumplimiento del objetivo CO: ≥110% 105.000 · ≥105% 100.000 · ≥100% 95.000 · ≥95% 50.000 · ≥90% 40.000 · <90% 0. | Mes de la venta |
+| RECALCULO INCENTIVO PRODUCTIVIDAD (1871) | Descuenta el bono de las líneas que no llegaron activas al día 180 (las suspendidas sin cancelar cuentan como activas). | Mes 6 |
+| INCENTIVO EFECTIVIDAD DISTRIBUCION (1891) | 50.000 / 45.000 / 35.000 por venta según efectividad de entregas (≥85 / ≥82 / ≥80%). Se paga en una parte de las activaciones (87,5%). | Mes de la venta |
+| DESCUENTO INCENTIVOS POR PENALIDAD | Devuelve el bono efectividad de la línea que cae dentro del chargeback. | Con la caída |
+| RESIDUAL | 14,5% del **monto acreditado** (lo que el cliente pagó), durante 12 liquidaciones. Las líneas que no pagan salen con "LINEA INACTIVA" en 0. | Meses 1 a 12 |
+| SUSPENSIONES | "Suspensión penalizable, primera factura impaga": descuenta cuota 1 + un residual (214.431 en CG15G). Las suspensiones estándar salen en 0. | ~60 días |
+| RECONEXIONES | Devuelve lo descontado por suspensiones y cancelaciones si la línea se reconecta dentro del chargeback. | ~130 días |
+| DESCUENTO PORTABILIDAD NUMERICA | Devuelve el plus porta de la línea que cae dentro del chargeback (falta de pago, port out, primera factura impaga). | Con la caída |
+| REVERSO DESCUENTO PORTABILIDAD NUMERICA | Devuelve el descuento anterior si la línea se reconecta. | ~140 días |
+| PENALIZACION POR DEUDA | Presuspensión ≥45 días o cancelación por falta de pago: descuenta cuota 1 (montos parciales, ~158.000 a 247.000). | ~140 días |
+| REVERSO PENALIZACION POR DEUDA | Reverso de la anterior al reconectar. | — |
+| REVERSO ACTIVACION / RECUPERO ACTIVACION | Cancelación temprana (reverso de activación, falta de tráfico): descuenta la cuota 1 completa; el recupero la devuelve. | ~20 días |
+| PENALIZACIÓN POR MIGRACIÓN DE NEGOCIO | La línea migra a otro negocio (prepago): pierde la cuota 1 (~207.000). | ~90 días |
+| LINEA CON DOCUMENTACION FALTANTE | A los 26 días sin legajo: 100% de cuota 1 y 2; incompleto u observado: 50%; rechazado: 100%. | ~40 días |
+| AJUSTE LEGAJO / DEVOLUCION DESCUENTO DOCUMENTACION ACTIVACION | Ajuste del anterior; devolución al día 365 si la línea sigue activa (menos del 1% de la facturación). | Mes 12 |
+| CANCELACIONES / CONCEPTO INICIO DE PRESUSPENSION / CAMBIO DE PLAN | Cancelación estándar (0), inicio de presuspensión (0), diferencia de comisión por cambio de plan (mínimo). | — |
+
+### 2. Las siete liquidaciones analizadas
+
+Detalle completo, fila por fila (255.748 filas), de las liquidaciones 383 a 389. Cada una cubre las gestiones del mes
+indicado y los ajustes de todas las cohortes anteriores. Importes en millones de guaraníes.
+
+| Liq. | Mes de gestión | Filas | Activaciones cuota 1 | Créditos | Débitos | **Neto liquidado** |
+|---|---|---|---|---|---|---|
+| 383 | 2025-11 | 34.814 | 1.992 | 1.366,5 M | -396,0 M | **970,4 M** |
+| 384 | 2025-12 | 34.033 | 1.764 | 1.243,5 M | -419,7 M | **823,8 M** |
+| 385 | 2026-01 | 36.608 | 1.918 | 1.323,0 M | -540,5 M | **782,5 M** |
+| 386 | 2026-02 | 36.313 | 1.825 | 1.207,8 M | -435,6 M | **772,2 M** |
+| 387 | 2026-03 | 37.681 | 1.928 | 1.391,2 M | -584,3 M | **806,9 M** |
+| 388 | 2026-04 | 37.489 | 1.913 | 1.450,1 M | -545,7 M | **904,4 M** |
+| 389 | 2026-05 | 38.810 | 1.832 | 1.329,2 M | -728,6 M | **600,6 M** |
+| **Total** | 7 meses | 255.748 | 13.172 | 9.311,3 M | -3.650,4 M | **5.660,8 M** |
+
+Por concepto (millones de Gs; "Recuperos" = reconexiones + reversos de descuentos + recupero de incentivos y de
+activación + devolución de documentación):
+
+| Liq. | Cuota 1 + 2 | Plus porta | Bono prod. | Bono efect. | Residual | Desc. porta | Suspensiones | Recálculo bono | Desc. incent. | Deuda | Legajos | Reverso act. | Migración | Recuperos |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 383 | 496,2 | 394,9 | 188,3 | 82,1 | 134,0 | -170,7 | -90,3 | 0,0 | -35,6 | -33,2 | -41,9 | -8,8 | -14,0 | 70,9 |
+| 384 | 431,5 | 375,3 | 166,8 | 76,5 | 138,7 | -180,1 | -115,6 | 0,0 | -40,1 | -33,8 | -18,8 | -13,9 | -15,5 | 54,7 |
+| 385 | 486,6 | 388,9 | 210,3 | 82,8 | 140,3 | -222,4 | -121,2 | -55,5 | -39,1 | -36,5 | -19,3 | -27,8 | -14,7 | 14,1 |
+| 386 | 469,6 | 398,3 | 91,0 | 79,1 | 138,6 | -190,9 | -68,9 | -59,5 | -31,6 | -32,0 | -17,9 | -19,7 | -11,7 | 31,1 |
+| 387 | 484,1 | 433,2 | 211,2 | 88,0 | 138,0 | -221,3 | -175,8 | -36,6 | -51,7 | -36,9 | -20,1 | -27,4 | -11,5 | 36,7 |
+| 388 | 509,6 | 458,7 | 210,1 | 86,9 | 141,7 | -212,5 | -98,3 | -97,0 | -36,7 | -41,0 | -27,0 | -20,3 | -9,0 | 43,1 |
+| 389 | 481,3 | 429,3 | 91,4 | 80,8 | 141,0 | -218,2 | -183,8 | -98,7 | -53,5 | -30,5 | -111,0 | -18,1 | -11,2 | 105,3 |
+| **Total** | **3.358,9** | **2.878,6** | **1.169,1** | **576,2** | **972,3** | **-1.416,1** | **-853,9** | **-347,3** | **-288,3** | **-243,9** | **-256,0** | **-136,0** | **-87,6** | **355,9** |
+
+Lecturas del cuadro: la cuota 1 y el plus porta son dos tercios de los créditos; el descuento de portabilidad es el
+débito más grande y supera a las suspensiones; el bono productividad cayó al escalón del 95% (50.000 por línea) en
+febrero y mayo de 2026; los legajos de mayo (111 M) son un pico aislado, el resto está entre 18 y 42 M.
+
+**Indicadores medidos por liquidación** (base de la calibración):
+
+| Liq. | Porta | Bono efect. cobrado | Cuota 2 cobran | Suspensiones | Deuda | Reverso | Migración | Legajos / activación | Recupero |
+|---|---|---|---|---|---|---|---|---|---|
+| 383 | 88% | 82% | 57% | 24% | 8,5% | 2,1% | 3,5% | 20.355 | 21,0% |
+| 384 | 82% | 87% | 52% | 31% | 9,5% | 3,7% | 4,3% | 9.926 | 14,4% |
+| 385 | 89% | 86% | 56% | 28% | 9,4% | 7,0% | 3,6% | 9.401 | 3,0% |
+| 386 | 90% | 87% | 52% | 17% | 8,5% | 4,9% | 3,2% | 9.195 | 9,2% |
+| 387 | 93% | 91% | 49% | 41% | 8,8% | 6,4% | 2,8% | 7.687 | 6,5% |
+| 388 | 92% | 91% | 53% | 23% | 9,4% | 4,8% | 2,2% | 11.636 | 9,9% |
+| 389 | 94% | 88% | 52% | 45% | 7,4% | 4,4% | 2,7% | 59.422 | 21,2% |
+| **Ponderado** | **89,8%** | **87,5%** | **53,0%** | **29,7%** | **8,8%** | **4,8%** | **3,2%** | **11.500 (sin mayo)** | **12,1%** |
+
+Porcentajes sobre las activaciones cuota 1 del mes; "Recupero" = devuelto ÷ descontado (ver §4).
+
+Curva real de **líneas que pagan residual** por mes de antigüedad (146.000 filas RESIDUAL), contra la **zafra**
+oficial de líneas activas:
+
+| Mes | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Pagan residual | 91,3 | 63,7 | 53,8 | 51,7 | 50,9 | 49,5 | 46,6 | 43,7 | 42,4 | 39,6 | 35,7 | 32,4 |
+| Zafra (activas) | 82,6 | 58,5 | 53,8 | 53,1 | 49,2 | 51,1 | 46,2 | 41,9 | 40,7 | 40,1 | 40,4 | 41,8 |
+
+### 3. El modelo del simulador
+
+Motor: `backend/app/services/analyzers/facturacion_simulador.py`. Todos los parámetros están en `PARAMETROS_DEFAULT`
+y son editables desde "Variables de negocio"; las simulaciones guardadas conservan los suyos.
+
+**Entrada**: ventas efectivas del mes (= activaciones cuota 1; la efectividad de entregas no descuenta ventas, solo
+elige el escalón del bono efectividad). Tarifas y abono se ponderan por el mix de planes.
+
+**Mes 0 (facturación del mes)**
+
+```
+activaciones  = ventas × cuota1_ponderada × (1 + ajuste_comisiones)
+portabilidad  = ventas × porta_pct × porta_plus_ponderado × (1 + ajuste_comisiones)
+bono_prod     = ventas × pct_estado_a × monto_escala(cumplimiento = ventas × pct_estado_a ÷ objetivo_co)
+bono_efect    = ventas × pct_bono_efectividad_cobrado × monto_escala(efectividad)
+bono_adicional = monto cargado a mano (no se devuelve ni se recalcula)
+```
+
+**Meses 1 a 12 de cada cohorte** (`z[k]` = zafra a la edad k, `rc[k]` = curva de líneas que pagan residual)
+
+```
+residual_k     = ventas × rc[k] × 14,5% × abono_acreditado × abono_ponderado        (k = 1..12)
+legajos_1      = − ventas × (no_presentado × cuota1 + incompleto × cuota1 ÷ 2)         (k = 1)
+caidas_k       = ventas × (z[k−1] − z[k])                                             (k ≤ chargeback)
+devolucion_k   = − caidas_k × [ pen × (cuota1 + residual_por_linea) + porta_pct × porta_plus ] × (1 − recupero)
+dev_bono_k     = − caidas_k × pct_bono_efectividad_cobrado × bono_efect_por_venta × (1 − recupero)
+migracion_3    = − ventas × migracion_pct × cuota1                                     (k = 3, sin recupero)
+cuota2_3       = ventas × z[3] × cuota2_ponderada × (1 − incompleto ÷ 2 − no_presentado)
+recalculo_6    = − ventas × pct_estado_a × bono_prod_por_linea × pct_recalculo
+```
+
+`pen` (caídas que pierden la cuota 1) se aplica solo a la cuota 1 y su residual; el plus porta y el bono efectividad
+se devuelven en el 100% de las caídas del chargeback. El ajuste de comisiones negociado con Claro escala cuota 1,
+cuota 2 y porta (también sus devoluciones) y no toca bonos, residual ni la remuneración del vendedor.
+
+**Salidas de la cohorte**: facturación bruta; "queda a 6 meses" (ya cayeron todas las caídas, residual a medias:
+la cifra que decide); "queda a 12 meses" (residual completo); peso de los bonos sobre la facturación; cierre
+(devoluciones y cobros a 12 meses, gana o pierde).
+
+**Simulación anual (12 o 18 meses)**: el mes 1 fija la estructura y el objetivo; cada mes es una cohorte. El mes
+calendario *t* liquida su propio mes 0 más los flujos de todas las cohortes anteriores en la edad que les toca.
+Nombres de mes editables, bono adicional por mes, y **meses afectados** (un mes puede tener porta, efectividad,
+objetivo, mix, ajuste, bonos, legajos, caídas, recupero o costos variables propios). Al cierre queda la **cola**:
+lo que las últimas cohortes todavía tienen por cobrar (residual, cuota 2) y por devolver (caídas). Todo redondea
+por flujo y deriva lo demás de los redondeados, así cada puente cierra exacto: bruta + ajustes = neto;
+neto − costos = resultado; acumulado anterior + resultado = acumulado; resultado + cola = resultado final.
+
+**Costos de la estructura (por mes)**
+
+```
+vendedores    = ventas ÷ ventas_por_vendedor (1 supervisor cada 14; 1 backoffice cada 180 ventas; 1 coordinador; 2 controllers; SubGerencia opcional)
+salario operador = 14.635 Gs/h × 7 h × 23 días
+comisión vendedor = ventas × 102.000 Gs   → dentro del RRHH: paga IPS y aguinaldo
+plus vendedor     = ventas × 32.000 Gs    → fuera del RRHH: sin IPS ni aguinaldo
+IPS        = 16,5% × todo el RRHH (salarios, comisiones, supervisores, coordinación, backoffice, controllers, subgerencia)
+aguinaldo  = RRHH ÷ 12 por mes (sin IPS)
+logística  = ventas × (60% × 80.000 Interior + 40% × 55.000 Central) + 20.000.000 de premios fijos
+operativos = ventas × 12.500
+```
+
+El peso de comisión + plus sobre la facturación se muestra solo como referencia. Margen = lo que queda de la
+facturación (mes 0, 6 y 12 meses) − costo de la estructura; punto de equilibrio a 6 meses por bisección.
+
+### 4. Calibración (valores por defecto)
+
+| Parámetro | Default | Base |
+|---|---|---|
+| Mix de planes | CG15G 58% · CG30G 39% · CG50B 2,5% · C100X 0,5% | Activaciones cuota 1 de las 7 liquidaciones |
+| Portabilidad | 90% | 82–94% por liquidación, ponderado 89,8% |
+| Efectividad de entregas | 89% | Real 88,5–89,1% |
+| Activaciones que cobran bono efectividad | 87,5% | 82–91% por liquidación |
+| Líneas en estado A | 99,5% | Bono productividad pagado en todas las activaciones |
+| Legajo incompleto / no presentado | 5% (50%) / 3% (100%) | 11.500 Gs por activación sin el pico de mayo |
+| Cuota 2 | mes 3, zafra al día 90 | 53% cobra, 27.491 Gs por activación (modelo 26.400) |
+| Residual | 14,5% × 48% del abono, 12 meses, curva real | 78.400 Gs por activación en 12 meses |
+| Zafra | 99,9 · 82,6 · 58,5 · 53,8 · 53,1 · 49,2 · 51,1 · 46,2 · 41,9 · 40,7 · 40,1 · 40,4 · 41,8 | Cohortes jul-25 a ene-26 informadas por Claro |
+| Chargeback | 6 meses | Manual (180 días); descuento de porta 100% dentro de la ventana |
+| Caídas que pierden la cuota 1 | 85% de las caídas | 46% de las activaciones (susp. 29,7 + deuda 8,8 + reverso 4,8 + migración 3,2) contra 51% de caídas |
+| Migración de negocio | 3,2% en el mes 3 | 2,2–4,3% por liquidación, ~207.000 por línea |
+| Recálculo del bono productividad | 38% de las líneas, mes 6 | 22–52% por liquidación, ponderado 38,3% |
+| Recupero por reconexión | 12% | Ver definición abajo |
+| Comisión / plus del vendedor | 102.000 / 32.000 Gs por venta | Promedio real pagado |
+
+**Recupero por reconexión** = devuelto ÷ descontado, ponderado sobre las 7 liquidaciones (21,0 · 14,4 · 3,0 · 9,2 ·
+6,5 · 9,9 · 21,2% → 12,1%). Devuelto: RECONEXIONES + REVERSO DESCUENTO PORTABILIDAD NUMERICA + RECUPERO INCENTIVOS
+REVERSO PENALIDAD + REVERSO PENALIZACION POR DEUDA + RECUPERO ACTIVACION. Descontado: SUSPENSIONES + DESCUENTO
+PORTABILIDAD NUMERICA + DESCUENTO INCENTIVOS POR PENALIDAD + PENALIZACION POR DEUDA. Cada liquidación por separado
+salta porque los reversos corresponden a descuentos de meses anteriores; el valor de conjunto es el que vale.
+
+**Qué fila del EERR alimenta cada concepto**: Activaciones (cuota 1) ← ACTIVACIONES cuota 1 · Plus portabilidad ←
+ACTIVACION PORTABILIDAD NUMERICA · Bono productividad ← INCENTIVO PRODUCTIVIDAD · Bono efectividad ← INCENTIVO
+EFECTIVIDAD DISTRIBUCION · Residual ← RESIDUAL · Cuota 2 ← ACTIVACIONES cuota 2 · Legajos ← LINEA CON DOCUMENTACION
+FALTANTE + AJUSTE LEGAJO · Devoluciones por caídas ← SUSPENSIONES + DESCUENTO PORTABILIDAD NUMERICA + PENALIZACION
+POR DEUDA + REVERSO ACTIVACION + CANCELACIONES + PENALIZACIÓN POR MIGRACIÓN DE NEGOCIO, netas del recupero ·
+Devolución bono efectividad ← DESCUENTO INCENTIVOS POR PENALIDAD · Recálculo ← RECALCULO INCENTIVO PRODUCTIVIDAD.
+No modelados: CAMBIO DE PLAN, CONCEPTO INICIO DE PRESUSPENSION POR DEUDA y la devolución de documentación al día 365.
+
+### 5. Herramientas del módulo
+
+- **Simulador mensual** (`/televentas-claro/simulador`): una cohorte; EERR a mes 0 / 6 / 12 meses, estructura
+  necesaria, remuneración del vendedor, peso de los bonos, cierre con veredicto, explicación de cada cuadro.
+- **Simulador anual** (`/televentas-claro/simulador-anual`): 12 o 18 meses con cohortes superpuestas, EERR mes a mes,
+  meses afectados, bono adicional por mes, gráficos, historia animada del negocio con hitos y alertas, y **registro
+  del trabajo** (simulaciones guardadas con nombre y comentario, notas tipificadas, ítems marcados y post-its
+  arrastrables), en una barra lateral ocultable. Todo se imprime como informe.
+- **Reportes de liquidación** (`/televentas-claro`): carga del `.txt`, resumen por concepto, comparación entre
+  liquidaciones con descomposición del delta.
+- Endpoints: `GET /api/v1/facturacion/simulador/parametros`, `POST /api/v1/facturacion/simulador`,
+  `POST /api/v1/facturacion/simulador/anual`, CRUD en `/api/v1/facturacion/simulaciones`.
+- Tests: `backend/tests/test_facturacion_simulador.py` (invariantes del motor, aditividad al guaraní, calibración) y
+  `test_facturacion_simulaciones.py` (registro del trabajo).
+
 ## 🚧 Pendientes inmediatos
 
 ### Bases Adicionales (Débitos Automáticos / Bancard) — entregado
