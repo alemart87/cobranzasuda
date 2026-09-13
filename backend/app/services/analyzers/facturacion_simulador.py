@@ -20,8 +20,8 @@ TODAS las variables de negocio y componentes de facturación son editables
 
 Criterios Claro (editables):
   Bono productividad (1771): por línea en estado A; % cumplimiento = activaciones
-    netas ÷ objetivo; escala 2026 observada en las liquidaciones: ≥100% 110.000 ·
-    ≥95% 50.000 · <95% 0 (en 2025 el tramo ≥100% pagaba 95.000). Recálculo al 6º mes (1871).
+    netas ÷ objetivo; escala vigente comunicada por Claro: ≥110% 120.000 · ≥105% 115.000 ·
+    ≥100% 105.000 · ≥95% 40.000 · <95% 0. Recálculo al 6º mes (1871).
   Bono efectividad distribución (1891): por venta entregada según efectividad
     (activaciones ÷ ventas): ≥85% 50.000 · ≥82% 45.000 · ≥80% 35.000 · <80% 0.
   Cuota 2: mes +3, línea activa al día 90 y legajo completo (incompleto = 50%).
@@ -69,13 +69,12 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "residual_meses": 12,
     "residual_curva_pct": list(RESIDUAL_CURVA_DEFAULT),   # % de líneas que pagan residual por mes de antigüedad
     # ---- bonos (escalas editables) ----
-    # Escala 2026 según lo liquidado (observación "Obj CO / %Cumpl."): 100,3–101,6% → 110.000 por línea
-    # (ene, mar, abr 2026); 95,8–96,2% → 50.000 (feb, may 2026); bajo el 95% no se cobra. En 2025 el
-    # tramo ≥100% pagó 95.000 (nov, dic). Tramos ≥105% y ≥110% no observados: se dejan en 110.000 hasta
-    # que Claro confirme si pagan más.
+    # Escala VIGENTE comunicada por Claro (tabla ">= / Cuota"): ≥110% 120.000 · ≥105% 115.000 ·
+    # ≥100% 105.000 · ≥95% 40.000; bajo el 95% no se cobra. Historial liquidado: 2025 pagó 95.000 al
+    # ≥100% (nov, dic); ene–may 2026 pagó 110.000 al ≥100% y 50.000 entre 95 y 100% (feb, may).
     "escala_productividad": [
-        {"desde_pct": 110, "monto": 110000}, {"desde_pct": 105, "monto": 110000},
-        {"desde_pct": 100, "monto": 110000}, {"desde_pct": 95, "monto": 50000},
+        {"desde_pct": 110, "monto": 120000}, {"desde_pct": 105, "monto": 115000},
+        {"desde_pct": 100, "monto": 105000}, {"desde_pct": 95, "monto": 40000},
     ],
     "recalculo_productividad_mes": 6,
     "pct_recalculo_productividad": 38.0,   # % de líneas castigadas en el recálculo (real 7 liq: 22–52%, pond. 38,3%); la zafra daría 49%
