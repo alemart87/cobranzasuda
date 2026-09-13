@@ -663,6 +663,33 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         fila["ventas_por_vendedor"] = round(ventas[t] / headcount["vendedores"], 1) if headcount["vendedores"] else 0
         # Líneas activas: después de los 12 meses la cohorte se mantiene en su último nivel de zafra.
         fila["lineas_activas"] = round(sum(cohortes[m]["meses"][min(t - m, 12)]["lineas_activas"] for m in range(t + 1)))
+        # ---- La "ola": lo que las cohortes anteriores ya dejaron comprometido para este mes, venda lo que venda ----
+        fila["ola_devoluciones"] = fila["legajos"] + fila["clawbacks"] + fila["clawback_bonos"] + fila["recalculo_productividad"]
+        fila["ola_cobros"] = fila["residual"] + fila["cuota2"]
+        # Ventas mínimas del mes para no perder: bruta(v) + ajustes heredados − costos(v) ≥ 0, con la
+        # estructura fija (bisección sobre v; los bonos hacen escalones, se busca el primer v que cierra).
+        pm_t = _aplicar_afectado(base, afectados.get(t))
+
+        def _resultado_con(v: float) -> float:
+            c2 = simular_facturacion({**pm_t, "ventas": v, "bono_adicional": bonos_ad[t], "_sin_breakeven": True})
+            cst, _ = _costos_y_margen(c2["parametros"]["costos"], v, c2["mes0"], c2["bruto_mes0"],
+                                      c2["neto_6"], c2["neto_12"], headcount=headcount)
+            return c2["bruto_mes0"] + fila["ajustes"] - cst["total"]
+        hi = max(ventas[t] * 3, 500.0)
+        if _resultado_con(0.0) >= 0:
+            fila["ventas_equilibrio"] = 0
+        elif _resultado_con(hi) < 0:
+            fila["ventas_equilibrio"] = None      # ni triplicando las ventas cierra este mes
+        else:
+            lo, up = 0.0, hi
+            for _ in range(24):
+                mid = (lo + up) / 2
+                if _resultado_con(mid) >= 0:
+                    up = mid
+                else:
+                    lo = mid
+            fila["ventas_equilibrio"] = int(math.ceil(up))
+        fila["en_riesgo"] = fila["ventas_equilibrio"] is None or ventas[t] < fila["ventas_equilibrio"]
         meses.append(fila)
 
     # Cola después del horizonte: flujos de las cohortes que caen fuera de él.
@@ -712,6 +739,11 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "mejor_mes": max(meses, key=lambda f: f["resultado"])["mes"],
         "peor_mes": min(meses, key=lambda f: f["resultado"])["mes"],
         "meses_sin_bono_productividad": sum(1 for f in meses if f["monto_bono_productividad"] == 0),
+        # Ola de devoluciones heredadas: máximo y mes; meses donde las ventas no cubren la ola + estructura.
+        "ola_maxima": round(min(f["ola_devoluciones"] for f in meses)),
+        "ola_maxima_mes": min(meses, key=lambda f: f["ola_devoluciones"])["mes"],
+        "meses_en_riesgo": [f["mes"] for f in meses if f["en_riesgo"]],
+        "ventas_equilibrio_max": max((f["ventas_equilibrio"] or 0) for f in meses),
     }
 
     def gs(v: float) -> str:
@@ -727,6 +759,9 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
     ]
     if anual["meses_negativos"]:
         partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es {nombres[anual['peor_mes'] - 1]} y el mejor {nombres[anual['mejor_mes'] - 1]}.")
+    if anual["meses_en_riesgo"]:
+        partes.append(f"Riesgo por bajar productividad: en {len(anual['meses_en_riesgo'])} mes(es) las ventas no cubren la ola de devoluciones heredadas más la estructura fija "
+                      f"(ola máxima {gs(abs(anual['ola_maxima']))} en {nombres[anual['ola_maxima_mes'] - 1]}; hacen falta hasta {n(anual['ventas_equilibrio_max'])} ventas/mes para no perder).")
     if afectados:
         partes.append(f"{len(afectados)} mes(es) con variaciones propias (porta, efectividad, mix u otros): "
                       + ", ".join(nombres[t] for t in sorted(afectados)) + ".")

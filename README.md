@@ -404,6 +404,13 @@ lo que las últimas cohortes todavía tienen por cobrar (residual, cuota 2) y po
 por flujo y deriva lo demás de los redondeados, así cada puente cierra exacto: bruta + ajustes = neto;
 neto − costos = resultado; acumulado anterior + resultado = acumulado; resultado + cola = resultado final.
 
+**La ola de la zafra (riesgo potencial por bajar productividad)**: cada cohorte deja comprometidas devoluciones
+para los meses siguientes. Por mes calendario el motor informa `ola_devoluciones` (legajos + caídas + devolución de
+bonos + recálculo heredados), `ola_cobros` (residual + cuota 2 heredados) y `ventas_equilibrio`: las ventas mínimas
+del mes para que bruta(v) + ajustes heredados − costos(v) ≥ 0 con la estructura fija (bisección). Con ventas
+estables la ola crece hasta estabilizarse; si las ventas bajan, la ola sigue pegando sobre menos facturación y el
+mes queda `en_riesgo`. Se muestra como área roja en los gráficos del simulador anual y como hito en la historia.
+
 **Costos de la estructura (por mes)**
 
 ```

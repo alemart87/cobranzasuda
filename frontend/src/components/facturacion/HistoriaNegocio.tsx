@@ -95,6 +95,8 @@ function armarHitos(res: any, p: any, nombre: (i: number) => string): Hito[] {
     if (!primerRecalculo && m.recalculo_productividad < 0) { primerRecalculo = true; out.push({ paso: t, severidad: "warning", icono: "🔁", titulo: "Recálculo del bono productividad",
       detalle: `Claro descuenta el bono de las líneas de ${nombre(0)} que no llegaron activas al día 180: ${formatGs(Math.abs(m.recalculo_productividad))}.` }); }
     if (t === chb) out.push({ paso: t, severidad: "info", icono: "🛡️", titulo: `${nombre(0)} sale del chargeback`, detalle: `Pasaron ${chb} meses: la primera cohorte ya no devuelve caídas; de acá en más solo suma residual.` });
+    if (m.en_riesgo && prev && m.ventas < prev.ventas) out.push({ paso: t, severidad: "alert", icono: "🌊", titulo: "La ola de la zafra pega sobre menos ventas",
+      detalle: `${nombre(t)} baja a ${formatInt(m.ventas)} ventas pero hereda ${formatGs(Math.abs(m.ola_devoluciones))} de devoluciones de los meses anteriores: hacían falta ${m.ventas_equilibrio == null ? "más del triple de" : formatInt(m.ventas_equilibrio)} ventas para no perder.` });
     if (m.resultado < 0 && !enPerdida) { enPerdida = true; out.push({ paso: t, severidad: "alert", icono: "🔻", titulo: "Mes en pérdida", detalle: `${nombre(t)} liquida ${formatGs(m.ingreso_neto)} contra ${formatGs(m.costo_total)} de costos: ${formatGs(m.resultado)}.` }); }
     else if (m.resultado >= 0 && enPerdida) { enPerdida = false; out.push({ paso: t, severidad: "ok", icono: "🔺", titulo: "Vuelve a ganar", detalle: `${nombre(t)} cierra con ${formatGs(m.resultado)} (${m.margen_pct}% sobre ingreso neto).` }); }
     if (prev && Math.sign(prev.acumulado) !== Math.sign(m.acumulado) && m.acumulado !== 0 && prev.acumulado !== 0)
