@@ -20,8 +20,8 @@ TODAS las variables de negocio y componentes de facturación son editables
 
 Criterios Claro (editables):
   Bono productividad (1771): por línea en estado A; % cumplimiento = activaciones
-    netas ÷ objetivo; escala ≥110% 105.000 · ≥105% 100.000 · ≥100% 95.000 ·
-    ≥95% 50.000 · ≥90% 40.000 · <90% 0. Recálculo al 6º mes (1871).
+    netas ÷ objetivo; escala 2026 observada en las liquidaciones: ≥100% 110.000 ·
+    ≥95% 50.000 · <95% 0 (en 2025 el tramo ≥100% pagaba 95.000). Recálculo al 6º mes (1871).
   Bono efectividad distribución (1891): por venta entregada según efectividad
     (activaciones ÷ ventas): ≥85% 50.000 · ≥82% 45.000 · ≥80% 35.000 · <80% 0.
   Cuota 2: mes +3, línea activa al día 90 y legajo completo (incompleto = 50%).
@@ -69,10 +69,13 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "residual_meses": 12,
     "residual_curva_pct": list(RESIDUAL_CURVA_DEFAULT),   # % de líneas que pagan residual por mes de antigüedad
     # ---- bonos (escalas editables) ----
+    # Escala 2026 según lo liquidado (observación "Obj CO / %Cumpl."): 100,3–101,6% → 110.000 por línea
+    # (ene, mar, abr 2026); 95,8–96,2% → 50.000 (feb, may 2026); bajo el 95% no se cobra. En 2025 el
+    # tramo ≥100% pagó 95.000 (nov, dic). Tramos ≥105% y ≥110% no observados: se dejan en 110.000 hasta
+    # que Claro confirme si pagan más.
     "escala_productividad": [
-        {"desde_pct": 110, "monto": 105000}, {"desde_pct": 105, "monto": 100000},
-        {"desde_pct": 100, "monto": 95000}, {"desde_pct": 95, "monto": 50000},
-        {"desde_pct": 90, "monto": 40000},
+        {"desde_pct": 110, "monto": 110000}, {"desde_pct": 105, "monto": 110000},
+        {"desde_pct": 100, "monto": 110000}, {"desde_pct": 95, "monto": 50000},
     ],
     "recalculo_productividad_mes": 6,
     "pct_recalculo_productividad": 38.0,   # % de líneas castigadas en el recálculo (real 7 liq: 22–52%, pond. 38,3%); la zafra daría 49%
@@ -727,7 +730,8 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
     if anual["bonos_adicionales"]:
         partes.append(f"Incluye {gs(anual['bonos_adicionales'])} de bono adicional cargado a mano.")
     if anual["meses_sin_bono_productividad"] and base.get("bonos_activos", True):
-        partes.append(f"En {anual['meses_sin_bono_productividad']} mes(es) las ventas quedaron bajo el 90% del objetivo y el bono productividad no se liquidó.")
+        esc_min = min(float(e["desde_pct"]) for e in base["escala_productividad"]) if base.get("escala_productividad") else 0
+        partes.append(f"En {anual['meses_sin_bono_productividad']} mes(es) las ventas quedaron bajo el {esc_min:.0f}% del objetivo y el bono productividad no se liquidó.")
     final = anual["resultado_con_cola"]
     ingreso_final = tot("ingreso_neto") + cola_total
     anual["veredicto"] = {

@@ -483,7 +483,7 @@ export default function SimuladorAnualPage() {
                     </ComposedChart>
                   </ResponsiveContainer>
                   <Lectura>
-                    Barras: ventas del mes (rojas cuando no alcanzan el 90% del objetivo y el bono productividad se pierde). La línea
+                    Barras: ventas del mes (rojas cuando no alcanzan el escalón mínimo del bono productividad y el bono se pierde). La línea
                     punteada negra es lo que la estructura fija puede vender; la violeta, las ventas reales por vendedor. Un mes
                     por debajo de la capacidad paga la misma estructura con menos ingresos.
                   </Lectura>
