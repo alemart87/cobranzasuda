@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatInt } from "@/lib/format";
 import { NumeroInput } from "./NumeroInput";
+import { recalcSegunZafra } from "./VariablesNegocio";
 
 /** Meses afectados del Simulador Anual: un mes puede comportarse distinto (menos porta,
  *  otra efectividad, otro mix, otro ajuste de comisiones, costos variables). Las
@@ -33,7 +34,10 @@ export const CAMPOS_AFECTABLES: CampoDef[] = [
   { key: "operativo_por_venta", label: "Costo operativo por venta", step: 500, grupo: "Costos variables", costo: true },
 ];
 
-const valorBase = (base: any, c: CampoDef) => (c.costo ? base?.costos?.[c.key] : base?.[c.key]);
+const valorBase = (base: any, c: CampoDef) => {
+  if (c.key === "pct_recalculo_productividad" && base?.pct_recalculo_productividad == null) return recalcSegunZafra(base);
+  return c.costo ? base?.costos?.[c.key] : base?.[c.key];
+};
 const valorOv = (ov: Variaciones | undefined, c: CampoDef) => (c.costo ? ov?.costos?.[c.key] : ov?.[c.key]);
 const fmtV = (v: any, c?: CampoDef) => (typeof v === "boolean" ? (v ? "sí" : "no") : v == null ? "—" : `${typeof v === "number" ? formatInt(v) : v}${c?.suffix ?? ""}`);
 

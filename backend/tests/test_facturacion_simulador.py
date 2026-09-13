@@ -320,7 +320,7 @@ def test_calibracion_con_liquidaciones_reales():
     """Defaults calibrados con las 7 liquidaciones (383-389) y el manual de conceptos de Claro."""
     from app.services.analyzers.facturacion_simulador import RESIDUAL_CURVA_DEFAULT
     d = PARAMETROS_DEFAULT
-    assert d["porta_pct"] == 90 and d["pct_bono_efectividad_cobrado"] == 87.5 and d["pct_recalculo_productividad"] == 38
+    assert d["porta_pct"] == 90 and d["pct_bono_efectividad_cobrado"] == 87.5 and d["pct_recalculo_productividad"] is None
     assert d["pct_caidas_penalizables"] == 85 and d["recupero_pct"] == 12 and d["pct_abono_acreditado"] == 48
     assert d["migracion_negocio_pct"] == 3.2 and len(RESIDUAL_CURVA_DEFAULT) == 12
     r = simular_facturacion({"ventas": 1000, "objetivo_co": 900})
@@ -330,8 +330,13 @@ def test_calibracion_con_liquidaciones_reales():
     res_linea = r["derivados"]["residual_por_linea"]
     assert abs(m[12]["residual"] - 1000 * 0.324 * res_linea) <= 200
     assert abs(m[1]["residual"] - 1000 * 0.913 * res_linea) <= 500
-    # recálculo del bono: 38% de las líneas, no (1 − zafra 6)
-    assert m[6]["recalculo_productividad"] == -round(1000 * 0.995 * r["derivados"]["monto_bono_productividad"] * 0.38)
+    # recálculo del bono: regla de Claro, 100% del bono de las líneas caídas al día 180 (100 − zafra[6] = 48,9%)
+    assert r["derivados"]["pct_recalculo_efectivo"] == 48.9
+    assert m[6]["recalculo_productividad"] == -round(1000 * 0.995 * r["derivados"]["monto_bono_productividad"] * 0.489)
+    # un % explícito reemplaza la regla
+    r38 = simular_facturacion({"ventas": 1000, "objetivo_co": 900, "pct_recalculo_productividad": 38})
+    assert r38["derivados"]["pct_recalculo_efectivo"] == 38
+    assert r38["meses"][6]["recalculo_productividad"] == -round(1000 * 0.995 * r["derivados"]["monto_bono_productividad"] * 0.38)
     # cuota 2: legajo no presentado cobra 0, incompleto la mitad
     assert abs(m[3]["cuota2"] - 1000 * 0.538 * r["derivados"]["cuota2_ponderada"] * (1 - 0.05 / 2 - 0.03)) <= 600
     # migración de negocio: 3,2% pierde la cuota 1 completa en el mes 3

@@ -77,7 +77,11 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
         {"desde_pct": 100, "monto": 105000}, {"desde_pct": 95, "monto": 40000},
     ],
     "recalculo_productividad_mes": 6,
-    "pct_recalculo_productividad": 38.0,   # % de líneas castigadas en el recálculo (real 7 liq: 22–52%, pond. 38,3%); la zafra daría 49%
+    # Regla de Claro: al día 180 se descuenta el 100% del bono de TODAS las líneas caídas. El % de líneas
+    # castigadas sale de la zafra al mes del recálculo (100 − zafra[6] = 48,9%). Las 7 liquidaciones reales
+    # mostraron menos (22–52%, ponderado 38,3%) porque parte de las suspendidas sin cancelar cuentan como
+    # activas; el modelo toma la regla completa (más conservador). None = "según zafra".
+    "pct_recalculo_productividad": None,
     "escala_efectividad": [
         {"desde_pct": 85, "monto": 50000}, {"desde_pct": 82, "monto": 45000},
         {"desde_pct": 80, "monto": 35000},
@@ -143,6 +147,20 @@ def parametros_con_defaults(overrides: dict | None) -> dict:
     return p
 
 
+def pct_recalculo_efectivo(p: dict) -> float:
+    """% de líneas cuyo bono productividad se devuelve completo en el recálculo (día 180).
+
+    Si el parámetro viene vacío (None) se aplica la regla de Claro: 100% de las líneas caídas según la
+    zafra al mes del recálculo (100 − zafra[mes]). Un número explícito lo reemplaza (0–100)."""
+    v = p.get("pct_recalculo_productividad")
+    if v is None or v == "":
+        z = [min(max(float(x or 0), 0), 100) for x in (p.get("zafra_pct") or ZAFRA_DEFAULT)]
+        k = int(p.get("recalculo_productividad_mes") or 6)
+        k = min(max(k, 0), len(z) - 1)
+        return round(100.0 - z[k], 1)
+    return min(max(float(v), 0), 100)
+
+
 def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     p = parametros_con_defaults(params)
     ventas = max(float(p["ventas"] or 0), 0)
@@ -171,7 +189,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     monto_prod, esc_prod = _escala(p["escala_productividad"], cumplimiento) if bonos_activos else (0.0, None)
     monto_efect, esc_efect = _escala(p["escala_efectividad"], efect) if bonos_activos else (0.0, None)
     pct_bef = min(max(float(p.get("pct_bono_efectividad_cobrado", 100) or 0), 0), 100) / 100.0
-    pct_recalc = min(max(float(p.get("pct_recalculo_productividad", 0) or 0), 0), 100) / 100.0
+    pct_recalc = pct_recalculo_efectivo(p) / 100.0
     migr = min(max(float(p.get("migracion_negocio_pct", 0) or 0), 0), 100) / 100.0
 
     # ---- MES 0: facturación del mes ----
@@ -355,6 +373,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         "derivados": {
             "activaciones": round(act), "activaciones_estado_a": round(act_a), "bonos_activos": bonos_activos,
             "cumplimiento_pct": round(cumplimiento, 2), "monto_bono_productividad": monto_prod,
+            "pct_recalculo_efectivo": round(pct_recalc * 100, 1),
             "escalon_productividad": esc_prod, "monto_bono_efectividad": monto_efect, "escalon_efectividad": esc_efect,
             "ajuste_comisiones_pct": float(p.get("ajuste_comisiones_pct") or 0),
             "cuota1_ponderada": round(cuota1_w), "cuota2_ponderada": round(cuota2_w),
