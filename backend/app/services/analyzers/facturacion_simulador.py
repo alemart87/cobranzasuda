@@ -33,34 +33,41 @@ import math
 from typing import Any
 
 # Zafra tipo del negocio (% líneas nuevas activas por mes de antigüedad),
-# promedio de las cohortes 2025-07 … 2026-01 informadas por Claro.
+# promedio de las cohortes 2025-07 … 2026-01 informadas por Claro. Manda las caídas
+# (chargeback, cuota 2, descuento de bonos).
 ZAFRA_DEFAULT = [99.9, 82.6, 58.5, 53.8, 53.1, 49.2, 51.1, 46.2, 41.9, 40.7, 40.1, 40.4, 41.8]
+# Curva de líneas que PAGAN residual por mes de antigüedad (índice 0 = mes 1). El residual
+# no lo cobra toda línea activa sino la que tiene monto acreditado; medido sobre 7 liquidaciones
+# reales (383-389, nov-2025 a may-2026, 146.000 filas de RESIDUAL).
+RESIDUAL_CURVA_DEFAULT = [91.3, 63.7, 53.8, 51.7, 50.9, 49.5, 46.6, 43.7, 42.4, 39.6, 35.7, 32.4]
 
 PARAMETROS_DEFAULT: dict[str, Any] = {
     # ---- entrada principal ----
     "ventas": 1950,                 # ventas EFECTIVAS del mes (= activaciones cuota 1)
     "efectividad_pct": 89.0,        # efectividad de ENTREGAS: solo elige el escalón del bono (real: 88,5–89,1%)
+    "pct_bono_efectividad_cobrado": 87.5,   # % de las activaciones que cobran el bono efectividad (real 7 liq: 82–91%, pond. 87,5%)
     "objetivo_co": 1750,            # objetivo mensual de líneas CO (lo comunica Claro)
     "pct_estado_a": 99.5,           # activaciones en estado A (no S/P/C) al liquidar
     "bonos_activos": True,          # False = simular SIN bonos (productividad y efectividad en 0)
     "bono_adicional": 0.0,          # BONO ADICIONAL a mano (Gs totales del mes): campañas, premios o acuerdos puntuales
     "ajuste_comisiones_pct": 0.0,   # ajuste negociado sobre cuota 1, cuota 2 y plus de portabilidad (+5 = mejora 5%)
     # ---- tarifas por plan (Gs sin IVA) y mix ----
-    "planes": [
-        {"plan": "CG15G", "mix_pct": 68.0, "cuota1": 204545, "cuota2": 34091, "porta_plus": 218182, "abono": 170455},
-        {"plan": "CG30G", "mix_pct": 29.0, "cuota1": 245455, "cuota2": 81818, "porta_plus": 245455, "abono": 204545},
+    "planes": [   # mix real de activaciones cuota 1 en 7 liquidaciones: 58% / 39% / 2,5% / 0,5%
+        {"plan": "CG15G", "mix_pct": 58.0, "cuota1": 204545, "cuota2": 34091, "porta_plus": 218182, "abono": 170455},
+        {"plan": "CG30G", "mix_pct": 39.0, "cuota1": 245455, "cuota2": 81818, "porta_plus": 245455, "abono": 204545},
         {"plan": "CG50B", "mix_pct": 2.5, "cuota1": 272727, "cuota2": 109091, "porta_plus": 327273, "abono": 272727},
         {"plan": "C100X", "mix_pct": 0.5, "cuota1": 272727, "cuota2": 136364, "porta_plus": 409091, "abono": 340909},
     ],
-    "porta_pct": 45.0,              # % de activaciones con portabilidad numérica
+    "porta_pct": 90.0,              # % de activaciones con plus de portabilidad (real 7 liq: 82–94%, pond. 89,8%)
     # ---- cuota 2 y legajos ----
     "cuota2_mes": 3,
     "legajo_incompleto_pct": 5.0,   # cobra cuota 2 al 50% y descuento de media cuota 1
     "legajo_no_presentado_pct": 3.0,  # descuento de la cuota 1 completa
     # ---- residual ----
-    "residual_pct": 14.5,           # sobre el abono ACREDITADO
-    "pct_abono_acreditado": 40.0,   # abono acreditado ÷ abono del plan (real: 68.181/170.455)
+    "residual_pct": 14.5,           # sobre el abono ACREDITADO (exacto en todas las filas RESIDUAL)
+    "pct_abono_acreditado": 48.0,   # acreditado promedio de las líneas que pagan ÷ abono del plan (real: ~89.000 / 184.000)
     "residual_meses": 12,
+    "residual_curva_pct": list(RESIDUAL_CURVA_DEFAULT),   # % de líneas que pagan residual por mes de antigüedad
     # ---- bonos (escalas editables) ----
     "escala_productividad": [
         {"desde_pct": 110, "monto": 105000}, {"desde_pct": 105, "monto": 100000},
@@ -68,6 +75,7 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
         {"desde_pct": 90, "monto": 40000},
     ],
     "recalculo_productividad_mes": 6,
+    "pct_recalculo_productividad": 38.0,   # % de líneas castigadas en el recálculo (real 7 liq: 22–52%, pond. 38,3%); la zafra daría 49%
     "escala_efectividad": [
         {"desde_pct": 85, "monto": 50000}, {"desde_pct": 82, "monto": 45000},
         {"desde_pct": 80, "monto": 35000},
@@ -75,11 +83,15 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     # ---- zafra y chargeback ----
     "zafra_pct": list(ZAFRA_DEFAULT),
     "chargeback_meses": 6,
-    "pct_caidas_penalizables": 100.0,   # caídas dentro del chargeback que Claro descuenta
+    "pct_caidas_penalizables": 85.0,    # caídas que pierden la CUOTA 1 (suspensión penalizable, deuda, reverso); el plus porta y el
+                                        # bono efectividad se devuelven en el 100% de las caídas (real 7 liq: 46% de las activaciones
+                                        # pierden cuota 1 contra 51% de caídas de la zafra, con montos parciales por deuda)
+    "migracion_negocio_pct": 3.2,       # % de activaciones penalizadas por migración a otro negocio (PENALIZACIÓN POR MIGRACIÓN DE NEGOCIO)
+    "migracion_mes": 3,                 # se registra a los ~90 días
     # Parte de los descuentos del chargeback que Claro devuelve después (reconexiones, reverso del
     # descuento de portabilidad, recupero de incentivos, reverso de penalización por deuda).
-    # Calibrado con 5 liquidaciones reales: 21,0% · 14,4% · 6,8% · 10,8% · 3,0% → ponderado 10,5%.
-    "recupero_pct": 10.5,
+    # Calibrado con 7 liquidaciones reales (383-389): 21,0 · 14,4 · 3,0 · 9,2 · 6,5 · 9,9 · 21,2% → ponderado 12,1%.
+    "recupero_pct": 12.0,
     "clawback_incluye_residual": True,  # suspensión penalizable = cuota 1 + 1 residual (214.431)
     # ---- COSTOS de la estructura (el indicador principal: ventas por vendedor) ----
     "costos": {
@@ -156,13 +168,17 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     bonos_activos = bool(p.get("bonos_activos", True))
     monto_prod, esc_prod = _escala(p["escala_productividad"], cumplimiento) if bonos_activos else (0.0, None)
     monto_efect, esc_efect = _escala(p["escala_efectividad"], efect) if bonos_activos else (0.0, None)
+    pct_bef = min(max(float(p.get("pct_bono_efectividad_cobrado", 100) or 0), 0), 100) / 100.0
+    pct_recalc = min(max(float(p.get("pct_recalculo_productividad", 0) or 0), 0), 100) / 100.0
+    migr = min(max(float(p.get("migracion_negocio_pct", 0) or 0), 0), 100) / 100.0
 
     # ---- MES 0: facturación del mes ----
     mes0 = {
         "activaciones_cuota1": act * cuota1_w,
         "portabilidad": act * porta * porta_w,
         "bono_productividad": act_a * monto_prod,
-        "bono_efectividad": act * monto_efect,
+        # Bono efectividad: Claro lo paga en una parte de las activaciones (real ~87,5%), no en todas.
+        "bono_efectividad": act * pct_bef * monto_efect,
         # Bono adicional cargado a mano: se factura en el mes, no se devuelve ni se recalcula.
         "bono_adicional": max(float(p.get("bono_adicional") or 0), 0),
     }
@@ -172,12 +188,20 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
     z = [min(max(float(v), 0), 100) / 100.0 for v in p["zafra_pct"]]
     while len(z) < 13:
         z.append(z[-1] if z else 0.0)
+    # Curva de líneas que pagan residual (mes 1..12); si no viene, cae en la zafra.
+    rc = [min(max(float(v), 0), 100) / 100.0 for v in (p.get("residual_curva_pct") or [])]
+    if not rc:
+        rc = z[1:13]
+    while len(rc) < 12:
+        rc.append(rc[-1])
     chb = int(p["chargeback_meses"])
     pen = min(max(float(p["pct_caidas_penalizables"]), 0), 100) / 100.0
     recupero = min(max(float(p["recupero_pct"]), 0), 100) / 100.0
     leg_inc = float(p["legajo_incompleto_pct"]) / 100.0
     leg_np = float(p["legajo_no_presentado_pct"]) / 100.0
-    clawback_linea_base = cuota1_w + (residual_linea if p["clawback_incluye_residual"] else 0) + porta * porta_w
+    # Devolución por línea caída: la cuota 1 (+ un residual) se pierde en `pen` de las caídas (suspensión
+    # penalizable, deuda, reverso); el plus de portabilidad se devuelve en todas las caídas del chargeback.
+    clawback_linea_base = pen * (cuota1_w + (residual_linea if p["clawback_incluye_residual"] else 0)) + porta * porta_w
 
     meses = [{"mes": 0, "residual": 0.0, "cuota2": 0.0, "legajos": 0.0, "clawbacks": 0.0,
               "clawback_bonos": 0.0, "recalculo_productividad": 0.0, "neto_mes": bruto_mes0,
@@ -187,18 +211,23 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         row = {"mes": k, "residual": 0.0, "cuota2": 0.0, "legajos": 0.0, "clawbacks": 0.0,
                "clawback_bonos": 0.0, "recalculo_productividad": 0.0, "caidas": 0.0}
         if k <= int(p["residual_meses"]):
-            row["residual"] = act * z[k] * residual_linea
+            row["residual"] = act * rc[k - 1] * residual_linea
         if k == 1:
             row["legajos"] = -act * (leg_np * cuota1_w + leg_inc * cuota1_w / 2)
         if k <= chb:
-            caidas = act * max(0.0, z[k - 1] - z[k]) * pen
+            caidas = act * max(0.0, z[k - 1] - z[k])
             row["caidas"] = caidas
             row["clawbacks"] = -caidas * clawback_linea_base * (1 - recupero)
-            row["clawback_bonos"] = -caidas * monto_efect * (1 - recupero)
+            row["clawback_bonos"] = -caidas * pct_bef * monto_efect * (1 - recupero)
+        if k == int(p.get("migracion_mes") or 3) and migr > 0:
+            # Migración de negocio: pierde la cuota 1 completa, sin recupero (la línea deja el pospago).
+            row["clawbacks"] += -act * migr * cuota1_w
         if k == int(p["cuota2_mes"]):
-            row["cuota2"] = act * z[k] * (cuota2_w * (1 - leg_inc) + cuota2_w / 2 * leg_inc)
+            # Cuota 2: línea activa al día 90; legajo incompleto cobra la mitad y legajo no presentado cobra 0.
+            row["cuota2"] = act * z[k] * cuota2_w * (1 - leg_inc / 2 - leg_np)
         if k == int(p["recalculo_productividad_mes"]):
-            row["recalculo_productividad"] = -act_a * monto_prod * (1 - z[k])
+            # Recálculo: % de líneas castigadas medido en las liquidaciones (las suspendidas sin cancelar cuentan activas).
+            row["recalculo_productividad"] = -act_a * monto_prod * pct_recalc
         row["neto_mes"] = (row["residual"] + row["cuota2"] + row["legajos"] + row["clawbacks"]
                            + row["clawback_bonos"] + row["recalculo_productividad"])
         acumulado += row["neto_mes"]
@@ -300,7 +329,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         valor_pt = act * 0.01 * clawback_linea_base * (1 - recupero)
         recomendaciones.append({"severidad": "alert", "titulo": f"La primera factura se lleva el {caida_1 * 100:.0f}% de las líneas",
                                 "detalle": f"Cada punto de retención en el mes 1 vale {gs(valor_pt)} de clawbacks evitados. La palanca: calidad de venta y cobranza de la primera factura (P9-735)."})
-    exp_porta = act * porta * porta_w * (1 - z[chb]) * pen * (1 - recupero)
+    exp_porta = act * porta * porta_w * (1 - z[chb]) * (1 - recupero)
     recomendaciones.append({"severidad": "info", "titulo": f"Portabilidad: {gs(mes0['portabilidad'])} en el mes, {gs(exp_porta)} vuelven en chargeback",
                             "detalle": f"Con {porta * 100:.0f}% de portación, el plus de portabilidad es el componente con mayor exposición al chargeback: "
                                        f"se devuelve el de cada línea que cae antes del mes {chb}."})
@@ -313,7 +342,7 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         recomendaciones.insert(0, {"severidad": "warning", "titulo": f"Margen ajustado a 6 meses: {margen['pct_6']}%",
                                    "detalle": f"Con {p['costos']['ventas_por_vendedor']} ventas por vendedor el costo por venta es {gs(costos['costo_por_venta'])} contra {gs(neto_6 / act if act else 0)} que quedan por venta a 6 meses. Subir 1 venta por vendedor ahorra {gs(_ahorro_por_venta_vendedor(p, act))} al mes."})
     recomendaciones.append({"severidad": "info", "titulo": f"Residual: {gs(sum(m['residual'] for m in meses))} en 12 meses",
-                            "detalle": f"Cada línea activa deja {gs(residual_linea)}/mes durante {int(p['residual_meses'])} meses; subir la zafra del mes 6 un punto vale {gs(act * 0.01 * residual_linea * 6)} de residual futuro."})
+                            "detalle": f"Cada línea que paga deja {gs(residual_linea)}/mes durante {int(p['residual_meses'])} meses; subir un punto la curva de líneas que pagan vale {gs(act * 0.01 * residual_linea * int(p['residual_meses']))} de residual futuro."})
 
     return {
         "parametros": p,

@@ -16,6 +16,7 @@ type CampoDef = { key: string; label: string; suffix?: string; step?: number; gr
 export const CAMPOS_AFECTABLES: CampoDef[] = [
   { key: "porta_pct", label: "Portabilidad", suffix: "%", step: 1, grupo: "Ventas del mes" },
   { key: "efectividad_pct", label: "Efectividad de entregas", suffix: "%", step: 0.5, grupo: "Ventas del mes" },
+  { key: "pct_bono_efectividad_cobrado", label: "Activaciones que cobran bono efectividad", suffix: "%", step: 0.5, grupo: "Ventas del mes" },
   { key: "objetivo_co", label: "Objetivo CO", step: 10, grupo: "Ventas del mes" },
   { key: "pct_estado_a", label: "Líneas en estado A", suffix: "%", step: 0.5, grupo: "Ventas del mes" },
   { key: "ajuste_comisiones_pct", label: "Ajuste de comisiones", suffix: "%", step: 0.5, grupo: "Comisiones y bonos" },
@@ -24,6 +25,8 @@ export const CAMPOS_AFECTABLES: CampoDef[] = [
   { key: "legajo_no_presentado_pct", label: "Legajos no presentados", suffix: "%", step: 0.5, grupo: "Calidad y caídas" },
   { key: "pct_caidas_penalizables", label: "Caídas penalizables", suffix: "%", step: 5, grupo: "Calidad y caídas" },
   { key: "recupero_pct", label: "Recupero por reconexión", suffix: "%", step: 5, grupo: "Calidad y caídas" },
+  { key: "pct_recalculo_productividad", label: "Líneas castigadas en el recálculo", suffix: "%", step: 1, grupo: "Calidad y caídas" },
+  { key: "migracion_negocio_pct", label: "Migración de negocio", suffix: "%", step: 0.1, grupo: "Calidad y caídas" },
   { key: "comision_por_venta", label: "Comisión al vendedor por venta", step: 1000, grupo: "Costos variables", costo: true },
   { key: "plus_por_venta", label: "Plus al vendedor por venta", step: 1000, grupo: "Costos variables", costo: true },
   { key: "logistica_interior_pct", label: "Entregas en Interior", suffix: "%", step: 5, grupo: "Costos variables", costo: true },

@@ -22,6 +22,8 @@ def test_mes0_y_retencion_a_6_y_12_meses():
     b = r["bonos"]
     assert b["mes0"] == r["mes0"]["bono_productividad"] + r["mes0"]["bono_efectividad"]
     assert 0 < b["peso_mes0_pct"] < 100 and b["sin_bonos_mes0"] == r["bruto_mes0"] - b["mes0"]
+    # el bono efectividad se paga en el 87,5% de las activaciones (calibración real)
+    assert r["mes0"]["bono_efectividad"] == round(1950 * 0.875 * 50000)
 
 
 def test_escalas_de_bonos_y_acantilado():
@@ -44,7 +46,7 @@ def test_escalas_de_bonos_y_acantilado():
 def test_variables_editables_cambian_el_resultado():
     base = simular_facturacion({})
     # zafra plana al 100%: sin caídas → sin clawbacks y más residual
-    sin_caidas = simular_facturacion({"zafra_pct": [100.0] * 13})
+    sin_caidas = simular_facturacion({"zafra_pct": [100.0] * 13, "migracion_negocio_pct": 0})
     assert all(m["clawbacks"] == 0 for m in sin_caidas["meses"])
     assert sin_caidas["neto_12"] > base["neto_12"]
     # escala editada: bono productividad 120.000 en el escalón alcanzado
@@ -167,9 +169,9 @@ def test_ajuste_de_comisiones():
     mas5 = simular_facturacion({"ventas": 1900, "objetivo_co": 1750, "ajuste_comisiones_pct": 5})
     d0, d5 = base["derivados"], mas5["derivados"]
     # cuota 1, cuota 2 y porta suben 5%; el residual y los bonos no
-    assert d5["cuota1_ponderada"] == round(d0["cuota1_ponderada"] * 1.05)
-    assert d5["cuota2_ponderada"] == round(d0["cuota2_ponderada"] * 1.05)
-    assert d5["porta_plus_ponderado"] == round(d0["porta_plus_ponderado"] * 1.05)
+    assert abs(d5["cuota1_ponderada"] - d0["cuota1_ponderada"] * 1.05) <= 1
+    assert abs(d5["cuota2_ponderada"] - d0["cuota2_ponderada"] * 1.05) <= 1
+    assert abs(d5["porta_plus_ponderado"] - d0["porta_plus_ponderado"] * 1.05) <= 1
     assert d5["residual_por_linea"] == d0["residual_por_linea"]
     assert mas5["mes0"]["bono_productividad"] == base["mes0"]["bono_productividad"]
     assert mas5["mes0"]["activaciones_cuota1"] == round(base["mes0"]["activaciones_cuota1"] * 1.05)
@@ -306,3 +308,34 @@ def test_anual_es_aditiva_al_guarani():
     c = a["cola_post_12"]
     assert c["cobros"] + c["devoluciones"] == c["total"] == sum(c[k] for k in _FLUJOS)
     assert a["resultado"] + c["total"] == a["resultado_con_cola"] == a["veredicto"]["resultado_final"]
+
+
+
+def test_calibracion_con_liquidaciones_reales():
+    """Defaults calibrados con las 7 liquidaciones (383-389) y el manual de conceptos de Claro."""
+    from app.services.analyzers.facturacion_simulador import RESIDUAL_CURVA_DEFAULT
+    d = PARAMETROS_DEFAULT
+    assert d["porta_pct"] == 90 and d["pct_bono_efectividad_cobrado"] == 87.5 and d["pct_recalculo_productividad"] == 38
+    assert d["pct_caidas_penalizables"] == 85 and d["recupero_pct"] == 12 and d["pct_abono_acreditado"] == 48
+    assert d["migracion_negocio_pct"] == 3.2 and len(RESIDUAL_CURVA_DEFAULT) == 12
+    r = simular_facturacion({"ventas": 1000, "objetivo_co": 900})
+    m = r["meses"]
+    cuota1 = r["derivados"]["cuota1_ponderada"]
+    # residual: sigue la curva de líneas que pagan, no la zafra (mes 12: 32,4% de las líneas)
+    res_linea = r["derivados"]["residual_por_linea"]
+    assert abs(m[12]["residual"] - 1000 * 0.324 * res_linea) <= 200
+    assert abs(m[1]["residual"] - 1000 * 0.913 * res_linea) <= 500
+    # recálculo del bono: 38% de las líneas, no (1 − zafra 6)
+    assert m[6]["recalculo_productividad"] == -round(1000 * 0.995 * r["derivados"]["monto_bono_productividad"] * 0.38)
+    # cuota 2: legajo no presentado cobra 0, incompleto la mitad
+    assert abs(m[3]["cuota2"] - 1000 * 0.538 * r["derivados"]["cuota2_ponderada"] * (1 - 0.05 / 2 - 0.03)) <= 600
+    # migración de negocio: 3,2% pierde la cuota 1 completa en el mes 3
+    caidas3 = 1000 * (0.585 - 0.538)
+    sin_migr = simular_facturacion({"ventas": 1000, "objetivo_co": 900, "migracion_negocio_pct": 0})
+    assert abs((m[3]["clawbacks"] - sin_migr["meses"][3]["clawbacks"]) + 1000 * 0.032 * cuota1) <= 50
+    # caídas penalizables 85% solo sobre cuota 1 + residual; la porta se devuelve en el 100% de las caídas
+    porta_w = r["derivados"]["porta_plus_ponderado"]
+    esperado = -caidas3 * (0.85 * (cuota1 + res_linea) + 0.90 * porta_w) * (1 - 0.12)
+    assert abs(sin_migr["meses"][3]["clawbacks"] - esperado) <= 100
+    # devolución del bono efectividad: sobre la parte cobrada (87,5%)
+    assert abs(m[3]["clawback_bonos"] - (-caidas3 * 0.875 * 50000 * 0.88)) <= 2  # montos exactos (sin ponderar)
