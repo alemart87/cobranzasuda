@@ -269,7 +269,7 @@ aparece en las liquidaciones móviles.
 | ACTIVACIONES · cuota 1 (*upfront*) | Comisión por instalación: 204.545 (CG15G), 245.455 (CG30G), 272.727 (CG50B / C100X), 436.364 (C200X). | Mes de la venta |
 | ACTIVACIONES · cuota 2 (*diferido*) | 34.091 / 81.818 / 109.091 / 136.364 / 181.818 por plan. Se paga si la línea está activa al día 90 y el legajo está completo; incompleto cobra 50%, no presentado cobra 0. Sale en 0 para las líneas caídas. | ~100 días (mes 3) |
 | ACTIVACION PORTABILIDAD NUMERICA (plus porta) | 218.182 / 245.455 / 327.273 / 409.091 / 545.455 por plan, en las activaciones con portación (90% de las ventas). | Mes de la venta |
-| INCENTIVO PRODUCTIVIDAD (1771) | Por línea en estado A (la observación de cada fila informa "Obj CO / %Cumpl."); monto por escala de cumplimiento del objetivo CO. Escala 2026 observada: ≥100% 110.000 · ≥95% 50.000 · <95% 0. En 2025 el tramo ≥100% pagó 95.000. Objetivos informados: 1.950 (nov-25), 1.750 (dic-25), 1.900 (ene a may-26). | Mes de la venta |
+| INCENTIVO PRODUCTIVIDAD (1771) | Por línea en estado A (la observación de cada fila informa "Obj CO / %Cumpl."); monto por escala de cumplimiento del objetivo CO. Escala vigente comunicada por Claro: ≥110% 120.000 · ≥105% 115.000 · ≥100% 105.000 · ≥95% 40.000 · <95% 0. Historial liquidado: 2025 pagó 95.000 al ≥100%; ene a may 2026 pagó 110.000 al ≥100% y 50.000 entre 95 y 100%. Objetivos informados: 1.950 (nov-25), 1.750 (dic-25), 1.900 (ene a may-26). | Mes de la venta |
 | RECALCULO INCENTIVO PRODUCTIVIDAD (1871) | Descuenta el bono de las líneas que no llegaron activas al día 180 (las suspendidas sin cancelar cuentan como activas). | Mes 6 |
 | INCENTIVO EFECTIVIDAD DISTRIBUCION (1891) | 50.000 / 45.000 / 35.000 por venta según efectividad de entregas (≥85 / ≥82 / ≥80%). Se paga en una parte de las activaciones (87,5%). | Mes de la venta |
 | DESCUENTO INCENTIVOS POR PENALIDAD | Devuelve el bono efectividad de la línea que cae dentro del chargeback. | Con la caída |
@@ -330,8 +330,9 @@ débito más grande y supera a las suspensiones; los legajos de mayo (111 M) son
 | 388 (abr-26) | 1.900 | 100,5% | 110.000 |
 | 389 (may-26) | 1.900 | 96,2% | 50.000 |
 
-Si no se llega al objetivo se paga el escalón alcanzado: 50.000 por línea entre 95% y 100%, y nada por debajo
-del 95%. Las líneas en estado C o S ("no suma y no paga") quedan fuera: entre 3 y 10 por mes.
+Si no se llega al objetivo se paga el escalón alcanzado y nada por debajo del 95%. Con la escala vigente: entre
+95% y 100% son 40.000 por línea; al 100% 105.000; al 105% 115.000; al 110% 120.000. Las líneas en estado C o S
+("no suma y no paga") quedan fuera: entre 3 y 10 por mes.
 
 **Indicadores medidos por liquidación** (base de la calibración):
 
@@ -428,7 +429,7 @@ facturación (mes 0, 6 y 12 meses) − costo de la estructura; punto de equilibr
 | Efectividad de entregas | 89% | Real 88,5–89,1% |
 | Activaciones que cobran bono efectividad | 87,5% | 82–91% por liquidación |
 | Líneas en estado A | 99,5% | Bono productividad pagado en todas las activaciones salvo 3 a 10 líneas en estado C/S por mes |
-| Escala del bono productividad | ≥100% 110.000 · ≥95% 50.000 · <95% 0 | Liquidaciones 2026; tramos ≥105/110% no observados, quedan en 110.000 |
+| Escala del bono productividad | ≥110% 120.000 · ≥105% 115.000 · ≥100% 105.000 · ≥95% 40.000 · <95% 0 | Escala vigente comunicada por Claro (ene–may 2026 liquidó 110.000 / 50.000) |
 | Legajo incompleto / no presentado | 5% (50%) / 3% (100%) | 11.500 Gs por activación sin el pico de mayo |
 | Cuota 2 | mes 3, zafra al día 90 | 53% cobra, 27.491 Gs por activación (modelo 26.400) |
 | Residual | 14,5% × 48% del abono, 12 meses, curva real | 78.400 Gs por activación en 12 meses |
