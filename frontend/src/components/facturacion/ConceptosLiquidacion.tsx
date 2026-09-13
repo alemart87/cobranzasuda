@@ -8,7 +8,31 @@ export const CONCEPTOS_RECUPERO = {
   descontado: ["SUSPENSIONES", "DESCUENTO PORTABILIDAD NUMERICA", "DESCUENTO INCENTIVOS POR PENALIDAD", "PENALIZACION POR DEUDA"],
 };
 
-const FILAS: Array<{ fila: string; conceptos: string[]; nota?: string }> = [
+/** Verificación fila por fila en las 7 liquidaciones (383–389), exclusivamente sobre los conceptos de bonos.
+ *  Cohortes observadas hasta 12 meses (may/jun/jul-25 en la liq. 389): NO hay descuentos de bonos después del día 184. */
+export const VERIFICADO_BONOS: Record<string, { corto: string; detalle: string }> = {
+  clawback_bonos: {
+    corto: "✓ verificado · dentro de 180 días",
+    detalle: "Concepto 471: devuelve los 50.000 completos en cada caída dentro de los 180 días (máximo observado: 180). Se concentra en los meses 1 y 2 (PFI). En 6 meses devolvió el 45,8% (cohorte nov-25) y 47,4% (dic-25) de las líneas que cobraron el bono; el 472 re-acredita ~8–11% al reconectar. Nada después del día 180. Motor: clawback_bonos = caídas del mes × % que cobró el bono × monto × (1 − recupero), meses 1 a 6.",
+  },
+  recalculo_productividad: {
+    corto: "✓ verificado · una vez, día 152–184",
+    detalle: "Concepto 1871: una sola fila por línea de la cohorte, entre el día 152 y 184 (mediana 163) = liquidación del mes 6. Las caídas devuelven el 100% del bono que cobraron y las activas 0. Líneas castigadas por cohorte: jul-25 41%, ago 45%, sep 52%, oct 51%, nov 52% (promedio 48,5% = zafra al mes 6). Ningún descuento después del día 184, ni a 9 ni a 12 meses. Motor: recalculo = activaciones estado A × bono por línea × (100 − zafra[6]), solo en el mes 6.",
+  },
+};
+
+/** Chip verde con el detalle de la verificación al pasar el mouse. */
+export function Verificado({ k, className = "" }: { k: keyof typeof VERIFICADO_BONOS; className?: string }) {
+  const v = VERIFICADO_BONOS[k];
+  if (!v) return null;
+  return (
+    <span title={v.detalle} className={`inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-300 bg-emerald-50 text-emerald-800 text-[9px] font-semibold whitespace-nowrap cursor-help ${className}`}>
+      {v.corto}
+    </span>
+  );
+}
+
+const FILAS: Array<{ fila: string; conceptos: string[]; nota?: string; verificado?: { corto: string; detalle: string } }> = [
   { fila: "Activaciones (cuota 1)", conceptos: ["ACTIVACIONES · cuota 1"] },
   { fila: "Plus portabilidad", conceptos: ["ACTIVACION PORTABILIDAD NUMERICA"] },
   { fila: "Bono productividad", conceptos: ["INCENTIVO PRODUCTIVIDAD"] },
@@ -17,8 +41,8 @@ const FILAS: Array<{ fila: string; conceptos: string[]; nota?: string }> = [
   { fila: "Cuota 2", conceptos: ["ACTIVACIONES · cuota 2"] },
   { fila: "Legajos", conceptos: ["LINEA CON DOCUMENTACION FALTANTE", "AJUSTE LEGAJO"], nota: "neto de DEVOLUCION DESCUENTO DOCUMENTACION ACTIVACION" },
   { fila: "Devoluciones por caídas", conceptos: ["SUSPENSIONES", "DESCUENTO PORTABILIDAD NUMERICA", "PENALIZACION POR DEUDA", "REVERSO ACTIVACION", "CANCELACIONES", "PENALIZACIÓN POR MIGRACIÓN DE NEGOCIO"], nota: "netas del recupero por reconexión (ver conceptos devueltos); la migración de negocio va en el mes 3 sin recupero" },
-  { fila: "Devolución bono efectividad", conceptos: ["DESCUENTO INCENTIVOS POR PENALIDAD"], nota: "neto de RECUPERO INCENTIVOS REVERSO PENALIDAD" },
-  { fila: "Recálculo bono productividad", conceptos: ["RECALCULO INCENTIVO PRODUCTIVIDAD"] },
+  { fila: "Devolución bono efectividad", conceptos: ["DESCUENTO INCENTIVOS POR PENALIDAD"], nota: "neto de RECUPERO INCENTIVOS REVERSO PENALIDAD", verificado: VERIFICADO_BONOS.clawback_bonos },
+  { fila: "Recálculo bono productividad", conceptos: ["RECALCULO INCENTIVO PRODUCTIVIDAD"], verificado: VERIFICADO_BONOS.recalculo_productividad },
 ];
 
 const NO_MODELADOS = ["CAMBIO DE PLAN", "CONCEPTO INICIO DE PRESUSPENSION POR DEUDA", "DEVOLUCION DESCUENTO DOCUMENTACION ACTIVACION al día 365 (menor al 1% de la facturación)"];
@@ -50,12 +74,13 @@ export function ObservacionConceptosEERR() {
             <span className="font-semibold text-brand-ink">{f.fila}:</span>{" "}
             <span className="inline-flex flex-wrap gap-1 align-middle">{f.conceptos.map((c) => <Chip key={c} c={c} />)}</span>
             {f.nota && <span className="block text-[10px] text-brand-slate">{f.nota}</span>}
+            {f.verificado && <span className="block text-[10px] text-emerald-800 mt-0.5"><b>{f.verificado.corto}</b> — {f.verificado.detalle}</span>}
           </div>
         ))}
       </div>
       <div className="text-[10px] text-brand-slate mt-2 pt-2 border-t border-brand-border">
         <b>Recupero por reconexión</b> (neto de las devoluciones): devuelto = {CONCEPTOS_RECUPERO.devuelto.join(" + ")} ÷ descontado = {CONCEPTOS_RECUPERO.descontado.join(" + ")}. Ponderado de 7 liquidaciones: 12,1%.
-        {" "}<b>Calibración con 7 liquidaciones (nov-25 a may-26)</b>: plus porta en el 90% de las activaciones; bono efectividad cobrado en el 87,5%; cuota 2 cobrada por el 53% (zafra al día 90); la cuota 1 se pierde en el 46% de las activaciones (85% de las caídas de la zafra); recálculo del bono en el 38% de las líneas; migración de negocio 3,2%; residual 14,5% del acreditado (48% del abono) sobre la curva real de líneas que pagan.
+        {" "}<b>Calibración con 7 liquidaciones (nov-25 a may-26)</b>: plus porta en el 90% de las activaciones; bono efectividad cobrado en el 87,5%; cuota 2 cobrada por el 53% (zafra al día 90); la cuota 1 se pierde en el 46% de las activaciones (85% de las caídas de la zafra); recálculo del bono al 100% de las líneas caídas al día 180 (48,9% según zafra; real por cohorte 41–52%); migración de negocio 3,2%; residual 14,5% del acreditado (48% del abono) sobre la curva real de líneas que pagan.
         {" "}<b>No modelados</b> (no aparecen en el EERR): {NO_MODELADOS.join(", ")}.
       </div>
     </div>

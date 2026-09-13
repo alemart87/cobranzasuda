@@ -3,6 +3,7 @@
 import { formatGs } from "@/lib/format";
 import { ObservacionRecupero } from "./ConceptosLiquidacion";
 import { NumeroInput } from "./NumeroInput";
+import { Verificado } from "./ConceptosLiquidacion";
 
 function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hint?: string; abierto?: boolean; children: React.ReactNode }) {
   return (
@@ -123,9 +124,12 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="Líneas castigadas en el recálculo"
                 hint={`Claro descuenta el 100% del bono de cada línea caída, una sola vez, al día 180 (real 7 liq: 41–52% de las líneas por cohorte, promedio 48,5%; nada después). Según la zafra cargada caen ${recalcSegunZafra(p)}%${p.pct_recalculo_productividad == null ? " · automático según zafra" : ""}`}
                 value={Number(p.pct_recalculo_productividad ?? recalcSegunZafra(p))} onChange={(v) => set("pct_recalculo_productividad", v)} step={1} suffix="%" />
-              {p.pct_recalculo_productividad != null && (
-                <button onClick={() => set("pct_recalculo_productividad", null)} className="text-[11px] text-brand-primary font-semibold hover:underline">100% de las caídas (según zafra)</button>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Verificado k="recalculo_productividad" />
+                {p.pct_recalculo_productividad != null && (
+                  <button onClick={() => set("pct_recalculo_productividad", null)} className="text-[11px] text-brand-primary font-semibold hover:underline">100% de las caídas (según zafra)</button>
+                )}
+              </div>
               {escalaDistinta && (
                 <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 flex flex-wrap items-center justify-between gap-2">
                   <span><b>Escala distinta a la vigente de Claro</b> (≥110% 120.000 · ≥105% 115.000 · ≥100% 105.000 · ≥95% 40.000). Esta simulación se guardó con una escala anterior.</span>

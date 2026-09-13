@@ -9,7 +9,7 @@ import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { Bloque } from "@/components/facturacion/Bloque";
 import { HistoriaNegocio } from "@/components/facturacion/HistoriaNegocio";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
-import { ObservacionConceptosEERR } from "@/components/facturacion/ConceptosLiquidacion";
+import { ObservacionConceptosEERR, Verificado } from "@/components/facturacion/ConceptosLiquidacion";
 import { Afectados, MesAfectadoEditor, ResumenAfectados, describirVariaciones } from "@/components/facturacion/MesAfectado";
 import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
 import { Nota, NotasSimulacion } from "@/components/facturacion/NotasSimulacion";
@@ -608,7 +608,7 @@ export default function SimuladorAnualPage() {
                         <tr key={label} className={cls}>
                           <td className={`px-3 py-1 sticky left-0 ${tipo === "total" ? "bg-brand-ink" : tipo === "sub" ? "bg-brand-bg-soft" : tipo === "sep" ? "bg-brand-bg" : "bg-white"} ${tipo === "row" ? "pl-6" : ""} ${key && esMarcado(`eerr:${key}`) ? "!bg-amber-100 !text-brand-ink" : ""}`}>
                             <span className="flex items-center justify-between gap-2">
-                              <span>{label}</span>
+                              <span className="flex flex-wrap items-center gap-2">{label}{(key === "clawback_bonos" || key === "recalculo_productividad") && <Verificado k={key} />}</span>
                               {key && tipo !== "sep" && <Pin marcado={esMarcado(`eerr:${key}`)} onClick={() => toggleMarca(`eerr:${key}`, `EERR · ${label}`)} className="!w-5 !h-5 !text-[10px]" />}
                             </span>
                           </td>
