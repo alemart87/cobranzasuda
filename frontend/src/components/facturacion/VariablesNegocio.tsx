@@ -137,11 +137,16 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
             <Grupo titulo="Zafra (líneas activas por mes)" hint="curva editable">
               <p className="text-[10px] text-brand-slate">% de líneas nuevas activas en cada mes de antigüedad. Sembrada con la zafra tipo del negocio (cohortes jul-25 a ene-26).</p>
               <div className="grid grid-cols-4 gap-1.5">
-                {p.zafra_pct.map((z: number, i: number) => (
-                  <label key={i} className="text-[10px] text-brand-slate">M{i}
-                    <NumeroInput step={0.5} value={Number(z)} onChange={(n) => setZafra(i, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
-                  </label>
-                ))}
+                {p.zafra_pct.map((z: number, i: number) => {
+                  const pfi = i === 2;   // la suspensión por PFI llega a los ~60 días: es la caída del mes 1 al mes 2
+                  return (
+                    <label key={i} className={`text-[10px] ${pfi ? "text-brand-primary font-bold rounded-md ring-2 ring-brand-primary ring-offset-1 bg-brand-primary/5 px-0.5" : "text-brand-slate"}`}
+                      title={pfi ? `PFI (primera factura impaga): la caída del mes 1 al mes 2 (${Number(p.zafra_pct[1])}% → ${z}%) es la suspensión penalizable a los ~60 días. Real por cohorte: 28,7% de las ventas.` : undefined}>
+                      <span className="flex items-center justify-between">M{i}{pfi && <span className="px-1 rounded bg-brand-primary text-white text-[8px] font-bold leading-4">PFI</span>}</span>
+                      <NumeroInput step={0.5} value={Number(z)} onChange={(n) => setZafra(i, n)} className={`input !py-0.5 !px-1 text-[11px] text-right w-full ${pfi ? "border-brand-primary text-brand-primary font-bold" : ""}`} />
+                    </label>
+                  );
+                })}
               </div>
               {defaults && <button onClick={() => set("zafra_pct", defaults.zafra_pct)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar zafra tipo</button>}
               <div className="rounded-md border border-brand-border bg-brand-bg-soft p-2 text-[10px] text-brand-graphite space-y-1">
