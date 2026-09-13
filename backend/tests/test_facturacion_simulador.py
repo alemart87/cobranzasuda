@@ -142,7 +142,9 @@ def test_simulacion_anual_estructura_fija():
     assert m2["costos"]["rrhh"]["operadores_comisiones"] < m1["costos"]["rrhh"]["operadores_comisiones"]
     assert m2["costos"]["logistica_entregas"] < m1["costos"]["logistica_entregas"]
     # mes 6 (1.600 ventas = 91% del objetivo) baja de escalón; mes 8 (2.100 = 119%) llega al máximo
-    assert r["meses"][5]["escalon_productividad"] == 90 and r["meses"][7]["escalon_productividad"] == 110
+    # mes 6: 1.600 ÷ 1.750 = 91% → bajo el 95% no cobra (escala 2026); mes 8: 2.100 ÷ 1.750 = 120% → escalón 110
+    assert r["meses"][5]["escalon_productividad"] is None and r["meses"][5]["monto_bono_productividad"] == 0
+    assert r["meses"][7]["escalon_productividad"] == 110
     # consistencia anual
     a = r["anual"]
     assert a["ventas"] == sum(ventas)
