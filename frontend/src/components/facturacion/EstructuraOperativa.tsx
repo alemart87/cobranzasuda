@@ -1,6 +1,126 @@
 "use client";
 
+import { useState } from "react";
 import { formatGs, formatInt } from "@/lib/format";
+
+/** Factores que determinan el SPH/VPH neto (ventas por hora), con peso recomendado y responsable. */
+const FACTORES_SPH: Array<{ factor: string; corto: string; peso: number; responsable: string; quien: "claro" | "bpo" | "mixto"; mueve: string }> = [
+  { factor: "Calidad de la base de datos", corto: "Base de datos", peso: 35, responsable: "Claro", quien: "claro", mueve: "Contactabilidad, datos correctos, elegibilidad, saturación, perfil del cliente" },
+  { factor: "Coaching, control y ejecución comercial", corto: "Coaching / gestión BPO", peso: 25, responsable: "BPO / Voicenter", quien: "bpo", mueve: "Speech, manejo de objeciones, cierre, disciplina, productividad" },
+  { factor: "Condiciones / oferta comercial", corto: "Oferta comercial", peso: 25, responsable: "Claro", quien: "claro", mueve: "Precio, GB, beneficios, promociones, diferencial vs. operador actual" },
+  { factor: "Políticas de aprobación y netificación", corto: "Aprobación / netificación", peso: 15, responsable: "Claro / proceso Telco", quien: "mixto", mueve: "Rechazos, validaciones, titularidad, reglas de portabilidad, caída bruto→neto" },
+];
+const COLOR_QUIEN = { claro: "#E6332A", bpo: "#0EA5E9", mixto: "#F39200" };
+const MEJORA_MAXIMA_PCT = 15;
+
+/** Descomposición del VPH por factor + simulador aislado de mejora (no toca el simulador principal). */
+function FactoresVPH({ vph, ventasVend, ventas, vendedores, horasMes }: { vph: number; ventasVend: number; ventas: number; vendedores: number; horasMes: number }) {
+  const [mejora, setMejora] = useState(10);
+  const f2 = (x: number) => x.toLocaleString("es-PY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const f3 = (x: number) => x.toLocaleString("es-PY", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  const f1 = (x: number) => x.toLocaleString("es-PY", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const m = Math.min(Math.max(mejora, 0), MEJORA_MAXIMA_PCT) / 100;
+  const vphNuevo = vph * (1 + m);
+  const ventasVendNuevo = ventasVend * (1 + m);
+  const ventasMesNuevo = ventas * (1 + m);
+  const vendedoresNecesarios = ventasVendNuevo > 0 ? Math.ceil(ventas / ventasVendNuevo) : vendedores;
+  return (
+    <div className="mt-4 space-y-3">
+      <div>
+        <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Qué determina el VPH neto</div>
+        <div className="text-[11px] text-brand-slate mb-2">Peso recomendado de cada factor y quién lo mueve. El equivalente es la parte del VPH actual ({f2(vph)}) que explica cada uno.</div>
+        {/* barra apilada por factor */}
+        <div className="flex h-9 w-full rounded-md overflow-hidden border border-brand-border">
+          {FACTORES_SPH.map((x) => (
+            <div key={x.corto} title={`${x.factor} · ${x.peso}% · ${x.responsable}`} style={{ width: `${x.peso}%`, background: COLOR_QUIEN[x.quien] }}
+              className="flex items-center justify-center text-white text-[11px] font-bold px-1 truncate">
+              {x.peso}%
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-[10px] text-brand-graphite">
+          <span className="inline-flex items-center gap-1"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: COLOR_QUIEN.claro }} /> Claro</span>
+          <span className="inline-flex items-center gap-1"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: COLOR_QUIEN.bpo }} /> BPO / Voicenter</span>
+          <span className="inline-flex items-center gap-1"><i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: COLOR_QUIEN.mixto }} /> Claro / proceso Telco</span>
+        </div>
+        <div className="overflow-x-auto mt-2">
+          <table className="w-full text-[11px] min-w-[640px]">
+            <thead className="bg-brand-bg text-[9px] uppercase tracking-wider2 text-brand-slate">
+              <tr>
+                <th className="px-2 py-1.5 text-left">Factor que determina el SPH neto</th>
+                <th className="px-2 py-1.5 text-right">Peso</th>
+                <th className="px-2 py-1.5 text-left">Responsable principal</th>
+                <th className="px-2 py-1.5 text-left">Qué mueve</th>
+                <th className="px-2 py-1.5 text-right">Equivalente sobre VPH {f2(vph)}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {FACTORES_SPH.map((x) => (
+                <tr key={x.corto} className="border-t border-brand-border">
+                  <td className="px-2 py-1.5 text-brand-ink font-semibold"><span className="inline-block w-2 h-2 rounded-sm mr-1.5 align-middle" style={{ background: COLOR_QUIEN[x.quien] }} />{x.factor}</td>
+                  <td className="px-2 py-1.5 text-right font-mono">{x.peso}%</td>
+                  <td className="px-2 py-1.5">{x.responsable}</td>
+                  <td className="px-2 py-1.5 text-brand-graphite">{x.mueve}</td>
+                  <td className="px-2 py-1.5 text-right font-mono">{f3(vph * x.peso / 100)}</td>
+                </tr>
+              ))}
+              <tr className="border-t-2 border-brand-ink bg-brand-bg-soft font-bold">
+                <td className="px-2 py-1.5">Total</td>
+                <td className="px-2 py-1.5 text-right font-mono">100%</td>
+                <td className="px-2 py-1.5">—</td>
+                <td className="px-2 py-1.5">SPH neto</td>
+                <td className="px-2 py-1.5 text-right font-mono">{f3(vph)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="mt-2 rounded-md border-l-4 border-brand-primary bg-brand-primary/5 px-3 py-2 text-[12px] text-brand-ink">
+          <b>Leyenda.</b> Con controles y coaching efectivos el VPH puede mejorar hasta un <b>{MEJORA_MAXIMA_PCT}%</b>. El <b>{100 - MEJORA_MAXIMA_PCT}%</b> restante corresponde a bases de datos, oferta comercial, políticas de aprobación y otras políticas de Claro.
+        </div>
+      </div>
+
+      {/* simulador aislado */}
+      <div className="rounded-md border-2 border-dashed border-sky-300 bg-sky-50/60 p-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div className="text-[10px] uppercase tracking-wider2 text-sky-800 font-bold">Simulador aislado · ¿cómo quedarían las ventas por operador?</div>
+          <div className="text-[10px] text-sky-800">no afecta al simulador: solo se calcula acá</div>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 mt-2">
+          <label className="text-[11px] text-brand-graphite">Mejora del VPH por coaching y control</label>
+          <input type="range" min={0} max={MEJORA_MAXIMA_PCT} step={1} value={Math.min(mejora, MEJORA_MAXIMA_PCT)} onChange={(e) => setMejora(Number(e.target.value))} className="w-48 accent-sky-600" />
+          <span className="font-mono font-bold text-sky-800 text-sm">+{Math.min(mejora, MEJORA_MAXIMA_PCT)}%</span>
+          <span className="text-[10px] text-brand-slate">mejora máxima posible: {MEJORA_MAXIMA_PCT}% sobre el SPH total</span>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+          <div className="rounded-md border border-sky-200 bg-white p-3 text-center">
+            <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">VPH</div>
+            <div className="font-display text-2xl text-brand-ink leading-tight mt-1">{f2(vph)} → <span className="text-sky-700">{f2(vphNuevo)}</span></div>
+            <div className="text-[10px] text-brand-slate mt-1">ventas por hora por vendedor</div>
+          </div>
+          <div className="rounded-md border border-sky-200 bg-white p-3 text-center">
+            <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Ventas por vendedor / mes</div>
+            <div className="font-display text-2xl text-brand-ink leading-tight mt-1">{f1(ventasVend)} → <span className="text-sky-700">{f1(ventasVendNuevo)}</span></div>
+            <div className="text-[10px] text-brand-slate mt-1">{f2(vphNuevo)} × {formatInt(horasMes)} h</div>
+          </div>
+          <div className="rounded-md border border-sky-200 bg-white p-3 text-center">
+            <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Ventas del mes, mismos {formatInt(vendedores)} vendedores</div>
+            <div className="font-display text-2xl text-brand-ink leading-tight mt-1">{formatInt(ventas)} → <span className="text-sky-700">{formatInt(Math.round(ventasMesNuevo))}</span></div>
+            <div className="text-[10px] text-brand-slate mt-1">+{formatInt(Math.round(ventasMesNuevo - ventas))} ventas</div>
+          </div>
+          <div className="rounded-md border border-sky-200 bg-white p-3 text-center">
+            <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Vendedores para las mismas {formatInt(ventas)} ventas</div>
+            <div className="font-display text-2xl text-brand-ink leading-tight mt-1">{formatInt(vendedores)} → <span className="text-sky-700">{formatInt(vendedoresNecesarios)}</span></div>
+            <div className="text-[10px] text-brand-slate mt-1">{vendedores - vendedoresNecesarios > 0 ? `${formatInt(vendedores - vendedoresNecesarios)} vendedores menos` : "misma estructura"}</div>
+          </div>
+        </div>
+        <div className="mt-2 text-[11px] text-brand-graphite">
+          <b className="text-brand-ink">Para volver a simular con este dato:</b> cargá <b className="font-mono text-sky-800">{f1(ventasVendNuevo)}</b> ventas por vendedor en Costos (misma venta, menos estructura) o{" "}
+          <b className="font-mono text-sky-800">{formatInt(Math.round(ventasMesNuevo))}</b> ventas efectivas en el mes 1 (misma estructura, más venta).
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /** Estructura operativa necesaria: cuadros de headcount (vendedores, supervisores, backoffice…),
  *  remuneración promedio del vendedor y costo total de la estructura. Compartido por el simulador
@@ -70,6 +190,7 @@ export function EstructuraOperativa({ costos, p, ventas, sinCard = false, titulo
             <div className="text-[10px] text-brand-slate mt-1">{horasDia} h × {diasMes} días al mes</div>
           </div>
         </div>
+        <FactoresVPH vph={vph} ventasVend={ventasVend} ventas={ventas} vendedores={hc.vendedores} horasMes={horasMes} />
       </div>
       {v && (
         <div className="mt-4 rounded-md border border-brand-border bg-brand-bg-soft p-4">
