@@ -78,45 +78,47 @@ export default function CriteriosLiquidacionPage() {
   const residual12 = sum("residual", 1, 12), cuota2 = sum("cuota2", 1, 12), residual7a12 = sum("residual", 7, 12);
   const devBonos = olaBonoEf + olaRecalc;
 
+  const descubierto = margenInicial + ola;   // margen inicial − ola: lo que el mes 1 NO alcanza a cubrir si Claro descuenta toda la ola
+  const cobros12 = cuota2 + residual12;
   const pasos1: PasoCascada[] = [
-    { nombre: "Cuota 1", corto: "Cuota 1", valor: mes0.activaciones_cuota1 ?? 0, color: "#0F1116" },
-    { nombre: "Plus portabilidad", corto: "Porta", valor: mes0.portabilidad ?? 0, color: "#0EA5E9" },
-    { nombre: "Bono productividad", corto: "Bono prod.", valor: mes0.bono_productividad ?? 0, color: "#E6332A" },
-    { nombre: "Bono efectividad", corto: "Bono efect.", valor: mes0.bono_efectividad ?? 0, color: "#F39200" },
-    { nombre: "Facturación del mes 1", corto: "Facturado", valor: bruta, tipo: "total" },
-    { nombre: "Costos de la estructura", corto: "Costos", valor: -costos },
-    { nombre: "Margen inicial", corto: "Margen inicial", valor: margenInicial, tipo: "total", color: margenInicial >= 0 ? "#10B981" : "#E6332A" },
-    { nombre: "Ola potencial del chargeback (legajos, caídas, bonos, recálculo)", corto: "Ola potencial", valor: ola, color: "#E6332A" },
-    { nombre: "Margen si cae toda la ola", corto: "Con la ola", valor: margenInicial + ola, tipo: "total", color: margenInicial + ola >= 0 ? "#10B981" : "#B91C1C" },
+    { nombre: "Cuota 1", corto: "+ Cuota 1", valor: mes0.activaciones_cuota1 ?? 0, color: "#0F1116" },
+    { nombre: "Plus portabilidad", corto: "+ Porta", valor: mes0.portabilidad ?? 0, color: "#0EA5E9" },
+    { nombre: "Bono productividad", corto: "+ Bono prod.", valor: mes0.bono_productividad ?? 0, color: "#E6332A" },
+    { nombre: "Bono efectividad", corto: "+ Bono efect.", valor: mes0.bono_efectividad ?? 0, color: "#F39200" },
+    { nombre: "= Facturación del mes 1", corto: "= Facturado", valor: bruta, tipo: "total" },
+    { nombre: "− Costos de la estructura del mes", corto: "− Costos", valor: -costos },
+    { nombre: "= Margen inicial (facturado − costos)", corto: "= Margen inicial", valor: margenInicial, tipo: "total", color: margenInicial >= 0 ? "#10B981" : "#E6332A" },
+    { nombre: "− Ola potencial: lo que Claro puede descontar en 180 días (legajos, caídas, bonos, recálculo)", corto: "− Ola potencial", valor: ola, color: "#E6332A" },
+    { nombre: "= Descubierto (margen inicial − ola): lo que el mes 1 no alcanza a cubrir", corto: "= Descubierto", valor: descubierto, tipo: "total", color: descubierto >= 0 ? "#10B981" : "#B91C1C" },
   ];
   const pasos2: PasoCascada[] = [
-    { nombre: "Facturación del mes 1", corto: "Facturado", valor: bruta, tipo: "total" },
-    { nombre: "Cuota 2 y residual cobrados (6 meses)", corto: "+ Cobrado", valor: cobros6, color: "#10B981" },
-    { nombre: "Legajos", corto: "Legajos", valor: olaLegajos },
-    { nombre: "Caídas (cuota 1, porta, residual)", corto: "Caídas", valor: olaCaidas },
-    { nombre: "Devolución bono efectividad", corto: "Bono efect.", valor: olaBonoEf },
-    { nombre: "Recálculo bono productividad (día 180)", corto: "Recálculo", valor: olaRecalc },
-    { nombre: "Neto liquidado a 6 meses", corto: "Neto 6 m", valor: neto6, tipo: "total" },
-    { nombre: "Costos de la estructura", corto: "Costos", valor: -costos },
-    { nombre: "Margen a 6 meses", corto: "Margen 6 m", valor: margen6, tipo: "total", color: margen6 >= 0 ? "#10B981" : "#B91C1C" },
+    { nombre: "= Facturación del mes 1", corto: "= Facturado", valor: bruta, tipo: "total" },
+    { nombre: "+ Cuota 2 y residual cobrados en 6 meses", corto: "+ Cobrado", valor: cobros6, color: "#10B981" },
+    { nombre: "− Legajos", corto: "− Legajos", valor: olaLegajos },
+    { nombre: "− Caídas (cuota 1, porta, residual)", corto: "− Caídas", valor: olaCaidas },
+    { nombre: "− Devolución bono efectividad", corto: "− Bono efect.", valor: olaBonoEf },
+    { nombre: "− Recálculo bono productividad (día 180)", corto: "− Recálculo", valor: olaRecalc },
+    { nombre: "= Neto liquidado a 6 meses", corto: "= Neto 6 m", valor: neto6, tipo: "total" },
+    { nombre: "− Costos de la estructura del mes", corto: "− Costos", valor: -costos },
+    { nombre: "= Margen a 6 meses (neto − costos)", corto: "= Margen 6 m", valor: margen6, tipo: "total", color: margen6 >= 0 ? "#10B981" : "#B91C1C" },
   ];
   const pasos3: PasoCascada[] = [
-    { nombre: "Facturación del mes 1", corto: "Facturado", valor: bruta, tipo: "total" },
-    { nombre: "Cuota 2", corto: "+ Cuota 2", valor: cuota2, color: "#10B981" },
-    { nombre: "Residual 12 meses", corto: "+ Residual", valor: residual12, color: "#0EA5E9" },
-    { nombre: "Legajos", corto: "Legajos", valor: olaLegajos },
-    { nombre: "Caídas (cuota 1, porta, residual)", corto: "Caídas", valor: olaCaidas },
-    { nombre: "Bonos devueltos (efectividad + recálculo)", corto: "Bonos dev.", valor: devBonos },
-    { nombre: "Facturado real (neto a 12 meses)", corto: "Facturado real", valor: neto12, tipo: "total" },
-    { nombre: "Costos de la estructura", corto: "Costos", valor: -costos },
-    { nombre: "Margen real", corto: "Margen real", valor: margen12, tipo: "total", color: margen12 >= 0 ? "#10B981" : "#B91C1C" },
+    { nombre: "= Facturación del mes 1", corto: "= Facturado", valor: bruta, tipo: "total" },
+    { nombre: "+ Cuota 2", corto: "+ Cuota 2", valor: cuota2, color: "#10B981" },
+    { nombre: "+ Residual de 12 meses", corto: "+ Residual", valor: residual12, color: "#0EA5E9" },
+    { nombre: "− Legajos", corto: "− Legajos", valor: olaLegajos },
+    { nombre: "− Caídas (cuota 1, porta, residual)", corto: "− Caídas", valor: olaCaidas },
+    { nombre: "− Bonos devueltos (efectividad + recálculo)", corto: "− Bonos dev.", valor: devBonos },
+    { nombre: "= Facturado real (neto a 12 meses)", corto: "= Facturado real", valor: neto12, tipo: "total" },
+    { nombre: "− Costos de la estructura del mes", corto: "− Costos", valor: -costos },
+    { nombre: "= Margen real (facturado real − costos)", corto: "= Margen real", valor: margen12, tipo: "total", color: margen12 >= 0 ? "#10B981" : "#B91C1C" },
   ];
 
   const Z = { factura: "#0EA5E9", eerr: "#4B5563", riesgo: "#E6332A", ajustes: "#F39200", cierre: "#00B2BF" };
   const zonas1: ZonaCascada[] = [
     { nombre: "1 · Lo que Claro paga en el mes 1", desde: 0, hasta: 4, color: Z.factura, descripcion: "Cuota 1, plus porta y los dos bonos se cobran completos en la liquidación del mes." },
     { nombre: "2 · EERR del mes 1", desde: 5, hasta: 6, color: Z.eerr, descripcion: "Facturado menos la estructura del mes = margen inicial. Es el número que se ve en la primera liquidación." },
-    { nombre: "3 · Potencial de devolución", desde: 7, hasta: 8, color: Z.riesgo, descripcion: "Lo que Claro puede descontar en los 180 días siguientes (ola). No es margen ganado: es margen expuesto." },
+    { nombre: "3 · Potencial de devolución", desde: 7, hasta: 8, color: Z.riesgo, descripcion: "Una sola resta: al margen inicial se le descuenta la ola (lo que Claro puede devolver en 180 días). El resultado es el descubierto: lo que el mes 1 no cubre." },
   ];
   const zonas2: ZonaCascada[] = [
     { nombre: "1 · Facturado", desde: 0, hasta: 0, color: Z.factura, descripcion: "Punto de partida: la liquidación del mes 1." },
@@ -158,10 +160,14 @@ export default function CriteriosLiquidacionPage() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
                 <Cifra label="Se factura en el mes 1" valor={M(bruta)} sub={`${formatInt(ESCENARIO.ventas)} líneas`} />
                 <Cifra label="Margen inicial" valor={M(margenInicial)} tono={margenInicial >= 0 ? "ok" : "primary"} sub={`${pct(margenInicial, bruta)} de lo facturado`} />
-                <Cifra label="Ola potencial (180 días)" valor={M(ola)} tono="primary" sub={`${pct(-ola, bruta)} de lo facturado puede volver`} />
-                <Cifra label="Si cae toda la ola" valor={M(margenInicial + ola)} tono={margenInicial + ola >= 0 ? "ok" : "primary"} sub="sin contar lo que se cobra después" />
+                <Cifra label="Ola potencial (180 días)" valor={M(ola)} tono="primary" sub={`${pct(-ola, bruta)} de lo facturado puede volver a Claro`} />
+                <Cifra label="Descubierto = margen − ola" valor={M(descubierto)} tono={descubierto >= 0 ? "ok" : "primary"} sub={`${M(margenInicial)} de margen no cubren ${M(-ola)} de ola`} />
               </div>
-              <p className="text-[12px] text-brand-graphite mt-3"><b className="text-brand-ink">Lectura.</b> El mes 1 cobra todo y no devuelve nada. La barra roja es lo que Claro puede descontar en los 180 días siguientes: no es margen ganado, es margen expuesto.</p>
+              <div className="mt-3 rounded-md border border-brand-border bg-brand-bg-soft px-4 py-3 text-[12px] text-brand-graphite space-y-1">
+                <div><b className="text-brand-ink">Cómo leerlo.</b> Las barras con <b>+</b> suman, las de <b>−</b> restan y las de <b>=</b> son resultados. La ola no es un costo más: es <b>una sola resta</b> sobre el margen inicial.</div>
+                <div className="font-mono text-brand-ink">{M(bruta)} facturado − {M(costos)} costos = <b>{M(margenInicial)}</b> margen inicial → {M(margenInicial)} − {M(-ola)} ola = <b className="text-brand-primary">{M(descubierto)}</b> descubierto</div>
+                <div>El mes 1 cobra todo y todavía no devuelve nada. El margen inicial parece ganado, pero {pct(-ola, bruta)} de lo facturado puede volver a Claro en 180 días y el margen del mes solo cubre el {pct(margenInicial, -ola)} de esa ola. Lo que la tapa después son los cobros posteriores (cuota 2 y residual, {M(cobros12)} en 12 meses): por eso el cierre real es {M(margen12)} y no {M(descubierto)}.</div>
+              </div>
             </Momento>
 
             <Momento n={2} cuando="6 meses" titulo="Ya cayó el chargeback del bono" color="#F39200"
@@ -173,7 +179,10 @@ export default function CriteriosLiquidacionPage() {
                 <Cifra label="Queda neto a 6 meses" valor={M(neto6)} sub={`${res.pct_retenido_6}% de lo facturado`} />
                 <Cifra label="Riesgo pendiente" valor="0" tono="ok" sub={`sin devoluciones después del día 184 · por cobrar ${M(residual7a12)} de residual`} />
               </div>
-              <p className="text-[12px] text-brand-graphite mt-3"><b className="text-brand-ink">Lectura.</b> Al día 180 Claro recalcula el bono productividad y devuelve el 100% del bono de cada línea caída. Acá se cierra el riesgo: de acá en más solo entra residual.</p>
+              <div className="mt-3 rounded-md border border-brand-border bg-brand-bg-soft px-4 py-3 text-[12px] text-brand-graphite space-y-1">
+                <div className="font-mono text-brand-ink">{M(bruta)} facturado + {M(cobros6)} cobrado − {M(-ola)} devuelto = <b>{M(neto6)}</b> neto a 6 meses → {M(neto6)} − {M(costos)} costos = <b className={margen6 >= 0 ? "text-emerald-600" : "text-brand-primary"}>{M(margen6)}</b> margen a 6 meses</div>
+                <div><b className="text-brand-ink">Lectura.</b> Al día 180 Claro recalcula el bono productividad y devuelve el 100% del bono de cada línea caída. Acá se cierra el riesgo: no hay más devoluciones y de acá en más solo entra residual.</div>
+              </div>
             </Momento>
 
             <Momento n={3} cuando="Cierre del residual · 12 meses" titulo="Margen final con sus componentes" color="#0EA5E9"
@@ -185,7 +194,10 @@ export default function CriteriosLiquidacionPage() {
                 <Cifra label="Costos" valor={M(costos)} tono="orange" sub={`${formatGs(res.costos.costo_por_venta)} por línea`} />
                 <Cifra label="Margen real" valor={M(margen12)} tono={margen12 >= 0 ? "ok" : "primary"} sub={`${pct(margen12, neto12)} sobre el facturado real · ${pct(margen12, bruta)} sobre lo facturado`} />
               </div>
-              <p className="text-[12px] text-brand-graphite mt-3"><b className="text-brand-ink">Lectura.</b> Cerrado el residual, esto es lo que la cohorte dejó de verdad: {formatGs(neto12)} de {formatGs(bruta)} facturados, contra {formatGs(costos)} de estructura.</p>
+              <div className="mt-3 rounded-md border border-brand-border bg-brand-bg-soft px-4 py-3 text-[12px] text-brand-graphite space-y-1">
+                <div className="font-mono text-brand-ink">{M(bruta)} facturado + {M(cobros12)} cobrado − {M(-ola)} devuelto = <b>{M(neto12)}</b> facturado real → {M(neto12)} − {M(costos)} costos = <b className={margen12 >= 0 ? "text-emerald-600" : "text-brand-primary"}>{M(margen12)}</b> margen real</div>
+                <div><b className="text-brand-ink">Lectura.</b> Cerrado el residual, esto es lo que la cohorte dejó de verdad: {formatGs(neto12)} de {formatGs(bruta)} facturados ({res.pct_retenido_12}%), contra {formatGs(costos)} de estructura.</div>
+              </div>
             </Momento>
 
             <Bloque titulo="Estructura necesaria e indicadores" hint={hc ? `${hc.vendedores} vendedores · ${hc.total} personas · costo ${formatGs(res.costos.total)}/mes` : undefined}>
