@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatGs, formatInt } from "@/lib/format";
 import { describirVariaciones } from "./MesAfectado";
+import { dominiosAlineados } from "./ejes";
 
 /** Historia del negocio: línea de tiempo animada del escenario anual. Al dar play el
  *  gráfico se construye mes a mes y aparecen los hitos con alertas. Cada escena muestra
@@ -148,6 +149,11 @@ export function HistoriaNegocio({ res, p, nombre }: { res: any; p: any; nombre: 
     resultado: i <= paso ? m.resultado : null, margen_pct: i <= paso ? m.margen_pct : null,
     ola_devoluciones: i <= paso ? m.ola_devoluciones : null,
   }));
+  // dominios fijos sobre TODOS los meses (no solo los ya revelados) para que la animación no reescale
+  const ejes = dominiosAlineados(
+    meses.flatMap((x: any) => [x.ingreso_neto, x.costo_total, x.resultado, x.ola_devoluciones]),
+    meses.map((x: any) => x.margen_pct),
+  );
   const mesActual = paso >= 0 && paso < h ? meses[paso] : null;
   const cierre = paso >= h;
   const cola = a.cola_post_12 ?? {};
@@ -334,8 +340,8 @@ export function HistoriaNegocio({ res, p, nombre }: { res: any; p: any; nombre: 
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                     <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => { const n = nombre(v - 1); return n.length > 10 ? n.slice(0, 9) + "…" : n; }} />
-                    <YAxis yAxisId="l" fontSize={10} tickFormatter={M} />
-                    <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${v}%`} />
+                    <YAxis yAxisId="l" fontSize={10} tickFormatter={M} domain={ejes.izq} allowDataOverflow />
+                    <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${Math.round(v)}%`} domain={ejes.der} ticks={ejes.ticksDer} allowDataOverflow />
                     <Tooltip
                       formatter={(v: any, name: any) => (name === "Margen del mes" ? `${Number(v).toFixed(1)}%` : formatGs(Number(v)))}
                       labelFormatter={(l) => nombre(Number(l) - 1)}

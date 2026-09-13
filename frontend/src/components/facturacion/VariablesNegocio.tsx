@@ -3,6 +3,7 @@
 import { formatGs } from "@/lib/format";
 import { ObservacionRecupero } from "./ConceptosLiquidacion";
 import { NumeroInput } from "./NumeroInput";
+import { Verificado } from "./ConceptosLiquidacion";
 
 function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hint?: string; abierto?: boolean; children: React.ReactNode }) {
   return (
@@ -13,6 +14,13 @@ function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hi
       <div className="px-3 pb-3 space-y-2">{children}</div>
     </details>
   );
+}
+
+/** Regla de Claro: al día 180 se descuenta el 100% del bono de las líneas caídas → 100 − zafra[mes del recálculo]. */
+export function recalcSegunZafra(p: any): number {
+  const z: number[] = (p?.zafra_pct ?? []).map((x: any) => Number(x) || 0);
+  const k = Math.min(Math.max(Number(p?.recalculo_productividad_mes ?? 6), 0), Math.max(z.length - 1, 0));
+  return z.length ? Math.round((100 - z[k]) * 10) / 10 : 0;
 }
 
 function Campo({ label, hint, value, onChange, step = 1, suffix }: { label: string; hint?: string; value: number; onChange: (v: number) => void; step?: number; suffix?: string }) {
@@ -43,6 +51,9 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
   const setZafra = (i: number, v: number) => setP((prev: any) => ({ ...prev, zafra_pct: prev.zafra_pct.map((z: number, j: number) => (j === i ? v : z)) }));
   const setCurvaRes = (i: number, v: number) => setP((prev: any) => ({ ...prev, residual_curva_pct: (prev.residual_curva_pct ?? []).map((z: number, j: number) => (j === i ? v : z)) }));
   const mixTotal = p ? p.planes.reduce((s: number, pl: any) => s + Number(pl.mix_pct || 0), 0) : 0;
+  const escalaDistinta = !!(p && defaults?.escala_productividad
+    && JSON.stringify((p.escala_productividad ?? []).map((e: any) => [Number(e.desde_pct), Number(e.monto)]))
+      !== JSON.stringify(defaults.escala_productividad.map((e: any) => [Number(e.desde_pct), Number(e.monto)])));
   if (!p) return null;
   return (
     <section className="space-y-2 no-print">
@@ -110,7 +121,21 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
 
             <Grupo titulo="Bono productividad (concepto 1771)" hint="escala editable">
               <p className="text-[10px] text-brand-slate">Por línea en estado A. % cumplimiento = activaciones netas ÷ objetivo CO. Bajo la escala mínima liquida 0. Al 6º mes se descuenta el de las líneas castigadas (1871).</p>
-              <Campo label="Líneas castigadas en el recálculo" hint="% del bono que Claro descuenta al mes 6 (real 7 liq: 22–52%, 38,3% ponderado; la zafra daría 49%)" value={Number(p.pct_recalculo_productividad ?? 49)} onChange={(v) => set("pct_recalculo_productividad", v)} step={1} suffix="%" />
+              <Campo label="Líneas castigadas en el recálculo"
+                hint={`Claro descuenta el 100% del bono de cada línea caída, una sola vez, al día 180 (real 7 liq: 41–52% de las líneas por cohorte, promedio 48,5%; nada después). Según la zafra cargada caen ${recalcSegunZafra(p)}%${p.pct_recalculo_productividad == null ? " · automático según zafra" : ""}`}
+                value={Number(p.pct_recalculo_productividad ?? recalcSegunZafra(p))} onChange={(v) => set("pct_recalculo_productividad", v)} step={1} suffix="%" />
+              <div className="flex flex-wrap items-center gap-2">
+                <Verificado k="recalculo_productividad" />
+                {p.pct_recalculo_productividad != null && (
+                  <button onClick={() => set("pct_recalculo_productividad", null)} className="text-[11px] text-brand-primary font-semibold hover:underline">100% de las caídas (según zafra)</button>
+                )}
+              </div>
+              {escalaDistinta && (
+                <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900 flex flex-wrap items-center justify-between gap-2">
+                  <span><b>Escala distinta a la vigente de Claro</b> (≥110% 120.000 · ≥105% 115.000 · ≥100% 105.000 · ≥95% 40.000). Esta simulación se guardó con una escala anterior.</span>
+                  <button onClick={() => set("escala_productividad", defaults.escala_productividad)} className="px-2 py-1 rounded bg-amber-600 text-white font-semibold">Usar escala vigente</button>
+                </div>
+              )}
               {p.escala_productividad.map((e: any, i: number) => (
                 <div key={i} className="flex items-center gap-2 text-sm">
                   <span className="text-brand-slate w-8">≥</span>

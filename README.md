@@ -386,6 +386,11 @@ dev_bono_k     = − caidas_k × pct_bono_efectividad_cobrado × bono_efect_por_
 migracion_3    = − ventas × migracion_pct × cuota1                                     (k = 3, sin recupero)
 cuota2_3       = ventas × z[3] × cuota2_ponderada × (1 − incompleto ÷ 2 − no_presentado)
 recalculo_6    = − ventas × pct_estado_a × bono_prod_por_linea × pct_recalculo
+                 pct_recalculo = 100 − zafra[6] (regla de Claro: 100% del bono de TODAS las líneas caídas al día 180;
+                 48,9% con la zafra tipo). Se puede fijar a mano un % distinto.
+                 Bono efectividad (concepto 471): se devuelve completo (50.000) en cada caída dentro de los 180 días,
+                 sobre todo en los meses 1 y 2 (PFI); en 6 meses devuelve el 46–47% de las líneas que lo cobraron y
+                 se re-acredita (472) en ~8–11% de las devoluciones al reconectar. Nada después del día 180.
 ```
 
 `pen` (caídas que pierden la cuota 1) se aplica solo a la cuota 1 y su residual; el plus porta y el bono efectividad
@@ -444,7 +449,7 @@ facturación (mes 0, 6 y 12 meses) − costo de la estructura; punto de equilibr
 | Chargeback | 6 meses | Manual (180 días); descuento de porta 100% dentro de la ventana |
 | Caídas que pierden la cuota 1 | 85% de las caídas | 46% de las activaciones (susp. 29,7 + deuda 8,8 + reverso 4,8 + migración 3,2) contra 51% de caídas |
 | Migración de negocio | 3,2% en el mes 3 | 2,2–4,3% por liquidación, ~207.000 por línea |
-| Recálculo del bono productividad | 38% de las líneas, mes 6 | 22–52% por liquidación, ponderado 38,3% |
+| Recálculo del bono productividad | 100% del bono de las líneas caídas al día 180 = 100 − zafra[6] (48,9%), mes 6 | Concepto 1871, una fila por línea de la cohorte, entre el día 152 y 184: líneas castigadas jul-25 41%, ago 45%, sep 52%, oct 51%, nov 52% (promedio 48,5%). Ningún descuento de bonos después del día 184 (cohortes observadas hasta 12 meses) |
 | Recupero por reconexión | 12% | Ver definición abajo |
 | Comisión / plus del vendedor | 102.000 / 32.000 Gs por venta | Promedio real pagado |
 

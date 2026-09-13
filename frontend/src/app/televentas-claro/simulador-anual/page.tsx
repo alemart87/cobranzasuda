@@ -9,7 +9,7 @@ import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { Bloque } from "@/components/facturacion/Bloque";
 import { HistoriaNegocio } from "@/components/facturacion/HistoriaNegocio";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
-import { ObservacionConceptosEERR } from "@/components/facturacion/ConceptosLiquidacion";
+import { ObservacionConceptosEERR, Verificado } from "@/components/facturacion/ConceptosLiquidacion";
 import { Afectados, MesAfectadoEditor, ResumenAfectados, describirVariaciones } from "@/components/facturacion/MesAfectado";
 import { PostitsLienzo } from "@/components/facturacion/PostitsLienzo";
 import { Nota, NotasSimulacion } from "@/components/facturacion/NotasSimulacion";
@@ -19,6 +19,7 @@ import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
+import { dominiosAlineados } from "@/components/facturacion/ejes";
 
 const M = (v: number) => `${Math.round(v / 1e6)}M`;
 
@@ -108,6 +109,11 @@ export default function SimuladorAnualPage() {
   const setVenta = (i: number, v: number) => setVentas((prev) => prev.map((x, j) => (j === i ? v : x)));
 
   const meses: any[] = res?.meses ?? [];
+
+  const ejesResultado = dominiosAlineados(
+    meses.flatMap((x: any) => [x.ingreso_neto, x.costo_total, x.resultado, x.ola_devoluciones]),
+    meses.map((x: any) => x.margen_pct),
+  );
   const a = res?.anual;
   const hc = res?.headcount;
 
@@ -472,8 +478,8 @@ export default function SimuladorAnualPage() {
                     <ComposedChart data={meses} margin={{ top: 8, right: 12 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
-                      <YAxis yAxisId="l" fontSize={10} tickFormatter={M} />
-                      <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${v}%`} />
+                      <YAxis yAxisId="l" fontSize={10} tickFormatter={M} domain={ejesResultado.izq} allowDataOverflow />
+                      <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${Math.round(v)}%`} domain={ejesResultado.der} ticks={ejesResultado.ticksDer} allowDataOverflow />
                       <Tooltip
                         formatter={(v: any, name: any) => (name === "Margen del mes" ? `${Number(v).toFixed(1)}%` : formatGs(Number(v)))}
                         labelFormatter={(l) => nombreMes(Number(l) - 1)}
@@ -602,7 +608,7 @@ export default function SimuladorAnualPage() {
                         <tr key={label} className={cls}>
                           <td className={`px-3 py-1 sticky left-0 ${tipo === "total" ? "bg-brand-ink" : tipo === "sub" ? "bg-brand-bg-soft" : tipo === "sep" ? "bg-brand-bg" : "bg-white"} ${tipo === "row" ? "pl-6" : ""} ${key && esMarcado(`eerr:${key}`) ? "!bg-amber-100 !text-brand-ink" : ""}`}>
                             <span className="flex items-center justify-between gap-2">
-                              <span>{label}</span>
+                              <span className="flex flex-wrap items-center gap-2">{label}{(key === "clawback_bonos" || key === "recalculo_productividad") && <Verificado k={key} />}</span>
                               {key && tipo !== "sep" && <Pin marcado={esMarcado(`eerr:${key}`)} onClick={() => toggleMarca(`eerr:${key}`, `EERR · ${label}`)} className="!w-5 !h-5 !text-[10px]" />}
                             </span>
                           </td>

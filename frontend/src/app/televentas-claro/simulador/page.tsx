@@ -9,7 +9,7 @@ import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { InsightsPanel } from "@/components/televentas/InsightsPanel";
 import { Lectura } from "@/components/televentas/Lectura";
 import { ExplicacionCuadros, VeredictoCierre } from "@/components/facturacion/CierreNegocio";
-import { ObservacionConceptosEERR } from "@/components/facturacion/ConceptosLiquidacion";
+import { ObservacionConceptosEERR, Verificado } from "@/components/facturacion/ConceptosLiquidacion";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
@@ -444,12 +444,15 @@ export default function SimuladorFacturacionPage() {
                         ["+ Cuota 2", (n: number) => res.meses.slice(1, n + 1).reduce((s: number, m: any) => s + m.cuota2, 0)],
                         ["− Legajos", (n: number) => res.meses.slice(1, n + 1).reduce((s: number, m: any) => s + m.legajos, 0)],
                         ["− Clawbacks por caídas (cuota 1, porta, residual)", (n: number) => res.meses.slice(1, n + 1).reduce((s: number, m: any) => s + m.clawbacks, 0)],
-                        ["− Devolución de bonos (efectividad + recálculo productividad)", (n: number) => res.meses.slice(1, n + 1).reduce((s: number, m: any) => s + m.clawback_bonos + m.recalculo_productividad, 0)],
-                      ] as Array<[string, (n: number) => number, ((n: number) => number)?]>).map(([label, f6, f12]) => {
+                        ["− Devolución bono efectividad (cada caída, dentro de los 180 días)", (n: number) => res.meses.slice(1, n + 1).reduce((s: number, m: any) => s + m.clawback_bonos, 0), undefined, "clawback_bonos"],
+                        ["− Recálculo bono productividad (una vez, mes 6, 100% por línea caída)", (n: number) => res.meses.slice(1, n + 1).reduce((s: number, m: any) => s + m.recalculo_productividad, 0), undefined, "recalculo_productividad"],
+                      ] as Array<[string, (n: number) => number, ((n: number) => number)?, string?]>).map(([label, f6, f12, ver]) => {
                         const v6 = f6(6), v12 = (f12 ?? f6)(12);
                         return (
                           <tr key={label} className="border-t border-brand-border">
-                            <td className="px-3 py-1.5 text-brand-ink">{label}</td>
+                            <td className="px-3 py-1.5 text-brand-ink">
+                              <span className="flex flex-wrap items-center gap-2">{label}{ver && <Verificado k={ver} />}</span>
+                            </td>
                             <td className={`px-3 py-1.5 text-right font-mono ${v6 < 0 ? "text-brand-primary" : ""}`}>{formatGs(v6)}</td>
                             <td className={`px-3 py-1.5 text-right font-mono ${v12 < 0 ? "text-brand-primary" : ""}`}>{formatGs(v12)}</td>
                           </tr>
