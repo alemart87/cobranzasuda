@@ -326,11 +326,15 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         recomendaciones.append({"severidad": "warning", "titulo": f"Acantilado del bono: solo {dist_prod['margen_unidades']} activaciones de margen",
                                 "detalle": f"Si el mes cierra {dist_prod['margen_unidades'] + 1} activaciones abajo, el bono productividad cae a "
                                            f"{gs(float(inferior[0]['monto'])) if inferior else 'Gs 0'}/línea: {gs(perdida)} menos de facturación."})
-    caida_1 = 1 - z[1]
-    if caida_1 > 0.12:
+    # PFI (primera factura impaga, razón P9-735): la suspensión penalizable llega a los ~60 días, así que en
+    # la zafra vive en las caídas acumuladas de los dos primeros meses (1 − z[2]). Real por cohorte
+    # (nov-25 a mar-26): 26,9 · 27,3 · 26,9 · 28,5 · 34,1% → 28,7% de las ventas; el 16% se reconecta.
+    caida_2 = 1 - z[2]
+    if caida_2 > 0.12:
         valor_pt = act * 0.01 * clawback_linea_base * (1 - recupero)
-        recomendaciones.append({"severidad": "alert", "titulo": f"La primera factura se lleva el {caida_1 * 100:.0f}% de las líneas",
-                                "detalle": f"Cada punto de retención en el mes 1 vale {gs(valor_pt)} de clawbacks evitados. La palanca: calidad de venta y cobranza de la primera factura (P9-735)."})
+        recomendaciones.append({"severidad": "alert", "titulo": f"PFI: los dos primeros meses se llevan el {caida_2 * 100:.0f}% de las líneas",
+                                "detalle": f"La zafra pierde {(1 - z[1]) * 100:.0f}% en el mes 1 y otro {(z[1] - z[2]) * 100:.0f}% en el mes 2, donde cae la suspensión por primera factura impaga (P9-735), medida en 28,7% de las ventas por cohorte. "
+                                           f"Cada punto de retención en esos dos meses vale {gs(valor_pt)} de devoluciones evitadas. La palanca: calidad de venta y cobranza de la primera factura."})
     exp_porta = act * porta * porta_w * (1 - z[chb]) * (1 - recupero)
     recomendaciones.append({"severidad": "info", "titulo": f"Portabilidad: {gs(mes0['portabilidad'])} en el mes, {gs(exp_porta)} vuelven en chargeback",
                             "detalle": f"Con {porta * 100:.0f}% de portación, el plus de portabilidad es el componente con mayor exposición al chargeback: "
