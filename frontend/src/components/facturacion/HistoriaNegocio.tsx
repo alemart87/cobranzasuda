@@ -86,7 +86,7 @@ function armarHitos(res: any, p: any, nombre: (i: number) => string): Hito[] {
     if (m.afectado) out.push({ paso: t, severidad: "info", icono: "🎚️", titulo: `${nombre(t)} se comporta distinto`, detalle: describirVariaciones(m.variaciones ?? {}, p).join(" · ") || "variaciones propias del mes." });
     if (m.bono_adicional > 0) out.push({ paso: t, severidad: "ok", icono: "🎁", titulo: "Bono adicional cargado a mano", detalle: `${formatGs(m.bono_adicional)} entran a la facturación de ${nombre(t)}; no se devuelven.` });
     if (bonosActivos && m.monto_bono_productividad === 0) out.push({ paso: t, severidad: "alert", icono: "🎯", titulo: "Sin bono productividad",
-      detalle: `${nombre(t)} llega al ${m.cumplimiento_pct}% del objetivo: por debajo del 90% el bono productividad no se liquida.` });
+      detalle: `${nombre(t)} llega al ${m.cumplimiento_pct}% del objetivo: por debajo del ${Math.min(...((p?.escala_productividad ?? []).map((e: any) => Number(e.desde_pct))), 100)}% el bono productividad no se liquida.` });
     else if (bonosActivos && m.escalon_productividad >= 110) out.push({ paso: t, severidad: "ok", icono: "🏆", titulo: "Escalón máximo del bono", detalle: `${nombre(t)} cumple el ${m.cumplimiento_pct}% del objetivo: ${formatGs(m.monto_bono_productividad)} por línea.` });
     if (!primeraCaida && m.clawbacks < 0) { primeraCaida = true; out.push({ paso: t, severidad: "warning", icono: "📉", titulo: "Llegan las primeras caídas",
       detalle: `Las líneas de ${nombre(0)} que se cortan en el chargeback empiezan a devolverse: ${formatGs(Math.abs(m.clawbacks))} en ${nombre(t)}. Desde acá cada mes descuenta las caídas de los anteriores.` }); }

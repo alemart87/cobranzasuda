@@ -6,8 +6,8 @@ def test_mes0_y_retencion_a_6_y_12_meses():
     r = simular_facturacion({"ventas": 1950, "objetivo_co": 1750})
     d = r["derivados"]
     assert d["activaciones"] == 1950  # las ventas cargadas ya son efectivas: no se descuentan
-    # 1.940 en estado A ÷ 1.750 = 110,9% → escalón 110% (105.000); efectividad 89% → 50.000
-    assert d["monto_bono_productividad"] == 105000 and d["monto_bono_efectividad"] == 50000
+    # 1.940 en estado A ÷ 1.750 = 110,9% → escalón ≥100% (110.000, escala 2026); efectividad 89% → 50.000
+    assert d["monto_bono_productividad"] == 110000 and d["monto_bono_efectividad"] == 50000
     assert r["bruto_mes0"] == sum(r["mes0"].values())
     # A los 6 meses queda menos que lo facturado (chargebacks) y a 12 se recupera parte con residual
     assert r["neto_6"] < r["bruto_mes0"]
@@ -27,10 +27,12 @@ def test_mes0_y_retencion_a_6_y_12_meses():
 
 
 def test_escalas_de_bonos_y_acantilado():
-    # ≥100% del objetivo → 95.000; <90% → 0
+    # ≥100% del objetivo → 110.000; 95–100% → 50.000; <95% → 0 (escala 2026 observada)
     alto = simular_facturacion({"ventas": 1720, "objetivo_co": 1700})  # 100,7%
-    assert alto["derivados"]["monto_bono_productividad"] == 95000
-    bajo = simular_facturacion({"ventas": 1500, "objetivo_co": 1750})  # 85,3% < 90%
+    assert alto["derivados"]["monto_bono_productividad"] == 110000
+    medio = simular_facturacion({"ventas": 1830, "objetivo_co": 1900, "pct_estado_a": 100})  # 96,3% (como feb/may-26)
+    assert medio["derivados"]["monto_bono_productividad"] == 50000
+    bajo = simular_facturacion({"ventas": 1780, "objetivo_co": 1900, "pct_estado_a": 100})  # 93,7% < 95%
     assert bajo["derivados"]["monto_bono_productividad"] == 0
     assert "ALERTA" in bajo["conclusion"]
     # efectividad (de entregas): elige el escalón pero NO cambia las activaciones
@@ -108,7 +110,7 @@ def test_sin_bonos_con_escalon_siguiente_no_rompe():
     assert not any("escalón" in x["titulo"] for x in r["recomendaciones"])
     # y con bonos activos el mismo escenario sí informa el escalón
     con = simular_facturacion({"ventas": 1700, "objetivo_co": 1700, "pct_estado_a": 100})
-    assert con["derivados"]["monto_bono_productividad"] == 95000
+    assert con["derivados"]["monto_bono_productividad"] == 110000
 
 
 def test_remuneracion_promedio_del_vendedor():
