@@ -11,9 +11,9 @@ import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
 
 /** Criterios de liquidación · página FIJA para el directorio.
- *  Escenario: 2.000 líneas, 21 líneas por vendedor, comisión y plus vigentes, resto del modelo como está.
+ *  Escenario: 2.000 líneas, 19 líneas por vendedor, comisión y plus vigentes, resto del modelo como está.
  *  Tres momentos críticos de la facturación de UNA cohorte: mes 1, 6 meses, cierre del residual (12 meses). */
-const ESCENARIO = { ventas: 2000, ventas_por_vendedor: 21 };
+const ESCENARIO = { ventas: 2000, ventas_por_vendedor: 19 };
 
 const M = (v: number) => `${v < 0 ? "−" : ""}${Math.round(Math.abs(v) / 1e6)} M`;
 const pct = (v: number, base: number) => (base ? `${Math.round((v / base) * 1000) / 10}%` : "—");
