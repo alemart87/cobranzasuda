@@ -20,6 +20,7 @@ import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
 import { dominiosAlineados } from "@/components/facturacion/ejes";
+import { EstructuraOperativa } from "@/components/facturacion/EstructuraOperativa";
 
 const M = (v: number) => `${Math.round(v / 1e6)}M`;
 
@@ -349,7 +350,12 @@ export default function SimuladorAnualPage() {
 
           {res && a && (
             <>
-              <Bloque titulo="Datos generales operativos y financieros" abierto hint={`${horizonte} meses · ${formatInt(a.ventas)} ventas`}>
+              <Bloque titulo="Estructura operativa necesaria" hint={hc ? `${hc.vendedores} vendedores · ${hc.supervisores} supervisores · ${hc.backoffice} backoffice · ${hc.total} personas · fija los ${horizonte} meses` : "estructura fija del mes 1"}>
+                <EstructuraOperativa costos={meses[0]?.costos} p={p} ventas={ventas[0] ?? 0} sinCard
+                  intro={`Estructura del mes 1, fija para los ${horizonte} meses. Dimensionada para ${formatInt(ventas[0] ?? 0)} ventas efectivas`} />
+              </Bloque>
+
+              <Bloque titulo="Datos generales operativos y financieros" hint={`${horizonte} meses · ${formatInt(a.ventas)} ventas`}>
               <div className="rounded-md border-l-4 border-brand-ink bg-brand-bg-soft px-4 py-3 mb-4">
                 <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-1">Conclusión del período ({horizonte} meses)</h3>
                 <p className="text-[15px] text-brand-ink leading-relaxed font-medium">{res.conclusion}</p>
