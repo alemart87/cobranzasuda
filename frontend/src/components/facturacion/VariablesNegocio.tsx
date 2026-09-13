@@ -41,6 +41,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
   const setEscala = (key: string, i: number, k: string, v: number) => setP((prev: any) => ({ ...prev, [key]: prev[key].map((e: any, j: number) => (j === i ? { ...e, [k]: v } : e)) }));
   const setC = (k: string, v: any) => setP((prev: any) => ({ ...prev, costos: { ...prev.costos, [k]: v } }));
   const setZafra = (i: number, v: number) => setP((prev: any) => ({ ...prev, zafra_pct: prev.zafra_pct.map((z: number, j: number) => (j === i ? v : z)) }));
+  const setCurvaRes = (i: number, v: number) => setP((prev: any) => ({ ...prev, residual_curva_pct: (prev.residual_curva_pct ?? []).map((z: number, j: number) => (j === i ? v : z)) }));
   const mixTotal = p ? p.planes.reduce((s: number, pl: any) => s + Number(pl.mix_pct || 0), 0) : 0;
   if (!p) return null;
   return (
@@ -53,6 +54,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
             <Grupo titulo="Ventas y objetivo" abierto>
               <Campo label="Ventas efectivas del mes" hint="ya son las activaciones (cuota 1): no se descuentan" value={p.ventas} onChange={(v) => set("ventas", v)} step={10} />
               <Campo label="Efectividad de entregas" hint="solo define el escalón del bono efectividad" value={p.efectividad_pct} onChange={(v) => set("efectividad_pct", v)} step={0.5} suffix="%" />
+              <Campo label="Activaciones que cobran bono efectividad" hint="Claro lo paga en una parte de las activaciones (real 7 liq: 82–91%, 87,5% ponderado)" value={Number(p.pct_bono_efectividad_cobrado ?? 100)} onChange={(v) => set("pct_bono_efectividad_cobrado", v)} step={0.5} suffix="%" />
               <Campo label="Objetivo CO (Claro)" hint="objetivo mensual de líneas para el bono productividad" value={p.objetivo_co} onChange={(v) => set("objetivo_co", v)} step={10} />
               <Campo label="Líneas en estado A" hint="activaciones que suman para el bono" value={p.pct_estado_a} onChange={(v) => set("pct_estado_a", v)} step={0.5} suffix="%" />
               <Campo label="Portabilidad" hint="% de activaciones con portación" value={p.porta_pct} onChange={(v) => set("porta_pct", v)} step={1} suffix="%" />
@@ -94,10 +96,21 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="Residual" hint="% sobre el abono acreditado" value={p.residual_pct} onChange={(v) => set("residual_pct", v)} step={0.5} suffix="%" />
               <Campo label="Abono acreditado" hint="% del abono del plan que Claro acredita" value={p.pct_abono_acreditado} onChange={(v) => set("pct_abono_acreditado", v)} step={1} suffix="%" />
               <Campo label="Meses de residual" value={p.residual_meses} onChange={(v) => set("residual_meses", v)} />
+              <div className="border-t border-brand-border pt-2 text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Líneas que pagan residual (% por mes de antigüedad)</div>
+              <p className="text-[10px] text-brand-slate">El residual no lo cobra toda línea activa sino la que tiene monto acreditado. Curva real medida en 7 liquidaciones (146.000 filas RESIDUAL). Manda solo el residual; las caídas siguen la zafra.</p>
+              <div className="grid grid-cols-4 gap-1.5">
+                {(p.residual_curva_pct ?? []).map((z: number, i: number) => (
+                  <label key={i} className="text-[10px] text-brand-slate">M{i + 1}
+                    <NumeroInput step={0.5} value={Number(z)} onChange={(n) => setCurvaRes(i, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
+                  </label>
+                ))}
+              </div>
+              {defaults?.residual_curva_pct && <button onClick={() => set("residual_curva_pct", defaults.residual_curva_pct)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar curva real</button>}
             </Grupo>
 
             <Grupo titulo="Bono productividad (concepto 1771)" hint="escala editable">
-              <p className="text-[10px] text-brand-slate">Por línea en estado A. % cumplimiento = activaciones netas ÷ objetivo CO. Bajo la escala mínima liquida 0. Al 6º mes se descuenta el de las líneas no activas (1871).</p>
+              <p className="text-[10px] text-brand-slate">Por línea en estado A. % cumplimiento = activaciones netas ÷ objetivo CO. Bajo la escala mínima liquida 0. Al 6º mes se descuenta el de las líneas castigadas (1871).</p>
+              <Campo label="Líneas castigadas en el recálculo" hint="% del bono que Claro descuenta al mes 6 (real 7 liq: 22–52%, 38,3% ponderado; la zafra daría 49%)" value={Number(p.pct_recalculo_productividad ?? 49)} onChange={(v) => set("pct_recalculo_productividad", v)} step={1} suffix="%" />
               {p.escala_productividad.map((e: any, i: number) => (
                 <div key={i} className="flex items-center gap-2 text-sm">
                   <span className="text-brand-slate w-8">≥</span>
@@ -135,8 +148,9 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
 
             <Grupo titulo="Chargeback y recuperos">
               <Campo label="Meses de chargeback" hint="ventana de devolución (180 días)" value={p.chargeback_meses} onChange={(v) => set("chargeback_meses", v)} />
-              <Campo label="Caídas penalizables" hint="% de caídas dentro del chargeback que Claro descuenta" value={p.pct_caidas_penalizables} onChange={(v) => set("pct_caidas_penalizables", v)} step={5} suffix="%" />
-              <Campo label="Recupero por reconexión" hint="% de los descuentos que Claro devuelve después (real: 10,5%)" value={p.recupero_pct} onChange={(v) => set("recupero_pct", v)} step={0.5} suffix="%" />
+              <Campo label="Caídas que pierden la cuota 1" hint="suspensión penalizable, deuda y reverso (real: 46% de las activaciones contra 51% de caídas → 85%). El plus porta y el bono efectividad se devuelven en el 100% de las caídas" value={p.pct_caidas_penalizables} onChange={(v) => set("pct_caidas_penalizables", v)} step={5} suffix="%" />
+              <Campo label="Migración de negocio" hint="% de activaciones que pierden la cuota 1 completa por migrar de negocio (real 7 liq: 2,2–4,3%)" value={Number(p.migracion_negocio_pct ?? 0)} onChange={(v) => set("migracion_negocio_pct", v)} step={0.1} suffix="%" />
+              <Campo label="Recupero por reconexión" hint="% de los descuentos que Claro devuelve después (real 7 liq: 12,1%)" value={p.recupero_pct} onChange={(v) => set("recupero_pct", v)} step={0.5} suffix="%" />
               <ObservacionRecupero />
               <label className="flex items-center gap-2 text-sm text-brand-ink">
                 <input type="checkbox" checked={!!p.clawback_incluye_residual} onChange={(e) => set("clawback_incluye_residual", e.target.checked)} className="accent-brand-primary" />
