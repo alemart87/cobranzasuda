@@ -75,7 +75,7 @@ function FactoresVPH({ vph, ventasVend, ventas, vendedores, horasMes }: { vph: n
           </table>
         </div>
         <div className="mt-2 rounded-md border-l-4 border-brand-primary bg-brand-primary/5 px-3 py-2 text-[12px] text-brand-ink">
-          <b>Leyenda.</b> Con controles y coaching efectivos el VPH puede mejorar hasta un <b>18%</b>. El <b>82%</b> restante corresponde a bases de datos, oferta comercial, políticas de aprobación y otras políticas de Claro.
+          <b>Leyenda.</b> Con controles y coaching efectivos el VPH puede mejorar hasta un <b>{MEJORA_MAXIMA_PCT}%</b>. El <b>{100 - MEJORA_MAXIMA_PCT}%</b> restante corresponde a bases de datos, oferta comercial, políticas de aprobación y otras políticas de Claro.
         </div>
       </div>
 
