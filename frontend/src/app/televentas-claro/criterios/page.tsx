@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
 import { Bloque } from "@/components/facturacion/Bloque";
-import { Cascada, PasoCascada } from "@/components/facturacion/Cascada";
+import { Cascada, PasoCascada, ZonaCascada } from "@/components/facturacion/Cascada";
 import { ObservacionConceptosEERR, ObservacionRecupero } from "@/components/facturacion/ConceptosLiquidacion";
 import { EstructuraOperativa } from "@/components/facturacion/EstructuraOperativa";
 import { apiFetch } from "@/lib/api";
@@ -112,6 +112,22 @@ export default function CriteriosLiquidacionPage() {
     { nombre: "Margen real", corto: "Margen real", valor: margen12, tipo: "total", color: margen12 >= 0 ? "#10B981" : "#B91C1C" },
   ];
 
+  const Z = { factura: "#0EA5E9", eerr: "#4B5563", riesgo: "#E6332A", ajustes: "#F39200", cierre: "#00B2BF" };
+  const zonas1: ZonaCascada[] = [
+    { nombre: "1 · Lo que Claro paga en el mes 1", desde: 0, hasta: 4, color: Z.factura, descripcion: "Cuota 1, plus porta y los dos bonos se cobran completos en la liquidación del mes." },
+    { nombre: "2 · EERR del mes 1", desde: 5, hasta: 6, color: Z.eerr, descripcion: "Facturado menos la estructura del mes = margen inicial. Es el número que se ve en la primera liquidación." },
+    { nombre: "3 · Potencial de devolución", desde: 7, hasta: 8, color: Z.riesgo, descripcion: "Lo que Claro puede descontar en los 180 días siguientes (ola). No es margen ganado: es margen expuesto." },
+  ];
+  const zonas2: ZonaCascada[] = [
+    { nombre: "1 · Facturado", desde: 0, hasta: 0, color: Z.factura, descripcion: "Punto de partida: la liquidación del mes 1." },
+    { nombre: "2 · Lo que pasó en 6 meses", desde: 1, hasta: 6, color: Z.ajustes, descripcion: "Se cobra cuota 2 y residual; se devuelven legajos, caídas, bono efectividad y el recálculo del bono al día 180." },
+    { nombre: "3 · EERR a 6 meses", desde: 7, hasta: 8, color: Z.eerr, descripcion: "Neto a 6 meses menos la estructura = margen a 6 meses, con el riesgo ya cerrado." },
+  ];
+  const zonas3: ZonaCascada[] = [
+    { nombre: "1 · Facturado", desde: 0, hasta: 0, color: Z.factura, descripcion: "Lo que se facturó en el mes 1." },
+    { nombre: "2 · Ajustes de los 12 meses", desde: 1, hasta: 6, color: Z.ajustes, descripcion: "Todo lo que se cobró después (cuota 2, residual) y todo lo que se devolvió (legajos, caídas, bonos) = facturado real." },
+    { nombre: "3 · EERR real", desde: 7, hasta: 8, color: Z.cierre, descripcion: "Facturado real menos la estructura = margen real de la cohorte. Este es el número final." },
+  ];
   const hc = res?.costos?.headcount;
 
   return (
@@ -138,7 +154,7 @@ export default function CriteriosLiquidacionPage() {
           <>
             <Momento n={1} cuando="Mes 1" titulo="Facturación con la ola potencial del chargeback" color="#0F1116"
               headline={`Margen inicial ${M(margenInicial)} · ${pct(margenInicial, bruta)}`} headlineTono={margenInicial >= 0 ? "ok" : "primary"}>
-              <Cascada pasos={pasos1} altura={320} />
+              <Cascada pasos={pasos1} zonas={zonas1} altura={340} />
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
                 <Cifra label="Se factura en el mes 1" valor={M(bruta)} sub={`${formatInt(ESCENARIO.ventas)} líneas`} />
                 <Cifra label="Margen inicial" valor={M(margenInicial)} tono={margenInicial >= 0 ? "ok" : "primary"} sub={`${pct(margenInicial, bruta)} de lo facturado`} />
@@ -150,7 +166,7 @@ export default function CriteriosLiquidacionPage() {
 
             <Momento n={2} cuando="6 meses" titulo="Ya cayó el chargeback del bono" color="#F39200"
               headline={`Margen a 6 meses ${M(margen6)} · ${pct(margen6, neto6)}`} headlineTono={margen6 >= 0 ? "ok" : "primary"}>
-              <Cascada pasos={pasos2} altura={320} />
+              <Cascada pasos={pasos2} zonas={zonas2} altura={340} />
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
                 <Cifra label="Devuelto en 6 meses" valor={M(ola)} tono="primary" sub={`legajos ${M(olaLegajos)} · caídas ${M(olaCaidas)} · bonos ${M(devBonos)}`} />
                 <Cifra label="Cobrado en 6 meses" valor={M(cobros6)} tono="ok" sub="cuota 2 al día 90 + residual" />
@@ -162,7 +178,7 @@ export default function CriteriosLiquidacionPage() {
 
             <Momento n={3} cuando="Cierre del residual · 12 meses" titulo="Margen final con sus componentes" color="#0EA5E9"
               headline={`Margen real ${M(margen12)} · ${pct(margen12, neto12)}`} headlineTono={margen12 >= 0 ? "ok" : "primary"}>
-              <Cascada pasos={pasos3} altura={320} />
+              <Cascada pasos={pasos3} zonas={zonas3} altura={340} />
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
                 <Cifra label="Se facturó" valor={M(bruta)} sub="mes 1, bruto" />
                 <Cifra label="Facturado real" valor={M(neto12)} tono="cyan" sub={`${res.pct_retenido_12}% de lo facturado quedó`} />
