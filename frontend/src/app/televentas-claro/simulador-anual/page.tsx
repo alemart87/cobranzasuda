@@ -467,14 +467,17 @@ export default function SimuladorAnualPage() {
               <div className="grid xl:grid-cols-2 gap-6 print:block">
                 <section className="card p-5 print:mb-5">
                   <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Resultado mes a mes</h2>
-                  <p className="text-xs text-brand-slate mb-3">Ingreso neto liquidado (con ajustes de cohortes anteriores) vs costos; barras de resultado y línea de acumulado. El área roja es la ola: las devoluciones que las cohortes anteriores ya dejaron comprometidas para ese mes, venda lo que venda.</p>
+                  <p className="text-xs text-brand-slate mb-3">Ingreso neto liquidado (con ajustes de cohortes anteriores) vs costos; barras de resultado y línea de margen del mes (%, eje derecho). El área roja es la ola: las devoluciones que las cohortes anteriores ya dejaron comprometidas para ese mes, venda lo que venda.</p>
                   <ResponsiveContainer width="100%" height={260}>
                     <ComposedChart data={meses} margin={{ top: 8, right: 12 }}>
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
                       <YAxis yAxisId="l" fontSize={10} tickFormatter={M} />
-                      <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={M} />
-                      <Tooltip formatter={(v: any) => formatGs(Number(v))} labelFormatter={(l) => nombreMes(Number(l) - 1)} />
+                      <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${v}%`} />
+                      <Tooltip
+                        formatter={(v: any, name: any) => (name === "Margen del mes" ? `${Number(v).toFixed(1)}%` : formatGs(Number(v)))}
+                        labelFormatter={(l) => nombreMes(Number(l) - 1)}
+                      />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <ReferenceLine yAxisId="l" y={0} stroke="#0F1116" />
                       <Bar yAxisId="l" dataKey="ingreso_neto" name="Ingreso neto" fill="#0EA5E9" fillOpacity={0.6} />
@@ -483,13 +486,15 @@ export default function SimuladorAnualPage() {
                       <Bar yAxisId="l" dataKey="resultado" name="Resultado">
                         {meses.map((m: any) => <Cell key={m.mes} fill={m.resultado >= 0 ? "#10B981" : "#E6332A"} />)}
                       </Bar>
-                      <Line yAxisId="r" dataKey="acumulado" name="Acumulado" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 2.5 }} />
+                      <Line yAxisId="r" dataKey="margen_pct" name="Margen del mes" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 2.5 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                   <Lectura>
                     Cada mes liquida la facturación de sus ventas más lo que devuelven o suman las cohortes anteriores. El mes 1
                     no tiene ajustes (todavía no cayó nada); desde el mes 2 llegan los chargebacks y desde el 3 la cuota 2. Por
-                    eso el mes 1 suele verse mejor que el resto: el año real es la línea negra de acumulado.
+                    eso el mes 1 suele verse mejor que el resto. La línea negra es el margen de cada mes (resultado sobre
+                    ingreso neto, eje derecho): cuando se estabiliza, ese es el margen real del negocio en régimen. El
+                    acumulado del período está en la tabla de abajo y en el cierre.
                   </Lectura>
                 </section>
 
