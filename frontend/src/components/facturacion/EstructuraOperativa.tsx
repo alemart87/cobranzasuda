@@ -11,18 +11,30 @@ const FACTORES_SPH: Array<{ factor: string; corto: string; peso: number; respons
   { factor: "Políticas de aprobación y netificación", corto: "Aprobación / netificación", peso: 15, responsable: "Claro / proceso Telco", quien: "mixto", mueve: "Rechazos, validaciones, titularidad, reglas de portabilidad, caída bruto→neto" },
 ];
 const COLOR_QUIEN = { claro: "#E6332A", bpo: "#0EA5E9", mixto: "#F39200" };
-const MEJORA_MAXIMA_PCT = 100;                // mejora máxima posible (siendo excelentes en coaching), SOLO sobre el factor de coaching / gestión BPO
+/** Niveles realistas de mejora del factor coaching (tope 60%: más allá es terreno muy optimista). */
+const NIVELES_MEJORA: Array<{ nivel: number; pct: number; nombre: string; interpretacion: string; color: string; banda: "baja" | "media" | "alta" }> = [
+  { nivel: 0, pct: 0, nombre: "Sin mejora", interpretacion: "Se mantiene la gestión actual", color: "#9CA3AF", banda: "baja" },
+  { nivel: 1, pct: 10, nombre: "Ajuste básico", interpretacion: "Controles mínimos y seguimiento de speech", color: "#7DD3FC", banda: "baja" },
+  { nivel: 2, pct: 20, nombre: "Mejora moderada", interpretacion: "Coaching regular y manejo de objeciones", color: "#0EA5E9", banda: "baja" },
+  { nivel: 3, pct: 30, nombre: "Buena mejora", interpretacion: "Disciplina comercial sostenida", color: "#34D399", banda: "media" },
+  { nivel: 4, pct: 40, nombre: "Mejora fuerte", interpretacion: "Gestión de cierre y productividad por vendedor", color: "#059669", banda: "media" },
+  { nivel: 5, pct: 50, nombre: "Muy buen nivel", interpretacion: "Equipo de alto rendimiento con control diario", color: "#F59E0B", banda: "alta" },
+  { nivel: 6, pct: 60, nombre: "Escenario exigente / casi óptimo", interpretacion: "Excelencia en coaching; más de esto es muy optimista", color: "#EA580C", banda: "alta" },
+];
+const BANDAS = { baja: "0–20% · mejora baja", media: "30–40% · mejora media", alta: "50–60% · mejora alta" };
+const MEJORA_MAXIMA_PCT = NIVELES_MEJORA[NIVELES_MEJORA.length - 1].pct;   // 60%, SOLO sobre el factor de coaching / gestión BPO
 const PESO_BPO = FACTORES_SPH.filter((x) => x.quien === "bpo").reduce((s, x) => s + x.peso, 0);   // 25
-const MEJORA_MAXIMA_VPH_PCT = Math.round(MEJORA_MAXIMA_PCT * PESO_BPO) / 100;                     // 25% sobre el VPH total
+const MEJORA_MAXIMA_VPH_PCT = Math.round(MEJORA_MAXIMA_PCT * PESO_BPO) / 100;                     // 15% sobre el VPH total
 
 /** Descomposición del VPH por factor + simulador aislado de mejora (no toca el simulador principal). */
 function FactoresVPH({ vph, ventasVend, ventas, vendedores, horasMes }: { vph: number; ventasVend: number; ventas: number; vendedores: number; horasMes: number }) {
-  const [mejora, setMejora] = useState(50);
+  const [mejora, setMejora] = useState(20);
+  const nivelActual = NIVELES_MEJORA.reduce((a, n) => (Math.min(mejora, MEJORA_MAXIMA_PCT) >= n.pct ? n : a), NIVELES_MEJORA[0]);
   const f2 = (x: number) => x.toLocaleString("es-PY", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const f3 = (x: number) => x.toLocaleString("es-PY", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   const f1 = (x: number) => x.toLocaleString("es-PY", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   const mejoraFactor = Math.min(Math.max(mejora, 0), MEJORA_MAXIMA_PCT) / 100;   // sobre el factor coaching (25% del VPH)
-  const m = mejoraFactor * PESO_BPO / 100;                                         // efecto sobre el VPH total (máx. 25%)
+  const m = mejoraFactor * PESO_BPO / 100;                                         // efecto sobre el VPH total (máx. 15%)
   const vphBpo = vph * PESO_BPO / 100;
   const vphBpoNuevo = vphBpo * (1 + mejoraFactor);
   const vphNuevo = vph * (1 + m);
@@ -81,7 +93,7 @@ function FactoresVPH({ vph, ventasVend, ventas, vendedores, horasMes }: { vph: n
           </table>
         </div>
         <div className="mt-2 rounded-md border-l-4 border-brand-primary bg-brand-primary/5 px-3 py-2 text-[12px] text-brand-ink">
-          <b>Leyenda.</b> Voicenter solo maneja el factor de coaching, control y ejecución comercial, que pesa el <b>{PESO_BPO}%</b> del VPH. Con controles y coaching efectivos ese factor puede mejorar hasta un <b>{MEJORA_MAXIMA_PCT}%</b>, lo que equivale a una mejora máxima de <b>{fp(MEJORA_MAXIMA_VPH_PCT)}%</b> sobre el VPH total ({f3(vph)} → {f3(vph * (1 + MEJORA_MAXIMA_VPH_PCT / 100))}). El <b>{100 - PESO_BPO}%</b> restante del VPH corresponde a bases de datos, oferta comercial, políticas de aprobación y otras políticas de Claro.
+          <b>Leyenda.</b> Voicenter solo maneja el factor de coaching, control y ejecución comercial, que pesa el <b>{PESO_BPO}%</b> del VPH. Con controles y coaching efectivos ese factor puede mejorar hasta un <b>{MEJORA_MAXIMA_PCT}%</b> (escenario exigente; más allá es muy optimista), lo que equivale a una mejora máxima de <b>{fp(MEJORA_MAXIMA_VPH_PCT)}%</b> sobre el VPH total ({f3(vph)} → {f3(vph * (1 + MEJORA_MAXIMA_VPH_PCT / 100))}). El <b>{100 - PESO_BPO}%</b> restante del VPH corresponde a bases de datos, oferta comercial, políticas de aprobación y otras políticas de Claro.
         </div>
       </div>
 
@@ -91,11 +103,34 @@ function FactoresVPH({ vph, ventasVend, ventas, vendedores, horasMes }: { vph: n
           <div className="text-[10px] uppercase tracking-wider2 text-sky-800 font-bold">Simulador aislado · ¿cómo quedarían las ventas por operador?</div>
           <div className="text-[10px] text-sky-800">no afecta al simulador: solo se calcula acá</div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 mt-2">
-          <label className="text-[11px] text-brand-graphite">Mejora del factor coaching y control ({PESO_BPO}% del VPH)</label>
-          <input type="range" min={0} max={MEJORA_MAXIMA_PCT} step={5} value={Math.min(mejora, MEJORA_MAXIMA_PCT)} onChange={(e) => setMejora(Number(e.target.value))} className="w-48 accent-sky-600" />
-          <span className="font-mono font-bold text-sky-800 text-sm">+{Math.min(mejora, MEJORA_MAXIMA_PCT)}%</span>
-          <span className="text-[10px] text-brand-slate">máximo {MEJORA_MAXIMA_PCT}% sobre ese factor (excelencia en coaching) = {fp(MEJORA_MAXIMA_VPH_PCT)}% sobre el VPH total</span>
+        <div className="mt-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="text-[11px] text-brand-graphite">Mejora del factor coaching y control ({PESO_BPO}% del VPH)</label>
+            <span className="inline-flex items-center gap-2 px-2 py-1 rounded-md text-white text-[11px] font-bold" style={{ background: nivelActual.color }}>
+              Nivel {nivelActual.nivel} · {nivelActual.nombre} · +{nivelActual.pct}%
+            </span>
+          </div>
+          <input type="range" min={0} max={MEJORA_MAXIMA_PCT} step={10} value={Math.min(mejora, MEJORA_MAXIMA_PCT)} onChange={(e) => setMejora(Number(e.target.value))}
+            className="w-full mt-2" style={{ accentColor: nivelActual.color }} aria-label="Nivel de mejora del factor coaching" />
+          <div className="grid grid-cols-7 gap-1 mt-1">
+            {NIVELES_MEJORA.map((n) => (
+              <button key={n.nivel} type="button" onClick={() => setMejora(n.pct)} title={`${n.nombre}: ${n.interpretacion}`}
+                className={`rounded-md border px-1 py-1 text-center transition-all ${n.pct === nivelActual.pct ? "text-white border-transparent shadow" : "bg-white text-brand-graphite border-brand-border hover:border-brand-ink"}`}
+                style={n.pct === nivelActual.pct ? { background: n.color } : { borderTopColor: n.color, borderTopWidth: 3 }}>
+                <div className="text-[11px] font-bold font-mono">{n.pct}%</div>
+                <div className="text-[9px] leading-tight hidden sm:block">{n.nombre}</div>
+              </button>
+            ))}
+          </div>
+          <div className="mt-1.5 text-[11px] text-brand-ink"><b>{nivelActual.nombre}:</b> {nivelActual.interpretacion}.</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-[10px] text-brand-graphite">
+            {(["baja", "media", "alta"] as const).map((b) => (
+              <span key={b} className={`inline-flex items-center gap-1 ${nivelActual.banda === b ? "font-bold text-brand-ink" : ""}`}>
+                <i className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: b === "baja" ? "#0EA5E9" : b === "media" ? "#059669" : "#EA580C" }} /> {BANDAS[b]}
+              </span>
+            ))}
+            <span className="text-brand-slate">tope {MEJORA_MAXIMA_PCT}% = {fp(MEJORA_MAXIMA_VPH_PCT)}% sobre el VPH total</span>
+          </div>
         </div>
         <div className="mt-2 rounded-md border border-sky-200 bg-white px-3 py-2 text-[11px] text-brand-graphite">
           Componente coaching del VPH: <b className="font-mono">{f3(vphBpo)}</b> → <b className="font-mono text-sky-700">{f3(vphBpoNuevo)}</b> (+{Math.min(mejora, MEJORA_MAXIMA_PCT)}%).
