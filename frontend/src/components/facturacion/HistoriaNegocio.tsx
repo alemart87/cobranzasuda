@@ -145,7 +145,8 @@ export function HistoriaNegocio({ res, p, nombre }: { res: any; p: any; nombre: 
   const visibles = hitos.filter((x) => x.paso <= paso);
   const data = meses.map((m, i) => ({
     mes: m.mes, ingreso_neto: i <= paso ? m.ingreso_neto : null, costo_total: i <= paso ? m.costo_total : null,
-    resultado: i <= paso ? m.resultado : null, acumulado: i <= paso ? m.acumulado : null,
+    resultado: i <= paso ? m.resultado : null, margen_pct: i <= paso ? m.margen_pct : null,
+    ola_devoluciones: i <= paso ? m.ola_devoluciones : null,
   }));
   const mesActual = paso >= 0 && paso < h ? meses[paso] : null;
   const cierre = paso >= h;
@@ -260,6 +261,14 @@ export function HistoriaNegocio({ res, p, nombre }: { res: any; p: any; nombre: 
                       { label: "Costos del mes", valor: mesActual.costo_total, op: "−" },
                       { label: "Resultado del mes", valor: mesActual.resultado, op: "=", destacado: true },
                     ]} />
+                    <div className="flex flex-wrap gap-2 text-[11px]">
+                      <span className={`px-2 py-1 rounded-md border font-mono ${mesActual.resultado >= 0 ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-red-300 bg-red-50 text-red-800"}`}>
+                        Margen del mes: {Number(mesActual.margen_pct ?? 0).toFixed(1)}%
+                      </span>
+                      <span className="px-2 py-1 rounded-md border border-red-300 bg-red-50 text-red-800 font-mono">
+                        Ola heredada: {formatGs(mesActual.ola_devoluciones ?? 0)}
+                      </span>
+                    </div>
                     <Puente pasos={[
                       { label: "Acumulado anterior", valor: mesActual.acumulado_anterior ?? mesActual.acumulado - mesActual.resultado },
                       { label: "Resultado del mes", valor: mesActual.resultado, op: "+" },
@@ -326,16 +335,20 @@ export function HistoriaNegocio({ res, p, nombre }: { res: any; p: any; nombre: 
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                     <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => { const n = nombre(v - 1); return n.length > 10 ? n.slice(0, 9) + "…" : n; }} />
                     <YAxis yAxisId="l" fontSize={10} tickFormatter={M} />
-                    <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={M} />
-                    <Tooltip formatter={(v: any) => formatGs(Number(v))} labelFormatter={(l) => nombre(Number(l) - 1)} />
+                    <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${v}%`} />
+                    <Tooltip
+                      formatter={(v: any, name: any) => (name === "Margen del mes" ? `${Number(v).toFixed(1)}%` : formatGs(Number(v)))}
+                      labelFormatter={(l) => nombre(Number(l) - 1)}
+                    />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     <ReferenceLine yAxisId="l" y={0} stroke="#0F1116" />
                     <Bar yAxisId="l" dataKey="ingreso_neto" name="Ingreso neto" fill="#0EA5E9" fillOpacity={0.6} radius={[3, 3, 0, 0]} animationDuration={600} animationEasing="ease-out" />
                     <Bar yAxisId="l" dataKey="costo_total" name="Costos" fill="#F39200" fillOpacity={0.6} radius={[3, 3, 0, 0]} animationDuration={600} animationEasing="ease-out" />
+                    <Area yAxisId="l" dataKey="ola_devoluciones" name="Ola de devoluciones heredadas" stroke="#E6332A" fill="#E6332A" fillOpacity={0.28} strokeWidth={1.5} type="monotone" connectNulls={false} animationDuration={600} />
                     <Area yAxisId="l" dataKey="resultado" name="Resultado del mes" stroke="#662483" fill="url(#hnRes)" strokeWidth={2} connectNulls={false} animationDuration={600} />
-                    <Line yAxisId="r" dataKey="acumulado" name="Acumulado" stroke="#0F1116" strokeWidth={3} dot={{ r: 3, strokeWidth: 2, fill: "#fff" }} connectNulls={false} animationDuration={600} />
+                    <Line yAxisId="r" dataKey="margen_pct" name="Margen del mes" stroke="#0F1116" strokeWidth={3} dot={{ r: 3, strokeWidth: 2, fill: "#fff" }} connectNulls={false} animationDuration={600} />
                     {Object.entries(marcadores).map(([i, hx]) => (
-                      <ReferenceDot key={i} yAxisId="r" x={Number(i) + 1} y={meses[Number(i)].acumulado} r={8} fill={SEV[hx.severidad].punto} stroke="#fff" strokeWidth={2.5}
+                      <ReferenceDot key={i} yAxisId="r" x={Number(i) + 1} y={meses[Number(i)].margen_pct} r={8} fill={SEV[hx.severidad].punto} stroke="#fff" strokeWidth={2.5}
                         label={{ value: hx.icono, position: "top", fontSize: 13 }} />
                     ))}
                   </ComposedChart>
