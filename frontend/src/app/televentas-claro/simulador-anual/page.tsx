@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
@@ -434,11 +434,40 @@ export default function SimuladorAnualPage() {
                 );
               })()}
 
-              <Bloque titulo="Gráficos del período" abierto envuelto={false} hint="resultado mes a mes · ventas vs estructura">
+              {(a.meses_en_riesgo?.length > 0) && (
+                <section className="card p-5 border-2 border-brand-primary bg-brand-primary/5">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-[260px] flex-1">
+                      <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-primary">Riesgo potencial por bajar productividad · la ola de la zafra</div>
+                      <div className="font-display text-2xl text-brand-ink uppercase mt-0.5">{a.meses_en_riesgo.length} de {horizonte} meses no cubren la ola heredada</div>
+                      <p className="text-[13px] text-brand-graphite leading-relaxed mt-2">
+                        Cada mes de ventas deja comprometidas devoluciones para los meses siguientes (caídas del chargeback, recálculo del bono, legajos).
+                        Con ventas estables esa ola crece hasta estabilizarse alrededor del mes {a.ola_maxima_mes} ({formatGs(Math.abs(a.ola_maxima))} por mes). Si después las ventas bajan,
+                        la ola sigue pegando sobre una facturación menor y el mes pierde, aunque la estructura no cambie. El área roja de los gráficos muestra esa ola y las ventas mínimas que exige.
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {a.meses_en_riesgo.map((mm: number) => {
+                          const f = meses[mm - 1];
+                          return <span key={mm} className="px-2 py-0.5 rounded-full bg-brand-primary text-white text-[11px] font-bold">{nombreMes(mm - 1)}: {formatInt(f.ventas)} vs {f.ventas_equilibrio == null ? "ni triplicando" : `${formatInt(f.ventas_equilibrio)} necesarias`}</span>;
+                        })}
+                      </div>
+                    </div>
+                    <div className="rounded-md border border-brand-border bg-white px-4 py-3 text-right">
+                      <div className="text-[9px] uppercase tracking-wider2 text-brand-slate">Ola máxima</div>
+                      <div className="font-mono text-lg font-bold text-brand-primary">{formatGs(Math.abs(a.ola_maxima))}</div>
+                      <div className="text-[10px] text-brand-slate">devoluciones heredadas en {nombreMes(a.ola_maxima_mes - 1)}</div>
+                      <div className="text-[9px] uppercase tracking-wider2 text-brand-slate mt-2">Ventas mínimas para no perder</div>
+                      <div className="font-mono text-lg font-bold text-brand-ink">hasta {formatInt(a.ventas_equilibrio_max)} / mes</div>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              <Bloque titulo="Gráficos del período" abierto envuelto={false} hint="resultado mes a mes · ventas vs estructura · ola de la zafra en rojo">
               <div className="grid xl:grid-cols-2 gap-6 print:block">
                 <section className="card p-5 print:mb-5">
                   <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Resultado mes a mes</h2>
-                  <p className="text-xs text-brand-slate mb-3">Ingreso neto liquidado (con ajustes de cohortes anteriores) vs costos; barras de resultado y línea de acumulado.</p>
+                  <p className="text-xs text-brand-slate mb-3">Ingreso neto liquidado (con ajustes de cohortes anteriores) vs costos; barras de resultado y línea de acumulado. El área roja es la ola: las devoluciones que las cohortes anteriores ya dejaron comprometidas para ese mes, venda lo que venda.</p>
                   <ResponsiveContainer width="100%" height={260}>
                     <ComposedChart data={meses} margin={{ top: 8, right: 12 }}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -450,6 +479,7 @@ export default function SimuladorAnualPage() {
                       <ReferenceLine yAxisId="l" y={0} stroke="#0F1116" />
                       <Bar yAxisId="l" dataKey="ingreso_neto" name="Ingreso neto" fill="#0EA5E9" fillOpacity={0.6} />
                       <Bar yAxisId="l" dataKey="costo_total" name="Costos" fill="#F39200" fillOpacity={0.6} />
+                      <Area yAxisId="l" dataKey="ola_devoluciones" name="Ola de devoluciones heredadas" stroke="#E6332A" fill="#E6332A" fillOpacity={0.28} strokeWidth={1.5} type="monotone" />
                       <Bar yAxisId="l" dataKey="resultado" name="Resultado">
                         {meses.map((m: any) => <Cell key={m.mes} fill={m.resultado >= 0 ? "#10B981" : "#E6332A"} />)}
                       </Bar>
@@ -475,17 +505,20 @@ export default function SimuladorAnualPage() {
                       <Tooltip labelFormatter={(l) => nombreMes(Number(l) - 1)} />
                       <Legend wrapperStyle={{ fontSize: 11 }} />
                       <Bar yAxisId="l" dataKey="ventas" name="Ventas">
-                        {meses.map((m: any) => <Cell key={m.mes} fill={m.monto_bono_productividad > 0 ? "#0EA5E9" : "#E6332A"} />)}
+                        {meses.map((m: any) => <Cell key={m.mes} fill={m.en_riesgo ? "#E6332A" : m.monto_bono_productividad > 0 ? "#0EA5E9" : "#F39200"} />)}
                       </Bar>
+                      <Area yAxisId="l" dataKey="ventas_equilibrio" name="Ventas mínimas para no perder (ola + estructura)" stroke="#E6332A" fill="#E6332A" fillOpacity={0.18} strokeWidth={2} strokeDasharray="5 3" type="monotone" connectNulls={false} />
                       <ReferenceLine yAxisId="l" y={Number(p.objetivo_co)} stroke="#E6332A" strokeDasharray="6 3" label={{ value: `Objetivo ${formatInt(Number(p.objetivo_co))}`, position: "insideTopRight", fill: "#E6332A", fontSize: 10, fontWeight: 700 }} />
                       <Line yAxisId="l" dataKey="capacidad" name="Capacidad de la estructura" stroke="#0F1116" strokeDasharray="4 3" dot={false} />
                       <Line yAxisId="r" dataKey="ventas_por_vendedor" name="Ventas por vendedor" stroke="#662483" strokeWidth={2} dot={{ r: 2.5 }} />
                     </ComposedChart>
                   </ResponsiveContainer>
                   <Lectura>
-                    Barras: ventas del mes (rojas cuando no alcanzan el escalón mínimo del bono productividad y el bono se pierde). La línea
-                    punteada negra es lo que la estructura fija puede vender; la violeta, las ventas reales por vendedor. Un mes
-                    por debajo de la capacidad paga la misma estructura con menos ingresos.
+                    Barras: ventas del mes (rojas cuando quedan por debajo del área roja, naranjas cuando pierden el bono productividad). El área roja
+                    es el riesgo potencial por bajar productividad: las ventas mínimas que cada mes necesita para cubrir la ola de devoluciones
+                    heredadas de los meses anteriores más la estructura fija. Crece con meses de ventas estables y no baja cuando bajan las ventas:
+                    por eso una caída de productividad después de una racha alta pierde plata aunque la estructura sea la misma. La línea punteada
+                    negra es lo que la estructura fija puede vender; la violeta, las ventas reales por vendedor.
                   </Lectura>
                 </section>
               </div>

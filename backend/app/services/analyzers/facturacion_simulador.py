@@ -326,11 +326,15 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         recomendaciones.append({"severidad": "warning", "titulo": f"Acantilado del bono: solo {dist_prod['margen_unidades']} activaciones de margen",
                                 "detalle": f"Si el mes cierra {dist_prod['margen_unidades'] + 1} activaciones abajo, el bono productividad cae a "
                                            f"{gs(float(inferior[0]['monto'])) if inferior else 'Gs 0'}/línea: {gs(perdida)} menos de facturación."})
-    caida_1 = 1 - z[1]
-    if caida_1 > 0.12:
+    # PFI (primera factura impaga, razón P9-735): la suspensión penalizable llega a los ~60 días, así que en
+    # la zafra vive en las caídas acumuladas de los dos primeros meses (1 − z[2]). Real por cohorte
+    # (nov-25 a mar-26): 26,9 · 27,3 · 26,9 · 28,5 · 34,1% → 28,7% de las ventas; el 16% se reconecta.
+    caida_2 = 1 - z[2]
+    if caida_2 > 0.12:
         valor_pt = act * 0.01 * clawback_linea_base * (1 - recupero)
-        recomendaciones.append({"severidad": "alert", "titulo": f"La primera factura se lleva el {caida_1 * 100:.0f}% de las líneas",
-                                "detalle": f"Cada punto de retención en el mes 1 vale {gs(valor_pt)} de clawbacks evitados. La palanca: calidad de venta y cobranza de la primera factura (P9-735)."})
+        recomendaciones.append({"severidad": "alert", "titulo": f"PFI: los dos primeros meses se llevan el {caida_2 * 100:.0f}% de las líneas",
+                                "detalle": f"La zafra pierde {(1 - z[1]) * 100:.0f}% en el mes 1 y otro {(z[1] - z[2]) * 100:.0f}% en el mes 2, donde cae la suspensión por primera factura impaga (P9-735), medida en 28,7% de las ventas por cohorte. "
+                                           f"Cada punto de retención en esos dos meses vale {gs(valor_pt)} de devoluciones evitadas. La palanca: calidad de venta y cobranza de la primera factura."})
     exp_porta = act * porta * porta_w * (1 - z[chb]) * (1 - recupero)
     recomendaciones.append({"severidad": "info", "titulo": f"Portabilidad: {gs(mes0['portabilidad'])} en el mes, {gs(exp_porta)} vuelven en chargeback",
                             "detalle": f"Con {porta * 100:.0f}% de portación, el plus de portabilidad es el componente con mayor exposición al chargeback: "
@@ -659,6 +663,33 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         fila["ventas_por_vendedor"] = round(ventas[t] / headcount["vendedores"], 1) if headcount["vendedores"] else 0
         # Líneas activas: después de los 12 meses la cohorte se mantiene en su último nivel de zafra.
         fila["lineas_activas"] = round(sum(cohortes[m]["meses"][min(t - m, 12)]["lineas_activas"] for m in range(t + 1)))
+        # ---- La "ola": lo que las cohortes anteriores ya dejaron comprometido para este mes, venda lo que venda ----
+        fila["ola_devoluciones"] = fila["legajos"] + fila["clawbacks"] + fila["clawback_bonos"] + fila["recalculo_productividad"]
+        fila["ola_cobros"] = fila["residual"] + fila["cuota2"]
+        # Ventas mínimas del mes para no perder: bruta(v) + ajustes heredados − costos(v) ≥ 0, con la
+        # estructura fija (bisección sobre v; los bonos hacen escalones, se busca el primer v que cierra).
+        pm_t = _aplicar_afectado(base, afectados.get(t))
+
+        def _resultado_con(v: float) -> float:
+            c2 = simular_facturacion({**pm_t, "ventas": v, "bono_adicional": bonos_ad[t], "_sin_breakeven": True})
+            cst, _ = _costos_y_margen(c2["parametros"]["costos"], v, c2["mes0"], c2["bruto_mes0"],
+                                      c2["neto_6"], c2["neto_12"], headcount=headcount)
+            return c2["bruto_mes0"] + fila["ajustes"] - cst["total"]
+        hi = max(ventas[t] * 3, 500.0)
+        if _resultado_con(0.0) >= 0:
+            fila["ventas_equilibrio"] = 0
+        elif _resultado_con(hi) < 0:
+            fila["ventas_equilibrio"] = None      # ni triplicando las ventas cierra este mes
+        else:
+            lo, up = 0.0, hi
+            for _ in range(24):
+                mid = (lo + up) / 2
+                if _resultado_con(mid) >= 0:
+                    up = mid
+                else:
+                    lo = mid
+            fila["ventas_equilibrio"] = int(math.ceil(up))
+        fila["en_riesgo"] = fila["ventas_equilibrio"] is None or ventas[t] < fila["ventas_equilibrio"]
         meses.append(fila)
 
     # Cola después del horizonte: flujos de las cohortes que caen fuera de él.
@@ -708,6 +739,11 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "mejor_mes": max(meses, key=lambda f: f["resultado"])["mes"],
         "peor_mes": min(meses, key=lambda f: f["resultado"])["mes"],
         "meses_sin_bono_productividad": sum(1 for f in meses if f["monto_bono_productividad"] == 0),
+        # Ola de devoluciones heredadas: máximo y mes; meses donde las ventas no cubren la ola + estructura.
+        "ola_maxima": round(min(f["ola_devoluciones"] for f in meses)),
+        "ola_maxima_mes": min(meses, key=lambda f: f["ola_devoluciones"])["mes"],
+        "meses_en_riesgo": [f["mes"] for f in meses if f["en_riesgo"]],
+        "ventas_equilibrio_max": max((f["ventas_equilibrio"] or 0) for f in meses),
     }
 
     def gs(v: float) -> str:
@@ -723,6 +759,9 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
     ]
     if anual["meses_negativos"]:
         partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es {nombres[anual['peor_mes'] - 1]} y el mejor {nombres[anual['mejor_mes'] - 1]}.")
+    if anual["meses_en_riesgo"]:
+        partes.append(f"Riesgo por bajar productividad: en {len(anual['meses_en_riesgo'])} mes(es) las ventas no cubren la ola de devoluciones heredadas más la estructura fija "
+                      f"(ola máxima {gs(abs(anual['ola_maxima']))} en {nombres[anual['ola_maxima_mes'] - 1]}; hacen falta hasta {n(anual['ventas_equilibrio_max'])} ventas/mes para no perder).")
     if afectados:
         partes.append(f"{len(afectados)} mes(es) con variaciones propias (porta, efectividad, mix u otros): "
                       + ", ".join(nombres[t] for t in sorted(afectados)) + ".")

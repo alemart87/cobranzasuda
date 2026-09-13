@@ -344,3 +344,28 @@ def test_calibracion_con_liquidaciones_reales():
     assert abs(sin_migr["meses"][3]["clawbacks"] - esperado) <= 100
     # devolución del bono efectividad: sobre la parte cobrada (87,5%)
     assert abs(m[3]["clawback_bonos"] - (-caidas3 * 0.875 * 50000 * 0.88)) <= 2  # montos exactos (sin ponderar)
+
+
+def test_ola_de_devoluciones_y_ventas_de_equilibrio():
+    """Con ventas estables la ola de devoluciones heredadas crece y se estabiliza; si las ventas bajan,
+    la ola sigue pegando y el mes queda en riesgo: hacen falta más ventas de las cargadas para no perder."""
+    from app.services.analyzers.facturacion_simulador import simular_anual
+    ventas = [1900] * 8 + [1400] * 4
+    r = simular_anual({"objetivo_co": 1750}, ventas)
+    m = r["meses"]
+    assert m[0]["ola_devoluciones"] == 0 and m[0]["ola_cobros"] == 0          # el mes 1 no hereda nada
+    assert m[1]["ola_devoluciones"] < 0 and m[6]["ola_devoluciones"] < m[1]["ola_devoluciones"]   # la ola crece
+    assert m[7]["ola_devoluciones"] <= m[6]["ola_devoluciones"] * 0.9                            # y se estabiliza (mes 7 ≈ mes 8)
+    for f in m:
+        assert f["ola_devoluciones"] == f["legajos"] + f["clawbacks"] + f["clawback_bonos"] + f["recalculo_productividad"]
+        assert f["ola_cobros"] == f["residual"] + f["cuota2"]
+        assert f["ventas_equilibrio"] is None or f["ventas_equilibrio"] >= 0
+    # al bajar a 1.400 con la ola de 1.900 encima, el mes 9 queda en riesgo: equilibrio > 1.400
+    assert m[8]["en_riesgo"] and (m[8]["ventas_equilibrio"] is None or m[8]["ventas_equilibrio"] > 1400)
+    assert 9 in r["anual"]["meses_en_riesgo"]
+    assert r["anual"]["ola_maxima"] < 0 and "Riesgo por bajar productividad" in r["conclusion"]
+    # el equilibrio de un mes es coherente: con esas ventas el resultado del mes no es negativo
+    eq = m[8]["ventas_equilibrio"]
+    if eq:
+        r2 = simular_anual({"objetivo_co": 1750}, ventas[:8] + [eq] + ventas[9:])
+        assert r2["meses"][8]["resultado"] >= -1

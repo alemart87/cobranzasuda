@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Legend, Line, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
@@ -565,11 +565,16 @@ export default function SimuladorFacturacionPage() {
                       <Bar yAxisId="r" dataKey="lineas" name="Líneas activas" fill="#0EA5E9" fillOpacity={0.35} />
                       <Line yAxisId="l" dataKey="activas" name="% activas (zafra)" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3 }} />
                       <ReferenceLine yAxisId="l" x={`M${p.chargeback_meses}`} stroke="#F39200" strokeDasharray="4 3" />
+                      <ReferenceLine yAxisId="l" x="M2" stroke="#E6332A" strokeWidth={2} strokeDasharray="6 3"
+                        label={{ value: `PFI · −${(Number(p.zafra_pct[1]) - Number(p.zafra_pct[2])).toFixed(1)} pts`, position: "insideTopRight", fill: "#E6332A", fontSize: 11, fontWeight: 700 }} />
+                      <ReferenceDot yAxisId="l" x="M2" y={Number(p.zafra_pct[2])} r={7} fill="#E6332A" stroke="#fff" strokeWidth={2} />
                     </ComposedChart>
                   </ResponsiveContainer>
                   <Lectura>
                     La línea negra es el porcentaje de la cohorte que sigue activa cada mes; las barras, cuántas líneas
-                    son. Cada escalón hacia abajo antes de la línea naranja (fin del chargeback) genera devoluciones; después
+                    son. El punto rojo en M2 es la PFI (primera factura impaga): la suspensión penalizable a los ~60 días,
+                    medida en 28,7% de las ventas por cohorte, que se lleva cuota 1, un residual y el plus porta de cada línea.
+                    Cada escalón hacia abajo antes de la línea naranja (fin del chargeback) genera devoluciones; después
                     solo deja de cobrarse el residual. La caída del mes 1 es la primera factura impaga: la palanca más grande.
                   </Lectura>
                 </section>
