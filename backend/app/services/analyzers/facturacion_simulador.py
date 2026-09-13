@@ -77,10 +77,11 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
         {"desde_pct": 100, "monto": 105000}, {"desde_pct": 95, "monto": 40000},
     ],
     "recalculo_productividad_mes": 6,
-    # Regla de Claro: al día 180 se descuenta el 100% del bono de TODAS las líneas caídas. El % de líneas
-    # castigadas sale de la zafra al mes del recálculo (100 − zafra[6] = 48,9%). Las 7 liquidaciones reales
-    # mostraron menos (22–52%, ponderado 38,3%) porque parte de las suspendidas sin cancelar cuentan como
-    # activas; el modelo toma la regla completa (más conservador). None = "según zafra".
+    # Regla de Claro (verificada fila por fila en las 7 liquidaciones, concepto 1871): una sola vez, entre el
+    # día 152 y 184 (mediana 163), una fila por línea de la cohorte; las caídas devuelven el 100% de su bono
+    # y las activas 0. Líneas castigadas por cohorte: jul-25 41%, ago 45%, sep 52%, oct 51%, nov 52%
+    # (promedio 48,5%) = la zafra al mes 6 (100 − 51,1 = 48,9%). Después del día 184 no hay ningún
+    # descuento de bonos (cohortes observadas hasta 12 meses). None = "según zafra".
     "pct_recalculo_productividad": None,
     "escala_efectividad": [
         {"desde_pct": 85, "monto": 50000}, {"desde_pct": 82, "monto": 45000},

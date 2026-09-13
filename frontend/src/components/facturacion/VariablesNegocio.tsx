@@ -121,7 +121,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
             <Grupo titulo="Bono productividad (concepto 1771)" hint="escala editable">
               <p className="text-[10px] text-brand-slate">Por línea en estado A. % cumplimiento = activaciones netas ÷ objetivo CO. Bajo la escala mínima liquida 0. Al 6º mes se descuenta el de las líneas castigadas (1871).</p>
               <Campo label="Líneas castigadas en el recálculo"
-                hint={`Claro descuenta el 100% del bono de cada línea caída al día 180. Según la zafra cargada caen ${recalcSegunZafra(p)}% (real 7 liq: 22–52%)${p.pct_recalculo_productividad == null ? " · automático según zafra" : ""}`}
+                hint={`Claro descuenta el 100% del bono de cada línea caída, una sola vez, al día 180 (real 7 liq: 41–52% de las líneas por cohorte, promedio 48,5%; nada después). Según la zafra cargada caen ${recalcSegunZafra(p)}%${p.pct_recalculo_productividad == null ? " · automático según zafra" : ""}`}
                 value={Number(p.pct_recalculo_productividad ?? recalcSegunZafra(p))} onChange={(v) => set("pct_recalculo_productividad", v)} step={1} suffix="%" />
               {p.pct_recalculo_productividad != null && (
                 <button onClick={() => set("pct_recalculo_productividad", null)} className="text-[11px] text-brand-primary font-semibold hover:underline">100% de las caídas (según zafra)</button>
