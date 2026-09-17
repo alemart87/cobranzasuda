@@ -45,6 +45,97 @@ def _delta(actual: Optional[float], previo: Optional[float]) -> Optional[float]:
     return round((float(actual) - float(previo)) / float(previo) * 100, 1)
 
 
+def _dia_num(d: Any) -> Optional[int]:
+    """Día del mes de una fecha ISO 'YYYY-MM-DD' (o datetime)."""
+    try:
+        s = d.isoformat() if hasattr(d, "isoformat") else str(d)
+        return int(s[8:10])
+    except (ValueError, TypeError):
+        return None
+
+
+def _agregar_llamadas(por_dia: list[dict], hasta_dia: Optional[int]) -> dict[str, Any]:
+    """Totales de llamadas sobre la serie diaria, opcionalmente cortada al día `hasta_dia` del mes."""
+    dias = [r for r in por_dia if (dn := _dia_num(r.get("dia"))) is not None and (hasta_dia is None or dn <= hasta_dia)]
+    oferta = sum(int(r.get("oferta") or 0) for r in dias)
+    cont = sum(int(r.get("contestadas") or 0) for r in dias)
+    aband = sum(int(r.get("abandonadas") or 0) for r in dias)
+    aht_num = sum(float(r.get("aht_seg") or 0) * int(r.get("contestadas") or 0) for r in dias if r.get("aht_seg"))
+    aht_w = sum(int(r.get("contestadas") or 0) for r in dias if r.get("aht_seg"))
+    return {"dias": len(dias), "ingresadas": oferta, "contestadas": cont, "abandonadas": aband,
+            "nivel_atencion_pct": round(cont / oferta * 100, 1) if oferta else 0.0,
+            "abandono_pct": round(aband / oferta * 100, 1) if oferta else 0.0,
+            "aht_seg": round(aht_num / aht_w, 1) if aht_w else 0.0}
+
+
+def _agregar_gestiones(por_dia: list[dict], hasta_dia: Optional[int]) -> dict[str, Any]:
+    dias = [r for r in por_dia if (dn := _dia_num(r.get("dia"))) is not None and (hasta_dia is None or dn <= hasta_dia)]
+    return {"dias": len(dias), "registros": sum(int(r.get("cantidad") or 0) for r in dias)}
+
+
+def comparativo_ultimo_mes(ll: dict[str, dict], ge: dict[str, dict], meses: list[str],
+                           serie: list[dict]) -> Optional[dict[str, Any]]:
+    """Último mes vs el anterior en DOS modos: `mismos_dias` (el mes anterior cortado al
+    mismo día del mes hasta el que tiene datos el último mes, para no comparar un mes
+    activo contra uno cerrado) y `mes_cerrado` (totales completos de ambos)."""
+    if len(meses) < 2:
+        return None
+    m, p = meses[-1], meses[-2]
+    ldm, ldp = ((ll.get(m) or {}).get("data") or {}), ((ll.get(p) or {}).get("data") or {})
+    gdm, gdp = ((ge.get(m) or {}).get("data") or {}), ((ge.get(p) or {}).get("data") or {})
+    pdl_m, pdl_p = list(ldm.get("por_dia") or []), list(ldp.get("por_dia") or [])
+    pdg_m, pdg_p = list(gdm.get("por_dia") or []), list(gdp.get("por_dia") or [])
+    dias_m = [d for d in ([_dia_num(r.get("dia")) for r in pdl_m] + [_dia_num(r.get("dia")) for r in pdg_m]) if d]
+    corte = max(dias_m) if dias_m else None
+    import calendar
+    y, mo = int(m[:4]), int(m[5:7])
+    dias_del_mes = calendar.monthrange(y, mo)[1]
+    mes_activo = corte is not None and corte < dias_del_mes
+
+    def _bloque(hasta: Optional[int], usar_serie_para_actual: bool) -> dict[str, Any]:
+        la = _agregar_llamadas(pdl_m, None) if pdl_m else None
+        lp = _agregar_llamadas(pdl_p, hasta) if pdl_p else None
+        ga = _agregar_gestiones(pdg_m, None) if pdg_m else None
+        gp = _agregar_gestiones(pdg_p, hasta) if pdg_p else None
+        # sin serie diaria (reportes viejos) → totales del reporte
+        sm, sp = serie[-1], serie[-2]
+        if la is None and sm.get("llamadas"):
+            la = {**{k: sm["llamadas"].get(k) for k in ("ingresadas", "contestadas", "abandonadas", "nivel_atencion_pct", "abandono_pct", "aht_seg")}, "dias": sm["llamadas"].get("dias_operativos")}
+        if lp is None and sp.get("llamadas") and hasta is None:
+            lp = {**{k: sp["llamadas"].get(k) for k in ("ingresadas", "contestadas", "abandonadas", "nivel_atencion_pct", "abandono_pct", "aht_seg")}, "dias": sp["llamadas"].get("dias_operativos")}
+        if ga is None and sm.get("gestiones"):
+            ga = {"registros": sm["gestiones"]["total"], "dias": None}
+        if gp is None and sp.get("gestiones") and hasta is None:
+            gp = {"registros": sp["gestiones"]["total"], "dias": None}
+        actual = {**(la or {}), **({"registros": ga["registros"]} if ga else {})}
+        previo = {**(lp or {}), **({"registros": gp["registros"]} if gp else {})}
+        for b in (actual, previo):
+            b["registros_por_100_contestadas"] = round(b["registros"] / b["contestadas"] * 100, 1) if b.get("registros") is not None and b.get("contestadas") else None
+        # % auxiliares: es un ratio mensual (no hay serie diaria); se compara tal cual en ambos modos
+        actual["aux_pct"] = (sm.get("llamadas") or {}).get("aux_pct")
+        previo["aux_pct"] = (sp.get("llamadas") or {}).get("aux_pct")
+        vs = {
+            "ingresadas": _delta(actual.get("ingresadas"), previo.get("ingresadas")),
+            "contestadas": _delta(actual.get("contestadas"), previo.get("contestadas")),
+            "abandonadas": _delta(actual.get("abandonadas"), previo.get("abandonadas")),
+            "registros": _delta(actual.get("registros"), previo.get("registros")),
+            "aht_seg": _delta(actual.get("aht_seg"), previo.get("aht_seg")),
+            "nivel_atencion_pts": round(actual["nivel_atencion_pct"] - previo["nivel_atencion_pct"], 1) if actual.get("nivel_atencion_pct") is not None and previo.get("nivel_atencion_pct") is not None else None,
+            "abandono_pts": round(actual["abandono_pct"] - previo["abandono_pct"], 1) if actual.get("abandono_pct") is not None and previo.get("abandono_pct") is not None else None,
+            "registros_por_100_pts": round(actual["registros_por_100_contestadas"] - previo["registros_por_100_contestadas"], 1) if actual.get("registros_por_100_contestadas") is not None and previo.get("registros_por_100_contestadas") is not None else None,
+            "aux_pct_pts": round(actual["aux_pct"] - previo["aux_pct"], 1) if actual.get("aux_pct") is not None and previo.get("aux_pct") is not None else None,
+        }
+        return {"actual": actual, "previo": previo, "vs": vs}
+
+    return {
+        "mes": m, "mes_previo": p, "corte_dia": corte, "dias_del_mes": dias_del_mes, "mes_activo": mes_activo,
+        "tiene_serie_diaria": bool(pdl_p or pdg_p),
+        "mismos_dias": {**_bloque(corte, True), "hasta_dia": corte},
+        "mes_cerrado": _bloque(None, False),
+        "modo_default": "mismos_dias" if (mes_activo and (pdl_p or pdg_p)) else "mes_cerrado",
+    }
+
+
 def historico_atencion(llamadas: list[dict], gestiones: list[dict], top_tipos: int = 6) -> dict[str, Any]:
     ll = _elegir(llamadas)
     ge = _elegir(gestiones)
@@ -140,4 +231,5 @@ def historico_atencion(llamadas: list[dict], gestiones: list[dict], top_tipos: i
         "tipo_mas_frecuente": top[0][0] if top else None,
     }
     resumen["aux_objetivo_pct"] = OBJETIVO_AUX_PCT
-    return {"resumen": resumen, "meses": meses, "serie": serie, "tipos": tipos_out, "otros_tipos": otros, "auxiliares": aux_out}
+    return {"resumen": resumen, "meses": meses, "serie": serie, "tipos": tipos_out, "otros_tipos": otros, "auxiliares": aux_out,
+            "comparativo": comparativo_ultimo_mes(ll, ge, meses, serie)}

@@ -27,9 +27,10 @@ export default function AtencionHistoricoPage() {
   const [h, setH] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [desde, setDesde] = useState<string>("");
+  const [modo, setModo] = useState<"mismos_dias" | "mes_cerrado">("mismos_dias");
 
   useEffect(() => {
-    apiFetch<any>("/api/v1/atencion/historico").then((d) => { setH(d); if (d.meses?.length > 12) setDesde(d.meses[d.meses.length - 12]); }).catch((e) => setError(e.message));
+    apiFetch<any>("/api/v1/atencion/historico").then((d) => { setH(d); if (d.meses?.length > 12) setDesde(d.meses[d.meses.length - 12]); if (d.comparativo?.modo_default) setModo(d.comparativo.modo_default); }).catch((e) => setError(e.message));
   }, []);
 
   const serie: any[] = useMemo(() => (h?.serie ?? []).filter((p: any) => !desde || p.mes >= desde), [h, desde]);
@@ -52,7 +53,13 @@ export default function AtencionHistoricoPage() {
   });
   const objetivoAux: number = h?.resumen?.aux_objetivo_pct ?? 13;
   const ultimo = serie[serie.length - 1];
-  const ul = ultimo?.llamadas, ug = ultimo?.gestiones, uv = ultimo?.vs_mes_anterior ?? {};
+  const ul = ultimo?.llamadas, ug = ultimo?.gestiones;
+  // Comparativo del último mes: "mismos días" (mes anterior cortado al mismo día) o "mes cerrado" (totales completos).
+  const comp = h?.comparativo;
+  const bloque = comp ? comp[modo] : null;
+  const ca = bloque?.actual ?? {}, cp = bloque?.previo ?? {}, uv = bloque?.vs ?? {};
+  const etiquetaPrevio = comp ? (modo === "mismos_dias" ? `${monthLabel(comp.mes_previo)} hasta el día ${comp.corte_dia}` : `${monthLabel(comp.mes_previo)} completo`) : "mes anterior";
+  const fmtDelta = (v?: number | null, pts = false) => (v == null ? "" : `${v > 0 ? "+" : ""}${v}${pts ? " pts" : "%"}`);
 
   return (
     <AppShell>
@@ -84,15 +91,29 @@ export default function AtencionHistoricoPage() {
 
       {ultimo && (
         <>
-          <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold mb-2">Último mes · {monthLabel(ultimo.mes)} vs mes anterior</h2>
+          <div className="flex flex-wrap items-end justify-between gap-3 mb-2">
+            <div>
+              <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold">Último mes · {monthLabel(ultimo.mes)}{comp?.mes_activo ? ` (mes activo, datos hasta el día ${comp.corte_dia})` : ""} vs {etiquetaPrevio}</h2>
+              {comp && modo === "mismos_dias" && <p className="text-[11px] text-brand-slate">Se compara contra el mes anterior cortado al día {comp.corte_dia}: misma cantidad de días de calendario. Ingresadas, contestadas, abandono, AHT y registros salen de la serie diaria; el % de auxiliares es el del mes completo.</p>}
+              {comp && modo === "mes_cerrado" && <p className="text-[11px] text-brand-slate">Se compara contra el total del mes anterior completo.{comp.mes_activo ? " Ojo: el último mes todavía está en curso, las cantidades no son comparables." : ""}</p>}
+            </div>
+            {comp && (
+              <div className="inline-flex rounded-md border border-brand-border overflow-hidden no-print">
+                {([["mismos_dias", `Mismos días (1–${comp.corte_dia})`], ["mes_cerrado", "Mes cerrado"]] as const).map(([k, label]) => (
+                  <button key={k} onClick={() => setModo(k)} disabled={k === "mismos_dias" && !comp.tiene_serie_diaria}
+                    className={`px-3 py-1.5 text-xs font-bold ${modo === k ? "bg-brand-ink text-white" : "text-brand-graphite hover:bg-brand-bg disabled:opacity-40"}`}>{label}</button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
-            <KpiCard label="Llamadas ingresadas" value={formatInt(ul?.ingresadas ?? 0)} hint={uv.ingresadas != null ? `${uv.ingresadas > 0 ? "+" : ""}${uv.ingresadas}% vs mes anterior` : "sin mes anterior"} accent="neutral" />
-            <KpiCard label="Contestadas" value={formatInt(ul?.contestadas ?? 0)} hint={`nivel de atención ${ul?.nivel_atencion_pct ?? "—"}%${uv.nivel_atencion_pts != null ? ` (${uv.nivel_atencion_pts > 0 ? "+" : ""}${uv.nivel_atencion_pts} pts)` : ""}`} accent="cyan" />
-            <KpiCard label="Registros (gestiones)" value={formatInt(ug?.total ?? 0)} hint={uv.registros != null ? `${uv.registros > 0 ? "+" : ""}${uv.registros}% vs mes anterior` : "sin mes anterior"} accent="purple" />
-            <KpiCard label="Registros por 100 contestadas" value={ultimo.registros_por_100_contestadas != null ? String(ultimo.registros_por_100_contestadas) : "—"} hint="cuántas llamadas terminan en un registro" accent="secondary" />
-            <KpiCard label="AHT" value={ul ? hms(ul.aht_seg) : "—"} hint={uv.aht_seg != null ? `${uv.aht_seg > 0 ? "+" : ""}${uv.aht_seg}% vs mes anterior` : "min:seg"} accent="orange" />
-            <KpiCard label="Tipo más frecuente" value={ug?.por_tipo?.[0]?.label ?? h.resumen.tipo_mas_frecuente ?? "—"} hint={ug?.por_tipo?.[0] ? `${formatInt(ug.por_tipo[0].cantidad)} · ${ug.por_tipo[0].pct}% de los registros` : "del histórico"} accent="primary" />
-            <KpiCard label="% auxiliares (sin reunión)" value={ul?.aux_pct != null ? `${ul.aux_pct}%` : "—"} hint={`objetivo ${objetivoAux}%${uv.aux_pct_pts != null ? ` · ${uv.aux_pct_pts > 0 ? "+" : ""}${uv.aux_pct_pts} pts vs mes anterior` : ""}`} accent={ul?.aux_pct != null && ul.aux_pct > objetivoAux ? "danger" : "cyan"} />
+            <KpiCard label="Llamadas ingresadas" value={formatInt(ca.ingresadas ?? ul?.ingresadas ?? 0)} hint={uv.ingresadas != null ? `${fmtDelta(uv.ingresadas)} vs ${formatInt(cp.ingresadas ?? 0)} del período anterior` : "sin mes anterior"} accent="neutral" />
+            <KpiCard label="Contestadas" value={formatInt(ca.contestadas ?? ul?.contestadas ?? 0)} hint={`${uv.contestadas != null ? `${fmtDelta(uv.contestadas)} · ` : ""}nivel de atención ${ca.nivel_atencion_pct ?? ul?.nivel_atencion_pct ?? "—"}%${uv.nivel_atencion_pts != null ? ` (${fmtDelta(uv.nivel_atencion_pts, true)})` : ""}`} accent="cyan" />
+            <KpiCard label="Registros (gestiones)" value={formatInt(ca.registros ?? ug?.total ?? 0)} hint={uv.registros != null ? `${fmtDelta(uv.registros)} vs ${formatInt(cp.registros ?? 0)} del período anterior` : "sin mes anterior"} accent="purple" />
+            <KpiCard label="Registros por 100 contestadas" value={(ca.registros_por_100_contestadas ?? ultimo.registros_por_100_contestadas) != null ? String(ca.registros_por_100_contestadas ?? ultimo.registros_por_100_contestadas) : "—"} hint={uv.registros_por_100_pts != null ? `${fmtDelta(uv.registros_por_100_pts, true)} vs ${cp.registros_por_100_contestadas}` : "cuántas llamadas terminan en un registro"} accent="secondary" />
+            <KpiCard label="AHT" value={hms(ca.aht_seg ?? ul?.aht_seg ?? 0)} hint={uv.aht_seg != null ? `${fmtDelta(uv.aht_seg)} vs ${hms(cp.aht_seg ?? 0)}` : "min:seg"} accent="orange" />
+            <KpiCard label="Tipo más frecuente" value={ug?.por_tipo?.[0]?.label ?? h.resumen.tipo_mas_frecuente ?? "—"} hint={ug?.por_tipo?.[0] ? `${formatInt(ug.por_tipo[0].cantidad)} · ${ug.por_tipo[0].pct}% de los registros del mes` : "del histórico"} accent="primary" />
+            <KpiCard label="% auxiliares (sin reunión)" value={ul?.aux_pct != null ? `${ul.aux_pct}%` : "—"} hint={`objetivo ${objetivoAux}%${uv.aux_pct_pts != null ? ` · ${fmtDelta(uv.aux_pct_pts, true)} vs mes anterior` : ""}`} accent={ul?.aux_pct != null && ul.aux_pct > objetivoAux ? "danger" : "cyan"} />
           </div>
 
           <section className="card p-6 mb-6">
