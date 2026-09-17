@@ -345,3 +345,33 @@ def test_historico_atencion_serie_mensual_y_top_tipos():
     assert h["otros_tipos"][1] == {"mes": "2026-07", "cantidad": 50}
     assert h["auxiliares"][0]["estado"] == "Comida" and h["auxiliares"][0]["por_mes"]["2026-06"] == 3600.0
     assert h["resumen"]["tipo_mas_frecuente"] == "Consulta" and h["resumen"]["meses"] == 2
+
+
+def test_historico_comparativo_mismos_dias_vs_mes_cerrado():
+    from datetime import date, datetime as _dt
+    from app.services.analyzers.atencion_historico import historico_atencion
+    # agosto cerrado (31 días con 10 llamadas/día, 5 registros/día); septiembre activo hasta el día 10
+    ago_ll = [{"dia": f"2026-08-{d:02d}", "oferta": 10, "contestadas": 9, "abandonadas": 1, "aht_seg": 200.0} for d in range(1, 32)]
+    sep_ll = [{"dia": f"2026-09-{d:02d}", "oferta": 12, "contestadas": 10, "abandonadas": 2, "aht_seg": 210.0} for d in range(1, 11)]
+    ago_ge = [{"dia": f"2026-08-{d:02d}", "cantidad": 5} for d in range(1, 32)]
+    sep_ge = [{"dia": f"2026-09-{d:02d}", "cantidad": 6} for d in range(1, 11)]
+    ll = [
+        {"id": "a", "period_month": date(2026, 8, 1), "generated_at": _dt(2026, 9, 1), "is_published": True, "llamadas_ingresadas": 310, "contestadas": 279,
+         "abandonadas": 31, "nivel_atencion_pct": 90.0, "sla_pct": 80.0, "abandono_pct": 10.0, "aht_seg": 200.0, "operadores_activos": 5, "dias_operativos": 31,
+         "data": {"kpis": {}, "auxiliares_equipo": [], "estados_equipo": [], "por_dia": ago_ll}},
+        {"id": "s", "period_month": date(2026, 9, 1), "generated_at": _dt(2026, 9, 11), "is_published": False, "llamadas_ingresadas": 120, "contestadas": 100,
+         "abandonadas": 20, "nivel_atencion_pct": 83.3, "sla_pct": 80.0, "abandono_pct": 16.7, "aht_seg": 210.0, "operadores_activos": 5, "dias_operativos": 10,
+         "data": {"kpis": {}, "auxiliares_equipo": [], "estados_equipo": [], "por_dia": sep_ll}},
+    ]
+    ge = [
+        {"id": "ga", "period_month": date(2026, 8, 1), "generated_at": _dt(2026, 9, 1), "is_published": True, "total_gestiones": 155, "cerrados": 150, "pendientes": 5, "pct_cerrados": 96.8, "data": {"por_tipo": [], "top_motivos": [], "por_dia": ago_ge}},
+        {"id": "gs", "period_month": date(2026, 9, 1), "generated_at": _dt(2026, 9, 11), "is_published": False, "total_gestiones": 60, "cerrados": 50, "pendientes": 10, "pct_cerrados": 83.3, "data": {"por_tipo": [], "top_motivos": [], "por_dia": sep_ge}},
+    ]
+    c = historico_atencion(ll, ge)["comparativo"]
+    assert c["mes"] == "2026-09" and c["mes_previo"] == "2026-08" and c["corte_dia"] == 10 and c["mes_activo"] and c["modo_default"] == "mismos_dias"
+    md = c["mismos_dias"]
+    assert md["previo"]["ingresadas"] == 100 and md["previo"]["contestadas"] == 90 and md["previo"]["registros"] == 50 and md["previo"]["dias"] == 10
+    assert md["actual"]["ingresadas"] == 120 and md["actual"]["registros"] == 60
+    assert md["vs"]["ingresadas"] == 20.0 and md["vs"]["registros"] == 20.0 and md["vs"]["aht_seg"] == 5.0
+    mc = c["mes_cerrado"]
+    assert mc["previo"]["ingresadas"] == 310 and mc["previo"]["registros"] == 155 and mc["vs"]["ingresadas"] == -61.3

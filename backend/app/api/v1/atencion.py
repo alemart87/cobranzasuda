@@ -188,13 +188,14 @@ async def atencion_historico(
                 "abandono_pct": float(r.abandono_pct or 0), "aht_seg": float(r.aht_seg or 0),
                 "operadores_activos": r.operadores_activos, "dias_operativos": r.dias_operativos,
                 "data": {"kpis": (r.data or {}).get("kpis") or {}, "auxiliares_equipo": (r.data or {}).get("auxiliares_equipo") or [],
-                         "estados_equipo": (r.data or {}).get("estados_equipo") or []}}
+                         "estados_equipo": (r.data or {}).get("estados_equipo") or [], "por_dia": (r.data or {}).get("por_dia") or []}}
 
     def _g(r: AtencionGestionReport) -> dict:
         return {"id": r.id, "period_month": r.period_month, "generated_at": r.generated_at, "is_published": r.is_published,
                 "total_gestiones": r.total_gestiones, "cerrados": r.cerrados, "pendientes": r.pendientes,
                 "pct_cerrados": float(r.pct_cerrados or 0),
-                "data": {"por_tipo": (r.data or {}).get("por_tipo") or [], "top_motivos": (r.data or {}).get("top_motivos") or []}}
+                "data": {"por_tipo": (r.data or {}).get("por_tipo") or [], "top_motivos": (r.data or {}).get("top_motivos") or [],
+                         "por_dia": (r.data or {}).get("por_dia") or []}}
 
     return historico_atencion([_l(r) for r in ll], [_g(r) for r in ge])
 
