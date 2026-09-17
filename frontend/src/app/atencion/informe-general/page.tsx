@@ -206,7 +206,9 @@ function LlamadasPrint({ r }: { r: any }) {
           <DistBar data={colas} color="#00B2BF" />
         </div>
       )}
-      {(r.data.operadores || []).length > 0 && (
+      {(r.data.operadores || []).length > 0 && (() => {
+        const auxEstados: string[] = (r.data.auxiliares_equipo || []).map((a: any) => a.estado);
+        return (
         <div className="card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-brand-bg border-b border-brand-border">
@@ -216,6 +218,8 @@ function LlamadasPrint({ r }: { r: any }) {
                 <th className="px-3 py-2 text-right">Salientes</th>
                 <th className="px-3 py-2 text-right">Total</th>
                 <th className="px-3 py-2 text-right">AHT</th>
+                {auxEstados.map((e) => <th key={e} className="px-3 py-2 text-right">{e}</th>)}
+                <th className="px-3 py-2 text-right">Aux. total</th>
               </tr>
             </thead>
             <tbody>
@@ -226,12 +230,15 @@ function LlamadasPrint({ r }: { r: any }) {
                   <td className="px-3 py-2 text-right">{formatInt(o.salientes)}</td>
                   <td className="px-3 py-2 text-right font-semibold">{formatInt(o.total)}</td>
                   <td className="px-3 py-2 text-right font-mono">{hms(o.aht_seg)}</td>
+                  {auxEstados.map((e) => <td key={e} className="px-3 py-2 text-right font-mono text-[12px]">{o.aux_detalle?.[e] ? `${(o.aux_detalle[e] / 3600).toFixed(1)} hs` : "—"}</td>)}
+                  <td className="px-3 py-2 text-right font-semibold">{o.aux_seg ? `${(o.aux_seg / 3600).toFixed(1)} hs` : "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
+        );
+      })()}
     </Block>
   );
 }

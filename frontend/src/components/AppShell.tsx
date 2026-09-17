@@ -46,6 +46,7 @@ const NAV_ATENCION_INICIO = { href: "/atencion", label: "Inicio" };
 const NAV_ATENCION_REPORTS = [
   { href: "/atencion/llamadas/reports", label: "Llamadas" },
   { href: "/atencion/gestiones/reports", label: "Gestiones" },
+  { href: "/atencion/historico", label: "Histórico" },
 ];
 const NAV_ATENCION_UPLOADS = [
   { href: "/atencion/llamadas/upload", label: "Llamadas" },

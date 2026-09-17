@@ -17,6 +17,7 @@ interface Operador {
   total: number;
   aht_seg: number;
   aux_seg: number;
+  aux_detalle?: Record<string, number>;   // segundos por estado auxiliar (Comida, Baño, Capacitación…)
 }
 
 interface LlamadasDetail {
@@ -83,6 +84,9 @@ export default function AtencionLlamadasDetailPage() {
 
   const k = report.data.kpis;
   const ops = [...report.data.operadores].sort((a, b) => b.total - a.total);
+  // Auxiliares por operador: columnas = estados auxiliares del equipo (orden por peso), valores en horas.
+  const auxEstados = report.data.auxiliares_equipo.map((a) => a.estado);
+  const auxOpTotal = ops.reduce((s, o) => s + (o.aux_seg || 0), 0);
   const auxData = report.data.auxiliares_equipo.map((a) => ({
     label: a.estado,
     cantidad: Number((a.seg / 3600).toFixed(1)),
@@ -211,6 +215,55 @@ export default function AtencionLlamadasDetailPage() {
           </table>
         </div>
       </Section>
+
+      {/* Auxiliares por operador */}
+      {auxEstados.length > 0 && (
+        <Section title="Auxiliares por operador" hint="Horas de cada operador en cada estado auxiliar del período. La barra muestra el peso del operador sobre el total de auxiliares del equipo.">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[720px]">
+              <thead className="bg-brand-bg border-b border-brand-border">
+                <tr className="text-[11px] uppercase tracking-wider2 text-brand-slate">
+                  <th className="px-4 py-2.5 text-left">Operador</th>
+                  {auxEstados.map((e) => <th key={e} className="px-3 py-2.5 text-right">{e}</th>)}
+                  <th className="px-4 py-2.5 text-right">Total aux.</th>
+                  <th className="px-4 py-2.5 text-left w-40">% del equipo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...ops].sort((a, b) => (b.aux_seg || 0) - (a.aux_seg || 0)).map((o) => {
+                  const det = o.aux_detalle ?? {};
+                  const pct = auxOpTotal ? ((o.aux_seg || 0) / auxOpTotal) * 100 : 0;
+                  const mayor = auxEstados.reduce((m, e) => ((det[e] ?? 0) > (det[m] ?? 0) ? e : m), auxEstados[0]);
+                  return (
+                    <tr key={o.operador} className="border-t border-brand-border hover:bg-brand-bg-soft">
+                      <td className="px-4 py-2.5 font-semibold text-brand-ink">{o.operador}</td>
+                      {auxEstados.map((e) => (
+                        <td key={e} className={`px-3 py-2.5 text-right font-mono ${det[e] ? (e === mayor ? "text-brand-orange font-bold" : "") : "text-brand-mist"}`}>{det[e] ? fmtHoras(det[e]) : "—"}</td>
+                      ))}
+                      <td className="px-4 py-2.5 text-right font-semibold">{fmtHoras(o.aux_seg)}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 rounded-full bg-brand-bg overflow-hidden"><div className="h-full bg-brand-orange" style={{ width: `${Math.min(100, pct)}%` }} /></div>
+                          <span className="text-[11px] font-mono w-10 text-right">{pct.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-brand-ink bg-brand-bg-soft font-semibold">
+                  <td className="px-4 py-2.5">Equipo</td>
+                  {auxEstados.map((e) => <td key={e} className="px-3 py-2.5 text-right font-mono">{fmtHoras(ops.reduce((s, o) => s + (o.aux_detalle?.[e] ?? 0), 0))}</td>)}
+                  <td className="px-4 py-2.5 text-right">{fmtHoras(auxOpTotal)}</td>
+                  <td className="px-4 py-2.5 text-[11px] text-brand-slate">100%</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+          {ops.some((o) => !o.aux_detalle) && <p className="text-[11px] text-brand-slate mt-2">Este reporte se generó antes de guardar el detalle por estado: reprocesá el archivo de estados para ver el desglose por operador.</p>}
+        </Section>
+      )}
 
       {/* Auxiliares */}
       {auxData.length > 0 && (
