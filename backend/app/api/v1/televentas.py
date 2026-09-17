@@ -48,6 +48,7 @@ from ...services.analyzers import (
 )
 from ...services.analyzers.televentas_analizador import analizar_cientifico
 from ...services.analyzers.televentas_eficiencia import ESTADOS as ESTADOS_EF, analizar_eficiencia, indices_del_mes
+from ...services.analyzers.televentas_gestion import gestion_semanal, rango_semana as rango_semana_gestion
 from ...services.analyzers.televentas_llamadas import por_dia_llamadas
 from ...services.analyzers.televentas_semanal import agrupar_semanas, analizar_semana, evaluar_semana
 from ...services.analyzers.televentas_simulador import regresion_diaria
@@ -913,6 +914,32 @@ async def borrar_compromiso(
     await record_action(db, user_id=user.id, action="delete_televentas_compromiso",
                         resource_type="televentas_compromiso", resource_id=compromiso_id, ip=client_ip(request))
     return {"status": "deleted", "id": compromiso_id}
+
+
+# ---- Gestión de liderazgo y seguimiento (dashboard de la reunión semanal) ----
+@router.get("/semanal/gestion")
+async def televentas_semanal_gestion(
+    semana: str = Query(..., description="Clave de la semana (fecha de inicio YYYY-MM-DD)"),
+    desde: Optional[str] = Query(None, description="Primer día de la semana operativa (YYYY-MM-DD)"),
+    hasta: Optional[str] = Query(None, description="Último día de la semana operativa (YYYY-MM-DD)"),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Qué acciones se tomaron en la semana, cuántas mitigaciones se aplicaron y a
+    qué asesor, quién las hizo, qué alertas siguen sin atender y cómo van los
+    compromisos de la reunión (de la semana, arrastrados e histórico)."""
+    from datetime import date as _date
+    semana = semana.strip()
+    d0, d1 = rango_semana_gestion(semana)
+    try:
+        f_desde = _date.fromisoformat(desde) if desde else d0
+        f_hasta = _date.fromisoformat(hasta) if hasta else d1
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Fechas inválidas (YYYY-MM-DD).")
+    comps = (await db.execute(select(TeleventasCompromiso))).scalars().all()
+    alertas = (await db.execute(select(TeleventasAlerta))).scalars().all()
+    return gestion_semanal([_compromiso_out(c) for c in comps], [_alerta_out(a) for a in alertas],
+                           semana, f_desde, f_hasta)
 
 
 # ---- Conclusión de la reunión semanal (una por semana) ----

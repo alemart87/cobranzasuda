@@ -8,6 +8,7 @@ import { PrintButton, PrintCover, PrintHeader } from "@/components/PrintButton";
 import { InformeAnalisis } from "@/components/televentas/InformeAnalisis";
 import { ResenaRegistro } from "@/components/televentas/ResenaRegistro";
 import { ReunionSemanal } from "@/components/televentas/ReunionSemanal";
+import { GestionLiderazgo } from "@/components/televentas/GestionLiderazgo";
 import { apiFetch } from "@/lib/api";
 import { formatGs, formatInt, formatPct } from "@/lib/format";
 import { weekLabel } from "@/lib/month";
@@ -309,6 +310,9 @@ export default function SemanalPage() {
                   </tbody>
                 </table>
               </section>
+
+              {/* Dashboard de gestión de liderazgo y seguimiento: acciones, mitigaciones por asesor, compromisos */}
+              <GestionLiderazgo semana={semanaSel!} desde={semana?.fecha_inicio} hasta={semana?.fecha_fin} />
 
               {/* Reunión de los viernes: conclusión + compromisos (editar / eliminar / arrastrados) */}
               <ReunionSemanal semana={semanaSel!} />
