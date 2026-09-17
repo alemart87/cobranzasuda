@@ -10,6 +10,13 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any, Optional
 
+from ..parsers._text import strip_accents
+from .atencion_llamadas import OBJETIVO_AUX_PCT, _es_reunion
+
+
+def _es_offline(estado: str) -> bool:
+    return strip_accents(estado) == "desconectado"
+
 
 def _mes(pm: Any) -> Optional[str]:
     if not pm:
@@ -62,9 +69,16 @@ def historico_atencion(llamadas: list[dict], gestiones: list[dict], top_tipos: i
                 tipos_mes[t["label"]][m] = int(t.get("cantidad") or 0)
                 tipos_total[t["label"]] += int(t.get("cantidad") or 0)
         aux_total = 0.0
+        aux_sin_reunion = 0.0
         for a in ld.get("auxiliares_equipo") or []:
             aux_mes[a["estado"]][m] = float(a.get("seg") or 0)
             aux_total += float(a.get("seg") or 0)
+            if not _es_reunion(a["estado"]):
+                aux_sin_reunion += float(a.get("seg") or 0)
+        # tiempo conectado del equipo: kpis nuevos, o suma de estados menos desconectado (reportes viejos)
+        tiempo_total = float(lk.get("tiempo_total_seg") or 0) or sum(
+            float(e.get("seg") or 0) for e in (ld.get("estados_equipo") or []) if not _es_offline(e.get("estado") or ""))
+        aux_pct = round(aux_sin_reunion / tiempo_total * 100, 1) if tiempo_total else None
         punto = {
             "mes": m,
             "llamadas": {
@@ -78,6 +92,10 @@ def historico_atencion(llamadas: list[dict], gestiones: list[dict], top_tipos: i
                 "operadores_activos": int((l or {}).get("operadores_activos") or lk.get("operadores_activos") or 0),
                 "dias_operativos": int((l or {}).get("dias_operativos") or lk.get("dias_operativos") or 0),
                 "aux_total_seg": round(aux_total, 1),
+                "aux_sin_reunion_seg": round(aux_sin_reunion, 1),
+                "tiempo_total_seg": round(tiempo_total, 1),
+                "aux_pct": aux_pct,                       # sin reunión, sobre tiempo conectado
+                "aux_objetivo_pct": OBJETIVO_AUX_PCT,
             } if l else None,
             "gestiones": {
                 "report_id": (g or {}).get("id"), "publicado": bool((g or {}).get("is_published")),
@@ -102,6 +120,7 @@ def historico_atencion(llamadas: list[dict], gestiones: list[dict], top_tipos: i
             d["nivel_atencion_pts"] = round(cl["nivel_atencion_pct"] - pl["nivel_atencion_pct"], 1) if cl.get("nivel_atencion_pct") is not None and pl.get("nivel_atencion_pct") is not None else None
             d["abandono_pts"] = round(cl["abandono_pct"] - pl["abandono_pct"], 1) if cl.get("abandono_pct") is not None and pl.get("abandono_pct") is not None else None
             d["aux_total_seg"] = _delta(cl.get("aux_total_seg"), pl.get("aux_total_seg"))
+            d["aux_pct_pts"] = round(cl["aux_pct"] - pl["aux_pct"], 1) if cl.get("aux_pct") is not None and pl.get("aux_pct") is not None else None
         punto["vs_mes_anterior"] = d
         serie.append(punto)
         prev = punto
@@ -120,4 +139,5 @@ def historico_atencion(llamadas: list[dict], gestiones: list[dict], top_tipos: i
         "registros_promedio_mes": round(sum((p.get("gestiones") or {}).get("total", 0) for p in serie) / max(1, sum(1 for p in serie if p.get("gestiones"))), 1) if serie else 0,
         "tipo_mas_frecuente": top[0][0] if top else None,
     }
+    resumen["aux_objetivo_pct"] = OBJETIVO_AUX_PCT
     return {"resumen": resumen, "meses": meses, "serie": serie, "tipos": tipos_out, "otros_tipos": otros, "auxiliares": aux_out}

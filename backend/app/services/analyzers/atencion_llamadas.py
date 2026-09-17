@@ -17,6 +17,16 @@ from ..parsers._text import strip_accents
 
 # Estados que NO cuentan como "auxiliar" (productivos u offline).
 _NO_AUX = {"disponible", "en la cola", "ocupado", "desconectado"}
+# Estados que no se conectan ("logueado") y no entran al tiempo total del operador.
+_OFFLINE = {"desconectado"}
+# Auxiliares que se EXCLUYEN del % de auxiliares (reunión es tiempo dispuesto por la empresa).
+_AUX_EXCLUIDOS_PCT = {"reunion"}
+# Objetivo mensual de auxiliares (sin reunión) sobre el tiempo conectado.
+OBJETIVO_AUX_PCT = 13.0
+
+
+def _es_reunion(estado: str) -> bool:
+    return any(x in strip_accents(estado) for x in _AUX_EXCLUIDOS_PCT)
 
 
 def _pct(part: float, whole: float) -> float:
@@ -131,7 +141,7 @@ def analyze_atencion_llamadas(
         if key not in op_acc:
             op_acc[key] = {"operador": name, "entrantes": 0, "salientes": 0,
                            "_dur_total": 0.0, "_dur_cont": 0, "aux_seg": 0.0,
-                           "aux_detalle": defaultdict(float)}
+                           "aux_detalle": defaultdict(float), "tiempo_total_seg": 0.0, "aux_sin_reunion_seg": 0.0}
         return op_acc[key]
 
     for r in entrantes:
@@ -148,15 +158,23 @@ def analyze_atencion_llamadas(
     # Auxiliares por operador (Estados) + breakdown de equipo.
     aux_equipo: dict[str, float] = defaultdict(float)
     estado_equipo: dict[str, float] = defaultdict(float)
+    tiempo_total_equipo = 0.0
+    aux_sin_reunion_equipo = 0.0
     for r in estados:
         estado = r["estado_principal"] or "(sin estado)"
         dur = r["duracion_seg"]
         estado_equipo[estado] += dur
+        if strip_accents(estado) not in _OFFLINE:
+            tiempo_total_equipo += dur
+            _op(r["agente"])["tiempo_total_seg"] += dur
         if strip_accents(estado) not in _NO_AUX:
             aux_equipo[estado] += dur
             op = _op(r["agente"])
             op["aux_seg"] += dur
             op["aux_detalle"][estado] += dur
+            if not _es_reunion(estado):
+                aux_sin_reunion_equipo += dur
+                op["aux_sin_reunion_seg"] += dur
 
     operadores = []
     for v in op_acc.values():
@@ -169,6 +187,10 @@ def analyze_atencion_llamadas(
             "aht_seg": round(v["_dur_total"] / v["_dur_cont"], 1) if v["_dur_cont"] else 0.0,
             "aux_seg": round(v["aux_seg"], 1),
             "aux_detalle": {k: round(s, 1) for k, s in v["aux_detalle"].items()},
+            "tiempo_total_seg": round(v["tiempo_total_seg"], 1),
+            "aux_sin_reunion_seg": round(v["aux_sin_reunion_seg"], 1),
+            # % de auxiliares (sin reunión) sobre el tiempo conectado del operador; objetivo 13%
+            "aux_pct": _pct(v["aux_sin_reunion_seg"], v["tiempo_total_seg"]) if v["tiempo_total_seg"] else None,
         })
     operadores.sort(key=lambda o: -o["total"])
 
@@ -212,6 +234,10 @@ def analyze_atencion_llamadas(
         "total_entrantes_op": total_entrantes_op,
         "total_salientes_op": total_salientes_op,
         "aux_total_seg": round(total_aux, 1),
+        "tiempo_total_seg": round(tiempo_total_equipo, 1),
+        "aux_sin_reunion_seg": round(aux_sin_reunion_equipo, 1),
+        "aux_pct": _pct(aux_sin_reunion_equipo, tiempo_total_equipo),   # sin reunión, sobre tiempo conectado
+        "aux_objetivo_pct": OBJETIVO_AUX_PCT,
     }
 
     return {

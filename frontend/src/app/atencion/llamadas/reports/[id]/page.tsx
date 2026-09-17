@@ -18,6 +18,9 @@ interface Operador {
   aht_seg: number;
   aux_seg: number;
   aux_detalle?: Record<string, number>;   // segundos por estado auxiliar (Comida, Baño, Capacitación…)
+  tiempo_total_seg?: number;              // tiempo conectado (todos los estados menos desconectado)
+  aux_sin_reunion_seg?: number;
+  aux_pct?: number | null;                // % auxiliares sin reunión sobre tiempo conectado (objetivo 13%)
 }
 
 interface LlamadasDetail {
@@ -40,6 +43,10 @@ interface LlamadasDetail {
       total_entrantes_op: number;
       total_salientes_op: number;
       aux_total_seg: number;
+      tiempo_total_seg?: number;
+      aux_sin_reunion_seg?: number;
+      aux_pct?: number;
+      aux_objetivo_pct?: number;
     };
     por_dia: Array<Record<string, any>>;
     por_hora: Array<Record<string, any>>;
@@ -120,6 +127,14 @@ export default function AtencionLlamadasDetailPage() {
         <KpiCard label="Abandono" value={formatPct(k.abandono_pct)} hint={`${formatInt(k.abandonadas)} llamadas`} accent="orange" />
         <KpiCard label="AHT" value={`${fmtMinSeg(k.aht_seg)} min`} hint={`ASA ${fmtMinSeg(k.asa_seg)}`} accent="secondary" />
       </div>
+      {k.aux_pct != null && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+          <KpiCard label="% auxiliares (sin reunión)" value={formatPct(k.aux_pct)} hint={`objetivo ${k.aux_objetivo_pct ?? 13}% · ${k.aux_pct > (k.aux_objetivo_pct ?? 13) ? "por encima" : "dentro"} del objetivo`} accent={k.aux_pct > (k.aux_objetivo_pct ?? 13) ? "danger" : "cyan"} />
+          <KpiCard label="Auxiliares sin reunión" value={fmtHoras(k.aux_sin_reunion_seg ?? 0)} hint={`de ${fmtHoras(k.aux_total_seg)} de auxiliares totales`} accent="orange" />
+          <KpiCard label="Tiempo conectado del equipo" value={fmtHoras(k.tiempo_total_seg ?? 0)} hint="todos los estados menos desconectado" accent="neutral" />
+          <KpiCard label="Operadores sobre el objetivo" value={String(ops.filter((o) => (o.aux_pct ?? 0) > (k.aux_objetivo_pct ?? 13)).length)} hint={`de ${ops.length} operadores`} accent="purple" />
+        </div>
+      )}
 
       {/* Evolución diaria */}
       <Section title="Evolución diaria" hint="Ingresadas, contestadas y abandonadas por día; línea = nivel de atención (%).">
@@ -218,7 +233,7 @@ export default function AtencionLlamadasDetailPage() {
 
       {/* Auxiliares por operador */}
       {auxEstados.length > 0 && (
-        <Section title="Auxiliares por operador" hint="Horas de cada operador en cada estado auxiliar del período. La barra muestra el peso del operador sobre el total de auxiliares del equipo.">
+        <Section title="Auxiliares por operador" hint={`Horas de cada operador en cada estado auxiliar del período. "% aux. sin reunión" = auxiliares sin reunión ÷ tiempo conectado del operador (objetivo ${k.aux_objetivo_pct ?? 13}%). La barra muestra el peso del operador sobre el total de auxiliares del equipo.`}>
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[720px]">
               <thead className="bg-brand-bg border-b border-brand-border">
@@ -226,6 +241,7 @@ export default function AtencionLlamadasDetailPage() {
                   <th className="px-4 py-2.5 text-left">Operador</th>
                   {auxEstados.map((e) => <th key={e} className="px-3 py-2.5 text-right">{e}</th>)}
                   <th className="px-4 py-2.5 text-right">Total aux.</th>
+                  <th className="px-4 py-2.5 text-right">% aux. sin reunión</th>
                   <th className="px-4 py-2.5 text-left w-40">% del equipo</th>
                 </tr>
               </thead>
@@ -241,6 +257,7 @@ export default function AtencionLlamadasDetailPage() {
                         <td key={e} className={`px-3 py-2.5 text-right font-mono ${det[e] ? (e === mayor ? "text-brand-orange font-bold" : "") : "text-brand-mist"}`}>{det[e] ? fmtHoras(det[e]) : "—"}</td>
                       ))}
                       <td className="px-4 py-2.5 text-right font-semibold">{fmtHoras(o.aux_seg)}</td>
+                      <td className="px-4 py-2.5 text-right">{o.aux_pct != null ? <span className={`font-mono font-bold ${o.aux_pct > (k.aux_objetivo_pct ?? 13) ? "text-brand-primary" : "text-emerald-600"}`}>{o.aux_pct}%</span> : <span className="text-brand-mist">—</span>}</td>
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="flex-1 h-2 rounded-full bg-brand-bg overflow-hidden"><div className="h-full bg-brand-orange" style={{ width: `${Math.min(100, pct)}%` }} /></div>
@@ -256,6 +273,7 @@ export default function AtencionLlamadasDetailPage() {
                   <td className="px-4 py-2.5">Equipo</td>
                   {auxEstados.map((e) => <td key={e} className="px-3 py-2.5 text-right font-mono">{fmtHoras(ops.reduce((s, o) => s + (o.aux_detalle?.[e] ?? 0), 0))}</td>)}
                   <td className="px-4 py-2.5 text-right">{fmtHoras(auxOpTotal)}</td>
+                  <td className="px-4 py-2.5 text-right font-mono">{k.aux_pct != null ? `${k.aux_pct}%` : "—"}</td>
                   <td className="px-4 py-2.5 text-[11px] text-brand-slate">100%</td>
                 </tr>
               </tfoot>
