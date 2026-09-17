@@ -297,3 +297,40 @@ def test_clasificar_tema_usa_motivo():
     assert clasificar_tema("carga de ppto") == "Siniestros y denuncias"  # ppto ahora clasifica solo
     assert clasificar_tema("0401.32350.0", "Solicitud aplicacion de pago Qr_transferencias") == "Pagos y cobranzas"
     assert clasificar_tema("", "") == "Sin descripción"
+
+
+def test_historico_atencion_serie_mensual_y_top_tipos():
+    from datetime import date, datetime as _dt
+    from app.services.analyzers.atencion_historico import historico_atencion
+    ll = [
+        {"id": "l1", "period_month": date(2026, 6, 1), "generated_at": _dt(2026, 7, 1), "is_published": True,
+         "llamadas_ingresadas": 1000, "contestadas": 900, "abandonadas": 100, "nivel_atencion_pct": 90.0, "sla_pct": 80.0,
+         "abandono_pct": 10.0, "aht_seg": 200.0, "operadores_activos": 10, "dias_operativos": 22,
+         "data": {"kpis": {}, "auxiliares_equipo": [{"estado": "Comida", "seg": 3600.0, "pct": 60.0}, {"estado": "Baño", "seg": 2400.0, "pct": 40.0}]}},
+        {"id": "l2", "period_month": date(2026, 7, 1), "generated_at": _dt(2026, 8, 1), "is_published": False,
+         "llamadas_ingresadas": 1200, "contestadas": 1020, "abandonadas": 180, "nivel_atencion_pct": 85.0, "sla_pct": 78.0,
+         "abandono_pct": 15.0, "aht_seg": 220.0, "operadores_activos": 12, "dias_operativos": 23,
+         "data": {"kpis": {}, "auxiliares_equipo": [{"estado": "Comida", "seg": 4000.0, "pct": 100.0}]}},
+        {"id": "l2b", "period_month": date(2026, 7, 1), "generated_at": _dt(2026, 8, 5), "is_published": True,   # publicado gana
+         "llamadas_ingresadas": 1100, "contestadas": 1000, "abandonadas": 100, "nivel_atencion_pct": 90.9, "sla_pct": 79.0,
+         "abandono_pct": 9.1, "aht_seg": 210.0, "operadores_activos": 12, "dias_operativos": 23, "data": {"kpis": {}, "auxiliares_equipo": []}},
+    ]
+    ge = [
+        {"id": "g1", "period_month": date(2026, 6, 1), "generated_at": _dt(2026, 7, 1), "is_published": True, "total_gestiones": 450, "cerrados": 400, "pendientes": 50, "pct_cerrados": 88.9,
+         "data": {"por_tipo": [{"label": "Reclamo", "cantidad": 250, "pct": 55.6}, {"label": "Consulta", "cantidad": 200, "pct": 44.4}], "top_motivos": []}},
+        {"id": "g2", "period_month": date(2026, 7, 1), "generated_at": _dt(2026, 8, 1), "is_published": True, "total_gestiones": 600, "cerrados": 500, "pendientes": 100, "pct_cerrados": 83.3,
+         "data": {"por_tipo": [{"label": "Consulta", "cantidad": 350, "pct": 58.3}, {"label": "Reclamo", "cantidad": 200, "pct": 33.3}, {"label": "Baja", "cantidad": 50, "pct": 8.3}], "top_motivos": []}},
+    ]
+    h = historico_atencion(ll, ge, top_tipos=2)
+    assert h["meses"] == ["2026-06", "2026-07"]
+    jun, jul = h["serie"]
+    assert jun["llamadas"]["contestadas"] == 900 and jun["gestiones"]["total"] == 450 and jun["registros_por_100_contestadas"] == 50.0
+    assert jul["llamadas"]["report_id"] == "l2b" and jul["llamadas"]["contestadas"] == 1000      # el publicado, no el borrador
+    assert jul["vs_mes_anterior"]["contestadas"] == 11.1 and jul["vs_mes_anterior"]["registros"] == 33.3
+    assert jul["vs_mes_anterior"]["nivel_atencion_pts"] == 0.9 and jul["vs_mes_anterior"]["aht_seg"] == 5.0
+    assert jun["llamadas"]["aux_total_seg"] == 6000.0 and jun["llamadas_por_operador"] == 90.0
+    tipos = {t["tipo"]: t for t in h["tipos"]}
+    assert set(tipos) == {"Consulta", "Reclamo"} and tipos["Consulta"]["por_mes"] == {"2026-06": 200, "2026-07": 350}
+    assert h["otros_tipos"][1] == {"mes": "2026-07", "cantidad": 50}
+    assert h["auxiliares"][0]["estado"] == "Comida" and h["auxiliares"][0]["por_mes"]["2026-06"] == 3600.0
+    assert h["resumen"]["tipo_mas_frecuente"] == "Consulta" and h["resumen"]["meses"] == 2

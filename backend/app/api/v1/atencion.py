@@ -45,6 +45,7 @@ from ...schemas.atencion import (
     AtencionLlamadasUploadRead,
     PublishRequest,
 )
+from ...services.analyzers.atencion_historico import historico_atencion
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
@@ -162,6 +163,39 @@ async def list_llamadas_reports(
     items = result.scalars().all()
     return AtencionLlamadasReportList(
         items=[AtencionLlamadasReportSummary.model_validate(r) for r in items], total=len(items))
+
+
+@router.get("/historico")
+async def atencion_historico(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Comparativo histórico del tablero: por mes, llamadas (ingresadas, contestadas,
+    nivel de atención, SLA, AHT, auxiliares) vs registros (gestiones) y el top de tipos
+    de consulta con su evolución. Usuarios cliente: solo reportes publicados."""
+    ql = select(AtencionLlamadasReport)
+    qg = select(AtencionGestionReport)
+    if user.is_client:
+        ql = ql.where(AtencionLlamadasReport.is_published == True)  # noqa: E712
+        qg = qg.where(AtencionGestionReport.is_published == True)  # noqa: E712
+    ll = (await db.execute(ql)).scalars().all()
+    ge = (await db.execute(qg)).scalars().all()
+
+    def _l(r: AtencionLlamadasReport) -> dict:
+        return {"id": r.id, "period_month": r.period_month, "generated_at": r.generated_at, "is_published": r.is_published,
+                "llamadas_ingresadas": r.llamadas_ingresadas, "contestadas": r.contestadas, "abandonadas": r.abandonadas,
+                "nivel_atencion_pct": float(r.nivel_atencion_pct or 0), "sla_pct": float(r.sla_pct or 0),
+                "abandono_pct": float(r.abandono_pct or 0), "aht_seg": float(r.aht_seg or 0),
+                "operadores_activos": r.operadores_activos, "dias_operativos": r.dias_operativos,
+                "data": {"kpis": (r.data or {}).get("kpis") or {}, "auxiliares_equipo": (r.data or {}).get("auxiliares_equipo") or []}}
+
+    def _g(r: AtencionGestionReport) -> dict:
+        return {"id": r.id, "period_month": r.period_month, "generated_at": r.generated_at, "is_published": r.is_published,
+                "total_gestiones": r.total_gestiones, "cerrados": r.cerrados, "pendientes": r.pendientes,
+                "pct_cerrados": float(r.pct_cerrados or 0),
+                "data": {"por_tipo": (r.data or {}).get("por_tipo") or [], "top_motivos": (r.data or {}).get("top_motivos") or []}}
+
+    return historico_atencion([_l(r) for r in ll], [_g(r) for r in ge])
 
 
 @router.get("/llamadas/reports/{report_id}", response_model=AtencionLlamadasReportDetail)
