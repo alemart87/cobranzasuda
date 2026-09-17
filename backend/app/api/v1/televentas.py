@@ -24,6 +24,7 @@ from ...models.televentas_analisis import TeleventasAnalisis
 from ...models.televentas_compromiso import TeleventasCompromiso
 from ...models.televentas_reunion import TeleventasReunionSemanal
 from ...models.televentas_alerta import TeleventasAlerta
+from ...models.televentas_monitoreo import TeleventasMonitoreo, TeleventasMonitoreoUpload
 from ...models.televentas_eficiencia import TeleventasEficiencia, TeleventasEficienciaNota
 from ...models.televentas_crm_report import TeleventasCrmReport
 from ...models.televentas_crm_upload import TeleventasCrmUpload
@@ -41,7 +42,7 @@ from ...schemas.televentas import (
     TeleventasLlamadasReportDetail, TeleventasLlamadasReportList, TeleventasLlamadasReportSummary,
     TeleventasLlamadasUploadList, TeleventasLlamadasUploadRead,
     TeleventasProduccionReportDetail, TeleventasProduccionReportList, TeleventasProduccionReportSummary,
-    TeleventasProduccionUploadList, TeleventasProduccionUploadRead,
+    TeleventasProduccionUploadList, TeleventasProduccionUploadRead, MonitoreoDevolucionRequest,
 )
 from ...services.analyzers import (
     combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
@@ -49,10 +50,12 @@ from ...services.analyzers import (
 from ...services.analyzers.televentas_analizador import analizar_cientifico
 from ...services.analyzers.televentas_eficiencia import ESTADOS as ESTADOS_EF, analizar_eficiencia, indices_del_mes
 from ...services.analyzers.televentas_gestion import gestion_semanal, rango_semana as rango_semana_gestion
+from ...services.analyzers.televentas_monitoreos import analizar_monitoreo, analizar_monitoreos
 from ...services.analyzers.televentas_llamadas import por_dia_llamadas
 from ...services.analyzers.televentas_semanal import agrupar_semanas, analizar_semana, evaluar_semana
 from ...services.analyzers.televentas_simulador import regresion_diaria
 from ...services.parsers import parse_televentas_llamadas
+from ...services.parsers.televentas_monitoreos_parser import parse_televentas_monitoreos
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
 
@@ -922,6 +925,7 @@ async def televentas_semanal_gestion(
     semana: str = Query(..., description="Clave de la semana (fecha de inicio YYYY-MM-DD)"),
     desde: Optional[str] = Query(None, description="Primer día de la semana operativa (YYYY-MM-DD)"),
     hasta: Optional[str] = Query(None, description="Último día de la semana operativa (YYYY-MM-DD)"),
+    agentes: Optional[float] = Query(None, description="Agentes efectivos de la semana (denominador del % de monitoreo)"),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -938,8 +942,184 @@ async def televentas_semanal_gestion(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Fechas inválidas (YYYY-MM-DD).")
     comps = (await db.execute(select(TeleventasCompromiso))).scalars().all()
     alertas = (await db.execute(select(TeleventasAlerta))).scalars().all()
+    monis = (await db.execute(select(TeleventasMonitoreo))).scalars().all()
     return gestion_semanal([_compromiso_out(c) for c in comps], [_alerta_out(a) for a in alertas],
-                           semana, f_desde, f_hasta)
+                           semana, f_desde, f_hasta,
+                           monitoreos=[_monitoreo_out(m, breve=True) for m in monis], agentes_activos=agentes)
+
+
+# ---- Monitoreos de calidad (carga, análisis semántico y devolución al asesor) ----
+_MONI_ESTADOS = ("pendiente", "devuelto")
+
+
+def _monitoreo_out(m: TeleventasMonitoreo, breve: bool = False) -> dict:
+    d = {"id": m.id, "id_monitoreo": m.id_monitoreo, "upload_id": m.upload_id, "cuenta": m.cuenta,
+         "fecha_monitoreo": m.fecha_monitoreo.isoformat() if m.fecha_monitoreo else None,
+         "fecha_llamada": m.fecha_llamada.isoformat() if m.fecha_llamada else None,
+         "monitoreador": m.monitoreador, "operador": m.operador, "estado_operador": m.estado_operador,
+         "duracion_seg": m.duracion_seg, "tipo_llamada": m.tipo_llamada, "tipo_contacto": m.tipo_contacto,
+         "tipo_producto": m.tipo_producto, "motivo_llamada": m.motivo_llamada,
+         "estado_evaluacion": m.estado_evaluacion, "precision": m.precision, "critico": m.critico,
+         "caso_puntual": m.caso_puntual, "analisis": m.analisis or {},
+         "estado_devolucion": m.estado_devolucion, "devuelto_por": m.devuelto_por,
+         "devuelto_at": m.devuelto_at.isoformat() if m.devuelto_at else None,
+         "created_at": m.created_at.isoformat() if m.created_at else None}
+    if not breve:
+        d.update({"id_grabacion": m.id_grabacion, "comentarios": m.comentarios, "sugerencias": m.sugerencias,
+                  "compromiso": m.compromiso, "comentario_lider": m.comentario_lider,
+                  "comentario_operador": m.comentario_operador, "seguimiento": m.seguimiento or [],
+                  "updated_at": m.updated_at.isoformat() if m.updated_at else None})
+    else:
+        d.update({"sugerencias": m.sugerencias, "comentarios": m.comentarios})
+    return d
+
+
+def _moni_query(desde: Optional[str], hasta: Optional[str], operador: Optional[str], estado: Optional[str]):
+    q = select(TeleventasMonitoreo).order_by(TeleventasMonitoreo.fecha_monitoreo.desc(), TeleventasMonitoreo.created_at.desc())
+    try:
+        if desde:
+            q = q.where(TeleventasMonitoreo.fecha_monitoreo >= datetime.fromisoformat(desde))
+        if hasta:
+            q = q.where(TeleventasMonitoreo.fecha_monitoreo < datetime.fromisoformat(hasta) + __import__("datetime").timedelta(days=1))
+    except ValueError:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Fechas inválidas (YYYY-MM-DD).")
+    if operador:
+        q = q.where(TeleventasMonitoreo.operador == operador.strip())
+    if estado in _MONI_ESTADOS:
+        q = q.where(TeleventasMonitoreo.estado_devolucion == estado)
+    return q
+
+
+@router.post("/monitoreos/uploads", status_code=status.HTTP_201_CREATED)
+async def monitoreos_upload(
+    request: Request,
+    file: UploadFile = File(..., description="Export 'Detalle General de Monitoreo' (.xls / .xlsx)"),
+    user: CurrentUser = Depends(require_analyst_or_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Parsea y guarda los monitoreos del archivo (síncrono: son pocas filas). Un monitoreo
+    con el mismo id_monitoreo se actualiza (evaluación) sin perder su devolución."""
+    up = TeleventasMonitoreoUpload(filename=file.filename or "monitoreos", uploaded_by=user.id, uploaded_by_nombre=user.full_name)
+    db.add(up)
+    await db.commit()
+    await db.refresh(up)
+    _, path, sha = await _save(file, "monitoreos", "monitoreos", up.id)
+    try:
+        filas = await asyncio.to_thread(parse_televentas_monitoreos, path)
+    except Exception as e:  # noqa: BLE001
+        await db.delete(up)
+        await db.commit()
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"No se pudo leer el archivo de monitoreos: {e}")
+    ids = [r["id_monitoreo"] for r in filas if r.get("id_monitoreo")]
+    existentes = {m.id_monitoreo: m for m in (await db.execute(
+        select(TeleventasMonitoreo).where(TeleventasMonitoreo.id_monitoreo.in_(ids)))).scalars().all()} if ids else {}
+    nuevos = actualizados = 0
+    campos = ("cuenta", "fecha_monitoreo", "fecha_llamada", "monitoreador", "operador", "estado_operador", "id_grabacion",
+              "duracion_seg", "tipo_llamada", "tipo_contacto", "tipo_producto", "motivo_llamada", "comentarios",
+              "sugerencias", "compromiso", "estado_evaluacion", "precision", "critico", "caso_puntual")
+    for r in filas:
+        an = analizar_monitoreo(r)
+        m = existentes.get(r["id_monitoreo"]) if r.get("id_monitoreo") else None
+        if m:
+            for k in campos:
+                setattr(m, k, r[k])
+            m.analisis = an
+            m.upload_id = up.id
+            actualizados += 1
+        else:
+            m = TeleventasMonitoreo(**{k: r[k] for k in campos}, id_monitoreo=r.get("id_monitoreo"), upload_id=up.id,
+                                    analisis=an, created_by=user.id,
+                                    seguimiento=[{"fecha": datetime.utcnow().isoformat(), "autor": user.full_name or user.id,
+                                                  "accion": "cargado", "comentario": f"Monitoreo cargado desde {file.filename}."}])
+            db.add(m)
+            if r.get("id_monitoreo"):
+                existentes[r["id_monitoreo"]] = m
+            nuevos += 1
+    up.file_sha256, up.filas, up.nuevos, up.actualizados = sha, len(filas), nuevos, actualizados
+    await db.commit()
+    await db.refresh(up)
+    await record_action(db, user_id=user.id, action="create_televentas_monitoreos_upload",
+                        resource_type="televentas_monitoreo_upload", resource_id=up.id, ip=client_ip(request),
+                        extra={"filas": len(filas), "nuevos": nuevos, "actualizados": actualizados})
+    return {"id": up.id, "filename": up.filename, "filas": up.filas, "nuevos": nuevos, "actualizados": actualizados,
+            "created_at": up.created_at.isoformat() if up.created_at else None}
+
+
+@router.get("/monitoreos/uploads")
+async def monitoreos_uploads(user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    rows = (await db.execute(select(TeleventasMonitoreoUpload).order_by(TeleventasMonitoreoUpload.created_at.desc()).limit(50))).scalars().all()
+    return {"uploads": [{"id": u.id, "filename": u.filename, "filas": u.filas, "nuevos": u.nuevos, "actualizados": u.actualizados,
+                         "subido_por": u.uploaded_by_nombre or u.uploaded_by,
+                         "created_at": u.created_at.isoformat() if u.created_at else None} for u in rows]}
+
+
+@router.get("/monitoreos")
+async def monitoreos_list(
+    desde: Optional[str] = Query(None), hasta: Optional[str] = Query(None),
+    operador: Optional[str] = Query(None), estado: Optional[str] = Query(None, description="pendiente | devuelto"),
+    user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict:
+    rows = (await db.execute(_moni_query(desde, hasta, operador, estado).limit(1000))).scalars().all()
+    return {"monitoreos": [_monitoreo_out(m) for m in rows]}
+
+
+@router.get("/monitoreos/analisis")
+async def monitoreos_analisis(
+    desde: Optional[str] = Query(None), hasta: Optional[str] = Query(None),
+    operador: Optional[str] = Query(None),
+    user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Análisis semántico de conjunto y % de calidad del período."""
+    rows = (await db.execute(_moni_query(desde, hasta, operador, None))).scalars().all()
+    out = analizar_monitoreos([_monitoreo_out(m, breve=True) for m in rows])
+    out["periodo"] = {"desde": desde, "hasta": hasta, "operador": operador}
+    return out
+
+
+@router.get("/monitoreos/{monitoreo_id}")
+async def monitoreo_get(monitoreo_id: str, user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)) -> dict:
+    m = await db.get(TeleventasMonitoreo, monitoreo_id)
+    if not m:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Monitoreo no encontrado")
+    return _monitoreo_out(m)
+
+
+@router.post("/monitoreos/{monitoreo_id}/devolucion")
+async def monitoreo_devolucion(
+    monitoreo_id: str, payload: MonitoreoDevolucionRequest, request: Request,
+    user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Flujo de devolución: `devolver` (el líder devuelve el monitoreo al asesor con su
+    comentario → devuelto), `comentar_operador` (el asesor deja el suyo), `comentar_lider`,
+    `reabrir` (→ pendiente). Toda acción exige comentario y queda en el seguimiento."""
+    m = await db.get(TeleventasMonitoreo, monitoreo_id)
+    if not m:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Monitoreo no encontrado")
+    accion = payload.accion.strip().lower()
+    comentario = payload.comentario.strip()
+    if not comentario:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "La devolución necesita un comentario.")
+    autor = user.full_name or user.id
+    if accion == "devolver":
+        m.comentario_lider = comentario
+        m.estado_devolucion = "devuelto"
+        m.devuelto_por = autor
+        m.devuelto_at = datetime.utcnow()
+    elif accion == "comentar_lider":
+        m.comentario_lider = comentario
+    elif accion == "comentar_operador":
+        m.comentario_operador = comentario
+    elif accion == "reabrir":
+        m.estado_devolucion = "pendiente"
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Acción inválida: devolver, comentar_lider, comentar_operador o reabrir.")
+    m.seguimiento = list(m.seguimiento or []) + [{"fecha": datetime.utcnow().isoformat(), "autor": autor,
+                                                  "accion": accion, "estado": m.estado_devolucion, "comentario": comentario}]
+    await db.commit()
+    await db.refresh(m)
+    await record_action(db, user_id=user.id, action=f"monitoreo_{accion}", resource_type="televentas_monitoreo",
+                        resource_id=m.id, ip=client_ip(request), extra={"operador": m.operador, "estado": m.estado_devolucion})
+    return _monitoreo_out(m)
 
 
 # ---- Conclusión de la reunión semanal (una por semana) ----
