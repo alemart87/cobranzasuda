@@ -205,3 +205,11 @@ class AlertaAccionRequest(BaseModel):
     (apagar) desde cualquier estado; (reactivar) desde mitigada/apagada."""
     accion: str                           # mitigar | resolver | apagar | reactivar | comentar
     comentario: str
+
+
+class MonitoreoDevolucionRequest(BaseModel):
+    """Flujo de devolución de un monitoreo al asesor.
+    accion: devolver (líder devuelve con su comentario → estado devuelto) ·
+    comentar_operador (el asesor deja su comentario) · comentar_lider · reabrir (→ pendiente)."""
+    accion: str                           # devolver | comentar_lider | comentar_operador | reabrir
+    comentario: str

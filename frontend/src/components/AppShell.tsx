@@ -66,6 +66,7 @@ const NAV_VENTAS_REPORTS = [
   { href: "/televentas/comparativo", label: "Comparativo" },
   { href: "/televentas/semanal", label: "Semanal" },
   { href: "/televentas/eficiencia", label: "Eficiencia" },
+  { href: "/televentas/monitoreos", label: "Monitoreos" },
   { href: "/televentas/simulador", label: "Simulador" },
 ];
 const NAV_VENTAS_UPLOADS = [

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { apiFetch } from "@/lib/api";
@@ -47,7 +48,7 @@ function Barra({ partes, total }: { partes: Array<{ n: number; color: string; la
   );
 }
 
-export function GestionLiderazgo({ semana, desde, hasta }: { semana: string; desde?: string | null; hasta?: string | null }) {
+export function GestionLiderazgo({ semana, desde, hasta, agentes }: { semana: string; desde?: string | null; hasta?: string | null; agentes?: number | null }) {
   const [g, setG] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [verTodo, setVerTodo] = useState(false);
@@ -57,13 +58,14 @@ export function GestionLiderazgo({ semana, desde, hasta }: { semana: string; des
     const q = new URLSearchParams({ semana });
     if (desde) q.set("desde", desde);
     if (hasta) q.set("hasta", hasta);
+    if (agentes) q.set("agentes", String(agentes));
     apiFetch<any>(`/api/v1/televentas/semanal/gestion?${q.toString()}`).then(setG).catch((e) => setError(e.message));
-  }, [semana, desde, hasta]);
+  }, [semana, desde, hasta, agentes]);
 
   if (error) return <section className="card p-5 mb-6 text-sm text-brand-primary">{error}</section>;
   if (!g) return <section className="card p-5 mb-6 text-sm text-brand-slate">Cargando gestión de la semana…</section>;
 
-  const r = g.resumen, al = g.alertas, comp = g.compromisos;
+  const r = g.resumen, al = g.alertas, comp = g.compromisos, moni = g.monitoreos ?? {};
   const asesores: any[] = al.por_asesor ?? [];
   const asesoresGrafico = asesores.filter((a) => a.abiertas > 0 || a.mitigaciones_semana + a.resueltas_semana + a.comentarios_semana > 0);
   const chartData = asesoresGrafico.map((a) => ({
@@ -84,14 +86,21 @@ export function GestionLiderazgo({ semana, desde, hasta }: { semana: string; des
         </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
+      {/* KPIs de gestión */}
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-3">
+        <Kpi label="Casos gestionados" valor={r.casos_gestionados ?? 0} sub="asesores con mitigación o comentario en la semana" tono="ok" />
         <Kpi label="Acciones de la semana" valor={r.acciones_semana} sub={`${r.lideres_activos} líder(es) actuaron`} />
         <Kpi label="Mitigaciones aplicadas" valor={r.mitigaciones_semana} sub={`a ${r.asesores_mitigados} asesor(es)`} tono="orange" />
-        <Kpi label="Alertas abiertas" valor={r.alertas_abiertas} sub={`${al.estado_actual.activa} activas · ${al.estado_actual.en_mitigacion} en mitigación`} tono="primary" />
-        <Kpi label="Sin atender" valor={r.sin_atender} sub={r.sin_atender_nunca ? `${r.sin_atender_nunca} nunca gestionada(s)` : "todas tuvieron gestión"} tono={r.sin_atender ? "primary" : "ok"} />
-        <Kpi label="Compromisos de la semana" valor={`${r.compromisos_cumplidos}/${r.compromisos_semana}`} sub={`${sem.cumplimiento_pct}% cumplidos`} tono={sem.total && sem.cumplido === sem.total ? "ok" : "cyan"} />
-        <Kpi label="Arrastrados" valor={r.arrastrados} sub="de semanas anteriores sin cumplir" tono={r.arrastrados ? "orange" : "ok"} />
+        <Kpi label="Alertas abiertas" valor={r.alertas_abiertas} sub={`${r.abiertas_gestionadas ?? 0} gestionadas · ${r.abiertas_sin_gestion ?? 0} sin gestión`} tono="primary" />
+        <Kpi label="Sin atender" valor={r.sin_atender} sub={r.sin_atender_nunca ? `${r.sin_atender_nunca} nunca gestionada(s)` : "activas sin gestión esta semana"} tono={r.sin_atender ? "primary" : "ok"} />
+        <Kpi label="Compromisos" valor={`${r.compromisos_cumplidos}/${r.compromisos_semana}`} sub={`${sem.cumplimiento_pct}% cumplidos · ${r.arrastrados} arrastrado(s)`} tono={sem.total && sem.cumplido === sem.total ? "ok" : "cyan"} />
+      </div>
+      {/* KPIs de monitoreos de calidad de la semana */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <Kpi label="Monitoreos de la semana" valor={moni.monitoreos ?? 0} sub={`${moni.operadores_monitoreados ?? 0} asesor(es) monitoreado(s)`} tono="cyan" />
+        <Kpi label="% de monitoreo semanal" valor={moni.pct_monitoreo != null ? `${moni.pct_monitoreo}%` : "—"} sub={moni.agentes_activos ? `${moni.operadores_monitoreados} de ${moni.agentes_activos} agentes efectivos` : "sin agentes efectivos de la semana"} tono="cyan" />
+        <Kpi label="Con devolución" valor={`${moni.devueltos ?? 0}/${moni.monitoreos ?? 0}`} sub={`${moni.pct_devueltos ?? 0}% devueltos · ${moni.pendientes ?? 0} pendiente(s)`} tono={(moni.pendientes ?? 0) > 0 ? "orange" : "ok"} />
+        <Kpi label="Calidad de la semana" valor={moni.precision_promedio != null ? `${moni.precision_promedio}%` : "—"} sub={`${moni.criticos ?? 0} crítico(s)`} tono={(moni.precision_promedio ?? 100) >= 80 ? "ok" : "primary"} />
       </div>
 
       <div className="grid xl:grid-cols-2 gap-4 mb-4">
@@ -154,9 +163,32 @@ export function GestionLiderazgo({ semana, desde, hasta }: { semana: string; des
               </div>
             )}
           </div>
+          <div className="card p-5">
+            <div className="flex items-baseline justify-between gap-2">
+              <h3 className="font-display text-base text-brand-ink uppercase">Monitoreos de calidad de la semana</h3>
+              <Link href="/televentas/monitoreos" className="no-print text-[11px] text-brand-primary font-semibold hover:underline">Ver monitoreos</Link>
+            </div>
+            {(moni.por_asesor ?? []).length === 0 ? (
+              <div className="text-sm text-brand-slate py-3">Sin monitoreos cargados para esta semana.</div>
+            ) : (
+              <table className="w-full text-[12px] mt-2">
+                <thead><tr className="text-[9px] uppercase tracking-wider2 text-brand-slate"><th className="text-left py-1">Asesor</th><th className="text-right">Monit.</th><th className="text-right">Calidad</th><th className="text-right">Devueltos</th></tr></thead>
+                <tbody>
+                  {moni.por_asesor.map((m: any) => (
+                    <tr key={m.asesor} className="border-t border-brand-border">
+                      <td className="py-1 font-semibold text-brand-ink">{m.asesor}</td>
+                      <td className="text-right font-mono">{m.monitoreos}</td>
+                      <td className={`text-right font-mono ${(m.precision_promedio ?? 100) < 80 ? "text-brand-primary font-bold" : ""}`}>{m.precision_promedio ?? "—"}%</td>
+                      <td className="text-right font-mono">{m.devueltos}/{m.monitoreos}{m.pendientes ? <span className="text-brand-orange"> · {m.pendientes} pend.</span> : null}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
           <div className={`card p-5 ${al.sin_atender.length ? "border-l-4 border-l-brand-primary" : ""}`}>
             <h3 className="font-display text-base text-brand-ink uppercase">Alertas sin atender</h3>
-            <p className="text-[11px] text-brand-slate mb-2">Activas sin plan de mitigación. Días desde la última gestión (o desde que se generó).</p>
+            <p className="text-[11px] text-brand-slate mb-2">Activas sin ninguna gestión esta semana: ni mitigación ni comentario del líder. Días desde la última gestión (o desde que se generó).</p>
             {al.sin_atender.length === 0 ? (
               <div className="text-sm text-emerald-700 font-semibold">Todas las alertas abiertas tienen un plan en curso.</div>
             ) : (
@@ -189,13 +221,14 @@ export function GestionLiderazgo({ semana, desde, hasta }: { semana: string; des
               <th className="px-3 py-2 text-left">Motivo</th>
               <th className="px-3 py-2 text-right">Mitigaciones</th>
               <th className="px-3 py-2 text-right">Resueltas</th>
+              <th className="px-3 py-2 text-center">Gestionado</th>
               <th className="px-3 py-2 text-right">Acciones sem.</th>
               <th className="px-3 py-2 text-left">Última acción</th>
               <th className="px-3 py-2 text-right">Días</th>
             </tr>
           </thead>
           <tbody>
-            {asesores.length === 0 && <tr><td colSpan={8} className="px-3 py-6 text-center text-brand-slate">No hay alertas de eficiencia registradas.</td></tr>}
+            {asesores.length === 0 && <tr><td colSpan={9} className="px-3 py-6 text-center text-brand-slate">No hay alertas de eficiencia registradas.</td></tr>}
             {asesores.map((a) => {
               const e = ESTADO_ALERTA[a.estado] ?? ESTADO_ALERTA.activa;
               return (
@@ -205,6 +238,7 @@ export function GestionLiderazgo({ semana, desde, hasta }: { semana: string; des
                   <td className="px-3 py-2 text-[11px] text-brand-graphite max-w-[220px]">{a.motivo ?? "—"}</td>
                   <td className="px-3 py-2 text-right font-mono"><b>{a.mitigaciones_semana}</b> <span className="text-brand-slate text-xs">/ {a.mitigaciones_total}</span></td>
                   <td className="px-3 py-2 text-right font-mono"><b>{a.resueltas_semana}</b> <span className="text-brand-slate text-xs">/ {a.resueltas_total}</span></td>
+                  <td className="px-3 py-2 text-center">{a.gestionado_semana ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">Sí</span> : a.abiertas ? <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-brand-primary/10 text-brand-primary">No</span> : <span className="text-[10px] text-brand-slate">—</span>}</td>
                   <td className="px-3 py-2 text-right font-mono">{a.acciones_semana}</td>
                   <td className="px-3 py-2 text-[11px]">
                     {a.ultima_accion ? (

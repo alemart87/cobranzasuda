@@ -60,7 +60,8 @@ def rango_semana(semana: str, dias: int = 7) -> tuple[Optional[date], Optional[d
 
 def gestion_semanal(compromisos: list[dict], alertas: list[dict], semana: str,
                     desde: Optional[date] = None, hasta: Optional[date] = None,
-                    hoy: Optional[date] = None) -> dict[str, Any]:
+                    hoy: Optional[date] = None, monitoreos: Optional[list[dict]] = None,
+                    agentes_activos: Optional[float] = None) -> dict[str, Any]:
     """Arma el dashboard de gestión de la semana `semana` (clave de inicio).
 
     `desde`/`hasta` acotan las ACCIONES del seguimiento que cuentan como "de la
@@ -169,7 +170,10 @@ def gestion_semanal(compromisos: list[dict], alertas: list[dict], semana: str,
                              "comentario": s.get("comentario"), "asesor": op, "alerta_id": a.get("id"),
                              "severidad": a.get("severidad")})
 
-        if est == "activa":
+        # Sin atender = activa y SIN NINGUNA gestión en la semana (ni mitigación ni comentario):
+        # un comentario del líder ya cuenta como caso gestionado.
+        gestion_en_semana = any((x.get("accion") or "").lower() in ACCIONES_GESTION and en_semana(_fecha(x.get("fecha"))) for x in seg)
+        if est == "activa" and not gestion_en_semana:
             ref = ultima_gestion or creada
             dias = (hoy - ref).days if ref else None
             sin_atender.append({"asesor": op, "alerta_id": a.get("id"), "severidad": a.get("severidad"),
@@ -193,6 +197,50 @@ def gestion_semanal(compromisos: list[dict], alertas: list[dict], semana: str,
     timeline.sort(key=lambda x: x.get("fecha") or "", reverse=True)
     sin_atender.sort(key=lambda x: (-(x["dias_sin_accion"] or 0), x["asesor"]))
 
+    # Un asesor con CUALQUIER acción registrada en la semana (mitigar, resolver, apagar,
+    # reactivar o un comentario) es un caso GESTIONADO: el comentario también cuenta.
+    gestionados = sorted(a["asesor"] for a in asesores if a["acciones_semana"] > 0)
+    for a in asesores:
+        a["gestionado_semana"] = a["acciones_semana"] > 0
+    con_alerta_abierta = [a for a in asesores if a["abiertas"] > 0]
+    abiertas_gestionadas = sum(1 for a in con_alerta_abierta if a["gestionado_semana"])
+
+    # ---------------- monitoreos de calidad de la semana ----------------
+    moni_sem = []
+    for m in (monitoreos or []):
+        f = _fecha(m.get("fecha_monitoreo"))
+        if en_semana(f):
+            moni_sem.append(m)
+    ops_moni = sorted({m.get("operador") for m in moni_sem if m.get("operador")})
+    devueltos = [m for m in moni_sem if (m.get("estado_devolucion") or "pendiente") == "devuelto"]
+    precs = [float(m["precision"]) for m in moni_sem if m.get("precision") is not None]
+    por_op_moni: dict[str, dict] = {}
+    for m in moni_sem:
+        o = por_op_moni.setdefault(m.get("operador") or "—", {"asesor": m.get("operador") or "—", "monitoreos": 0, "devueltos": 0, "precs": []})
+        o["monitoreos"] += 1
+        if (m.get("estado_devolucion") or "pendiente") == "devuelto":
+            o["devueltos"] += 1
+        if m.get("precision") is not None:
+            o["precs"].append(float(m["precision"]))
+    moni_por_asesor = sorted([{"asesor": o["asesor"], "monitoreos": o["monitoreos"], "devueltos": o["devueltos"],
+                               "pendientes": o["monitoreos"] - o["devueltos"],
+                               "precision_promedio": round(sum(o["precs"]) / len(o["precs"]), 1) if o["precs"] else None}
+                              for o in por_op_moni.values()], key=lambda x: (x["precision_promedio"] if x["precision_promedio"] is not None else 999, x["asesor"]))
+    denominador = float(agentes_activos) if agentes_activos else None
+    monitoreos_out = {
+        "monitoreos": len(moni_sem),
+        "operadores_monitoreados": len(ops_moni),
+        "operadores_monitoreados_lista": ops_moni,
+        "agentes_activos": denominador,
+        "pct_monitoreo": round(len(ops_moni) / denominador * 100, 1) if denominador else None,
+        "devueltos": len(devueltos),
+        "pendientes": len(moni_sem) - len(devueltos),
+        "pct_devueltos": round(len(devueltos) / len(moni_sem) * 100, 1) if moni_sem else 0.0,
+        "precision_promedio": round(sum(precs) / len(precs), 1) if precs else None,
+        "criticos": sum(1 for m in moni_sem if m.get("critico")),
+        "por_asesor": moni_por_asesor,
+    }
+
     mitig_semana = acciones_semana.get("mitigar", 0) + acciones_semana.get("resolver", 0)
     asesores_mitigados = sorted({t["asesor"] for t in timeline if t["accion"] in ACCIONES_MITIGACION})
     total_gestion = sum(v for k, v in acciones_semana.items() if k in ACCIONES_GESTION)
@@ -208,12 +256,21 @@ def gestion_semanal(compromisos: list[dict], alertas: list[dict], semana: str,
             "alertas_abiertas": estado_actual["activa"] + estado_actual["en_mitigacion"],
             "sin_atender": len(sin_atender),
             "sin_atender_nunca": sum(1 for s in sin_atender if s["nunca_gestionada"]),
+            "casos_gestionados": len(gestionados),
+            "casos_gestionados_lista": gestionados,
+            "abiertas_gestionadas": abiertas_gestionadas,
+            "abiertas_sin_gestion": len(con_alerta_abierta) - abiertas_gestionadas,
+            "monitoreos_semana": monitoreos_out["monitoreos"],
+            "operadores_monitoreados": monitoreos_out["operadores_monitoreados"],
+            "pct_monitoreo": monitoreos_out["pct_monitoreo"],
+            "monitoreos_devueltos": monitoreos_out["devueltos"],
             "compromisos_semana": compromisos_out["semana"]["total"],
             "compromisos_cumplidos": compromisos_out["semana"]["cumplido"],
             "arrastrados": compromisos_out["arrastrados"]["total"],
             "lideres_activos": len(lideres),
         },
         "compromisos": compromisos_out,
+        "monitoreos": monitoreos_out,
         "alertas": {
             "estado_actual": estado_actual,
             "acciones_semana": {k: acciones_semana.get(k, 0) for k in ("creada", "actualizada", *ACCIONES_GESTION)},
