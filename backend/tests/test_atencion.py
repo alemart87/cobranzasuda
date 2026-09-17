@@ -75,6 +75,10 @@ def test_analyze_llamadas_kpis_y_operadores():
          "inicio": None, "fin": None, "duracion_seg": 3600.0},
         {"agente": "Ana Pérez", "estado_principal": "Disponible", "estado_secundario": "Disponible",
          "inicio": None, "fin": None, "duracion_seg": 7200.0},  # no es auxiliar
+        {"agente": "Luis Gómez", "estado_principal": "Reunión", "estado_secundario": "Reunión",
+         "inicio": None, "fin": None, "duracion_seg": 1800.0},  # auxiliar, pero excluido del %
+        {"agente": "Luis Gómez", "estado_principal": "Desconectado", "estado_secundario": "",
+         "inicio": None, "fin": None, "duracion_seg": 99999.0},  # no cuenta en el tiempo conectado
     ]
 
     a = analyze_atencion_llamadas(entrantes, estados, intervalo, colas)
@@ -96,8 +100,13 @@ def test_analyze_llamadas_kpis_y_operadores():
     ana = next(o for o in a["operadores"] if o["operador"] == "Ana Pérez")
     assert ana["entrantes"] == 1 and ana["salientes"] == 1 and ana["total"] == 2
     assert ana["aux_seg"] == 3600.0                  # solo "Comida", no "Disponible"
+    assert ana["tiempo_total_seg"] == 10800.0 and ana["aux_pct"] == 33.3   # 3600 / (3600 + 7200), sin reunión
+    assert k["aux_objetivo_pct"] == 13.0
     # auxiliares de equipo: solo Comida (3600), no Disponible
     assert a["auxiliares_equipo"][0]["estado"] == "Comida"
+    luis = next(o for o in a["operadores"] if o["operador"] == "Luis Gómez")
+    assert luis["aux_seg"] == 1800.0 and luis["aux_sin_reunion_seg"] == 0.0 and luis["aux_pct"] == 0.0
+    assert k["tiempo_total_seg"] == 12600.0 and k["aux_sin_reunion_seg"] == 3600.0 and k["aux_pct"] == 28.6
 
 
 def test_queue_claim_atomico_y_reset():
@@ -306,7 +315,8 @@ def test_historico_atencion_serie_mensual_y_top_tipos():
         {"id": "l1", "period_month": date(2026, 6, 1), "generated_at": _dt(2026, 7, 1), "is_published": True,
          "llamadas_ingresadas": 1000, "contestadas": 900, "abandonadas": 100, "nivel_atencion_pct": 90.0, "sla_pct": 80.0,
          "abandono_pct": 10.0, "aht_seg": 200.0, "operadores_activos": 10, "dias_operativos": 22,
-         "data": {"kpis": {}, "auxiliares_equipo": [{"estado": "Comida", "seg": 3600.0, "pct": 60.0}, {"estado": "Baño", "seg": 2400.0, "pct": 40.0}]}},
+         "data": {"kpis": {}, "auxiliares_equipo": [{"estado": "Comida", "seg": 3600.0, "pct": 60.0}, {"estado": "Baño", "seg": 2400.0, "pct": 40.0}, {"estado": "Reunión", "seg": 1200.0, "pct": 0.0}],
+                  "estados_equipo": [{"estado": "Disponible", "seg": 36000.0}, {"estado": "Comida", "seg": 3600.0}, {"estado": "Baño", "seg": 2400.0}, {"estado": "Reunión", "seg": 1200.0}, {"estado": "Desconectado", "seg": 50000.0}]}},
         {"id": "l2", "period_month": date(2026, 7, 1), "generated_at": _dt(2026, 8, 1), "is_published": False,
          "llamadas_ingresadas": 1200, "contestadas": 1020, "abandonadas": 180, "nivel_atencion_pct": 85.0, "sla_pct": 78.0,
          "abandono_pct": 15.0, "aht_seg": 220.0, "operadores_activos": 12, "dias_operativos": 23,
@@ -328,7 +338,8 @@ def test_historico_atencion_serie_mensual_y_top_tipos():
     assert jul["llamadas"]["report_id"] == "l2b" and jul["llamadas"]["contestadas"] == 1000      # el publicado, no el borrador
     assert jul["vs_mes_anterior"]["contestadas"] == 11.1 and jul["vs_mes_anterior"]["registros"] == 33.3
     assert jul["vs_mes_anterior"]["nivel_atencion_pts"] == 0.9 and jul["vs_mes_anterior"]["aht_seg"] == 5.0
-    assert jun["llamadas"]["aux_total_seg"] == 6000.0 and jun["llamadas_por_operador"] == 90.0
+    assert jun["llamadas"]["aux_total_seg"] == 7200.0 and jun["llamadas_por_operador"] == 90.0
+    assert jun["llamadas"]["aux_pct"] == 13.9 and jun["llamadas"]["aux_objetivo_pct"] == 13.0   # 6000 / 43200 (sin reunión, sin desconectado)
     tipos = {t["tipo"]: t for t in h["tipos"]}
     assert set(tipos) == {"Consulta", "Reclamo"} and tipos["Consulta"]["por_mes"] == {"2026-06": 200, "2026-07": 350}
     assert h["otros_tipos"][1] == {"mes": "2026-07", "cantidad": 50}

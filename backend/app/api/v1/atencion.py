@@ -187,7 +187,8 @@ async def atencion_historico(
                 "nivel_atencion_pct": float(r.nivel_atencion_pct or 0), "sla_pct": float(r.sla_pct or 0),
                 "abandono_pct": float(r.abandono_pct or 0), "aht_seg": float(r.aht_seg or 0),
                 "operadores_activos": r.operadores_activos, "dias_operativos": r.dias_operativos,
-                "data": {"kpis": (r.data or {}).get("kpis") or {}, "auxiliares_equipo": (r.data or {}).get("auxiliares_equipo") or []}}
+                "data": {"kpis": (r.data or {}).get("kpis") or {}, "auxiliares_equipo": (r.data or {}).get("auxiliares_equipo") or [],
+                         "estados_equipo": (r.data or {}).get("estados_equipo") or []}}
 
     def _g(r: AtencionGestionReport) -> dict:
         return {"id": r.id, "period_month": r.period_month, "generated_at": r.generated_at, "is_published": r.is_published,

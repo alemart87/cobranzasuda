@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { Area, Bar, CartesianGrid, ComposedChart, Legend, Line, ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart } from "recharts";
+import { Area, Bar, CartesianGrid, ComposedChart, LabelList, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis, BarChart } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
@@ -46,10 +46,11 @@ export default function AtencionHistoricoPage() {
     return row;
   });
   const dataAux = serie.map((p) => {
-    const row: any = { mes: mm(p.mes) };
+    const row: any = { mes: mm(p.mes), "% auxiliares (sin reunión)": p.llamadas?.aux_pct ?? null };
     (h?.auxiliares ?? []).forEach((a: any) => { row[a.estado] = Number(((a.por_mes[p.mes] ?? 0) / 3600).toFixed(1)); });
     return row;
   });
+  const objetivoAux: number = h?.resumen?.aux_objetivo_pct ?? 13;
   const ultimo = serie[serie.length - 1];
   const ul = ultimo?.llamadas, ug = ultimo?.gestiones, uv = ultimo?.vs_mes_anterior ?? {};
 
@@ -84,13 +85,14 @@ export default function AtencionHistoricoPage() {
       {ultimo && (
         <>
           <h2 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-semibold mb-2">Último mes · {monthLabel(ultimo.mes)} vs mes anterior</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 mb-6">
             <KpiCard label="Llamadas ingresadas" value={formatInt(ul?.ingresadas ?? 0)} hint={uv.ingresadas != null ? `${uv.ingresadas > 0 ? "+" : ""}${uv.ingresadas}% vs mes anterior` : "sin mes anterior"} accent="neutral" />
             <KpiCard label="Contestadas" value={formatInt(ul?.contestadas ?? 0)} hint={`nivel de atención ${ul?.nivel_atencion_pct ?? "—"}%${uv.nivel_atencion_pts != null ? ` (${uv.nivel_atencion_pts > 0 ? "+" : ""}${uv.nivel_atencion_pts} pts)` : ""}`} accent="cyan" />
             <KpiCard label="Registros (gestiones)" value={formatInt(ug?.total ?? 0)} hint={uv.registros != null ? `${uv.registros > 0 ? "+" : ""}${uv.registros}% vs mes anterior` : "sin mes anterior"} accent="purple" />
             <KpiCard label="Registros por 100 contestadas" value={ultimo.registros_por_100_contestadas != null ? String(ultimo.registros_por_100_contestadas) : "—"} hint="cuántas llamadas terminan en un registro" accent="secondary" />
             <KpiCard label="AHT" value={ul ? hms(ul.aht_seg) : "—"} hint={uv.aht_seg != null ? `${uv.aht_seg > 0 ? "+" : ""}${uv.aht_seg}% vs mes anterior` : "min:seg"} accent="orange" />
             <KpiCard label="Tipo más frecuente" value={ug?.por_tipo?.[0]?.label ?? h.resumen.tipo_mas_frecuente ?? "—"} hint={ug?.por_tipo?.[0] ? `${formatInt(ug.por_tipo[0].cantidad)} · ${ug.por_tipo[0].pct}% de los registros` : "del histórico"} accent="primary" />
+            <KpiCard label="% auxiliares (sin reunión)" value={ul?.aux_pct != null ? `${ul.aux_pct}%` : "—"} hint={`objetivo ${objetivoAux}%${uv.aux_pct_pts != null ? ` · ${uv.aux_pct_pts > 0 ? "+" : ""}${uv.aux_pct_pts} pts vs mes anterior` : ""}`} accent={ul?.aux_pct != null && ul.aux_pct > objetivoAux ? "danger" : "cyan"} />
           </div>
 
           <section className="card p-6 mb-6">
@@ -104,10 +106,18 @@ export default function AtencionHistoricoPage() {
                 <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v) => `${v}`} />
                 <Tooltip formatter={(v: any, n: any) => [n.startsWith("Registros por") ? `${v}` : formatInt(Number(v)), n]} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar yAxisId="l" dataKey="Ingresadas" fill="#94a3b8" fillOpacity={0.6} radius={[3, 3, 0, 0]} />
-                <Bar yAxisId="l" dataKey="Contestadas" fill="#00B2BF" radius={[3, 3, 0, 0]} />
-                <Line yAxisId="l" dataKey="Registros" stroke="#662483" strokeWidth={3} dot={{ r: 4 }} />
-                <Line yAxisId="r" dataKey="Registros por 100 contestadas" stroke="#E6332A" strokeWidth={2} strokeDasharray="5 4" dot={{ r: 3 }} connectNulls />
+                <Bar yAxisId="l" dataKey="Ingresadas" fill="#94a3b8" fillOpacity={0.6} radius={[3, 3, 0, 0]}>
+                  <LabelList dataKey="Ingresadas" position="top" fontSize={10} fill="#4B5563" formatter={(v: any) => (v ? formatInt(Number(v)) : "")} />
+                </Bar>
+                <Bar yAxisId="l" dataKey="Contestadas" fill="#00B2BF" radius={[3, 3, 0, 0]}>
+                  <LabelList dataKey="Contestadas" position="top" fontSize={10} fontWeight={700} fill="#00838F" formatter={(v: any) => (v ? formatInt(Number(v)) : "")} />
+                </Bar>
+                <Line yAxisId="l" dataKey="Registros" stroke="#662483" strokeWidth={3} dot={{ r: 4 }}>
+                  <LabelList dataKey="Registros" position="top" offset={10} fontSize={11} fontWeight={700} fill="#662483" formatter={(v: any) => (v ? formatInt(Number(v)) : "")} />
+                </Line>
+                <Line yAxisId="r" dataKey="Registros por 100 contestadas" stroke="#E6332A" strokeWidth={2} strokeDasharray="5 4" dot={{ r: 3 }} connectNulls>
+                  <LabelList dataKey="Registros por 100 contestadas" position="bottom" offset={8} fontSize={10} fill="#E6332A" formatter={(v: any) => (v != null ? `${v}` : "")} />
+                </Line>
               </ComposedChart>
             </ResponsiveContainer>
           </section>
@@ -132,16 +142,21 @@ export default function AtencionHistoricoPage() {
             </section>
             <section className="card p-6">
               <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Auxiliares del equipo por mes</h2>
-              <p className="text-xs text-brand-slate mb-3">Horas totales del equipo en cada estado auxiliar (no productivo), según el reporte de llamadas de cada mes.</p>
+              <p className="text-xs text-brand-slate mb-3">Áreas: horas del equipo en cada estado auxiliar. Línea roja (eje derecho): <b>% de auxiliares sin reunión sobre el tiempo conectado</b>, comparable entre meses de distinta cantidad de días. Punteada: objetivo {objetivoAux}%.</p>
               {(h.auxiliares ?? []).length === 0 ? <p className="text-sm text-brand-slate">Sin datos de estados auxiliares.</p> : (
                 <ResponsiveContainer width="100%" height={320}>
-                  <ComposedChart data={dataAux} margin={{ top: 8, right: 12, left: 0, bottom: 4 }}>
+                  <ComposedChart data={dataAux} margin={{ top: 16, right: 12, left: 0, bottom: 4 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                     <XAxis dataKey="mes" fontSize={11} />
-                    <YAxis fontSize={10} tickFormatter={(v) => `${v} hs`} />
-                    <Tooltip formatter={(v: any) => `${v} hs`} />
+                    <YAxis yAxisId="l" fontSize={10} tickFormatter={(v) => `${v} hs`} />
+                    <YAxis yAxisId="r" orientation="right" fontSize={10} domain={[0, (max: number) => Math.max(20, Math.ceil((max + 3) / 5) * 5)]} tickFormatter={(v) => `${v}%`} />
+                    <Tooltip formatter={(v: any, n: any) => (String(n).startsWith("%") ? `${v}%` : `${v} hs`)} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
-                    {h.auxiliares.map((a: any, i: number) => <Area key={a.estado} dataKey={a.estado} stackId="a" stroke={PALETA[i % PALETA.length]} fill={PALETA[i % PALETA.length]} fillOpacity={0.35} type="monotone" />)}
+                    {h.auxiliares.map((a: any, i: number) => <Area yAxisId="l" key={a.estado} dataKey={a.estado} stackId="a" stroke={PALETA[i % PALETA.length]} fill={PALETA[i % PALETA.length]} fillOpacity={0.35} type="monotone" />)}
+                    <ReferenceLine yAxisId="r" y={objetivoAux} stroke="#E6332A" strokeDasharray="6 4" label={{ value: `objetivo ${objetivoAux}%`, position: "insideTopRight", fontSize: 10, fill: "#E6332A" }} />
+                    <Line yAxisId="r" dataKey="% auxiliares (sin reunión)" stroke="#E6332A" strokeWidth={3} dot={{ r: 4, fill: "#fff", strokeWidth: 2 }} connectNulls>
+                      <LabelList dataKey="% auxiliares (sin reunión)" position="top" offset={8} fontSize={11} fontWeight={700} fill="#E6332A" formatter={(v: any) => (v != null ? `${v}%` : "")} />
+                    </Line>
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
@@ -150,13 +165,13 @@ export default function AtencionHistoricoPage() {
 
           <section className="card overflow-x-auto mb-6">
             <div className="px-5 pt-4 pb-2"><h2 className="font-display text-lg text-brand-ink uppercase">Comparativo mensual</h2><p className="text-xs text-brand-slate">Variaciones contra el mes anterior. Verde = mejora, rojo = desmejora.</p></div>
-            <table className="w-full text-sm min-w-[980px]">
+            <table className="w-full text-sm min-w-[1080px]">
               <thead className="bg-brand-bg border-b border-brand-border">
                 <tr className="text-[10px] uppercase tracking-wider2 text-brand-slate">
                   <th className="px-3 py-2 text-left">Mes</th>
                   <th className="px-3 py-2 text-right">Ingresadas</th><th className="px-3 py-2 text-right">Contestadas</th><th className="px-3 py-2 text-right">Var.</th>
                   <th className="px-3 py-2 text-right">Nivel at.</th><th className="px-3 py-2 text-right">Abandono</th><th className="px-3 py-2 text-right">SLA</th><th className="px-3 py-2 text-right">AHT</th>
-                  <th className="px-3 py-2 text-right">Operadores</th><th className="px-3 py-2 text-right">Auxiliares</th>
+                  <th className="px-3 py-2 text-right">Operadores</th><th className="px-3 py-2 text-right">Auxiliares</th><th className="px-3 py-2 text-right">% aux. (obj. {objetivoAux}%)</th>
                   <th className="px-3 py-2 text-right">Registros</th><th className="px-3 py-2 text-right">Var.</th><th className="px-3 py-2 text-right">Reg./100 cont.</th>
                   <th className="px-3 py-2 text-left">Top tipos</th>
                 </tr>
@@ -175,7 +190,8 @@ export default function AtencionHistoricoPage() {
                       <td className="px-3 py-2 text-right">{l ? `${l.sla_pct}%` : "—"}</td>
                       <td className="px-3 py-2 text-right font-mono">{l ? hms(l.aht_seg) : "—"} {v.aht_seg != null && <Delta v={v.aht_seg} invertir />}</td>
                       <td className="px-3 py-2 text-right">{l ? l.operadores_activos : "—"}{p.llamadas_por_operador != null && <div className="text-[10px] text-brand-slate">{p.llamadas_por_operador} cont./op.</div>}</td>
-                      <td className="px-3 py-2 text-right">{l ? hs(l.aux_total_seg) : "—"} {v.aux_total_seg != null && <Delta v={v.aux_total_seg} invertir />}</td>
+                      <td className="px-3 py-2 text-right">{l ? hs(l.aux_total_seg) : "—"}</td>
+                      <td className="px-3 py-2 text-right">{l?.aux_pct != null ? <span className={`font-mono font-bold ${l.aux_pct > objetivoAux ? "text-brand-primary" : "text-emerald-600"}`}>{l.aux_pct}%</span> : "—"} {v.aux_pct_pts != null && <Delta v={v.aux_pct_pts} pts invertir />}</td>
                       <td className="px-3 py-2 text-right font-semibold text-brand-purple">{g ? formatInt(g.total) : "—"}</td>
                       <td className="px-3 py-2 text-right"><Delta v={v.registros} /></td>
                       <td className="px-3 py-2 text-right font-mono">{p.registros_por_100_contestadas ?? "—"}</td>
