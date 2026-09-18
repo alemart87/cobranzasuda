@@ -65,6 +65,25 @@ def _fin_de_mes(mes: str) -> date:
     return date(y, m, calendar.monthrange(y, m)[1])
 
 
+def _corte_datos(ll_data: dict, fin_mes: date) -> date:
+    """Último día con datos del reporte de llamadas del mes (fecha de corte real). Si el
+    reporte no trae fechas, se usa el fin de mes (mes cerrado)."""
+    fechas: list[str] = []
+    for v in (ll_data or {}).get("por_vendedor", []) or []:
+        if v.get("ultimo_dia"):
+            fechas.append(str(v["ultimo_dia"])[:10])
+    for d in (ll_data or {}).get("por_dia", []) or []:
+        f = d.get("fecha") or d.get("dia")
+        if f:
+            fechas.append(str(f)[:10])
+    if not fechas:
+        return fin_mes
+    try:
+        return min(date.fromisoformat(max(fechas)), fin_mes)
+    except ValueError:
+        return fin_mes
+
+
 def _metricas_operadores(ll_data: dict, pr_data: dict) -> list[dict]:
     """Cruza llamadas y producción por vendedor (equipo de marcación únicamente)."""
     pr_vend = {v["vendedor"]: v for v in (pr_data or {}).get("por_vendedor", [])}
@@ -125,13 +144,21 @@ def analizar_eficiencia(ll_data: dict, pr_data: dict, historia: dict[str, str],
     fin_mes = _fin_de_mes(mes)
     indices_prev = indices_prev or {}
 
-    # Antigüedad: primer registro HISTÓRICO (no del mes) hasta fin del mes analizado.
+    # Antigüedad REAL de calendario: desde el primer día en que el operador aparece en un
+    # reporte de llamadas (histórico) hasta el ÚLTIMO DÍA CON DATOS del reporte del mes.
+    # En un mes en curso NO se proyecta hasta fin de mes (eso inflaba la antigüedad con días
+    # que todavía no ocurrieron y clasificaba antes de tiempo).
+    corte = _corte_datos(ll_data, fin_mes)
     for o in ops:
         primero = historia.get(o["vendedor"]) or o.get("primer_dia")
         try:
-            o["antiguedad_dias"] = (fin_mes - date.fromisoformat(primero)).days + 1 if primero else None
+            o["antiguedad_dias"] = (corte - date.fromisoformat(primero)).days + 1 if primero else None
+            o["antiguedad_desde"] = primero
+            o["antiguedad_hasta"] = corte.isoformat()
         except Exception:
             o["antiguedad_dias"] = None
+            o["antiguedad_desde"] = primero
+            o["antiguedad_hasta"] = corte.isoformat()
 
     establecidos = [o for o in ops if (o["antiguedad_dias"] or 0) > NUEVO_MAX_DIAS and o["dias_activos"] > 0]
     base_media = establecidos or [o for o in ops if (o["antiguedad_dias"] or 0) >= MIN_DIAS_ANALISIS and o["dias_activos"] > 0]
@@ -265,7 +292,8 @@ def analizar_eficiencia(ll_data: dict, pr_data: dict, historia: dict[str, str],
         "serie_acumulada": serie,
         "conclusion": " ".join(partes),
         "reglas": {
-            "min_dias_analisis": MIN_DIAS_ANALISIS, "nuevo_max_dias": NUEVO_MAX_DIAS,
+            "min_dias_analisis": MIN_DIAS_ANALISIS, "antiguedad_corte": corte.isoformat(),
+                   "antiguedad_definicion": "días de calendario desde el primer día en que el operador aparece en un reporte de llamadas hasta el último día con datos del mes analizado", "nuevo_max_dias": NUEVO_MAX_DIAS,
             "pesos": {"prima_dia": PESO_PRIMA, "conversion": PESO_CONV, "ritmo": PESO_RITMO},
             "umbrales": {"optimo": UMBRAL_OPTIMO, "a_mejorar": UMBRAL_A_MEJORAR,
                          "critico": UMBRAL_CRITICO, "baja_persistente": BAJA_PERSISTENTE,

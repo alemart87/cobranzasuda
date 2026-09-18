@@ -1,7 +1,7 @@
 """Tests unitarios del módulo Televentas (sin archivos fixture)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from app.services.analyzers._nombres import best_match, name_tokens
 from app.services.analyzers.televentas_llamadas import analyze_televentas_llamadas
@@ -426,3 +426,23 @@ def test_regresion_origen_recupera_pendiente():
            for i, (x, y) in enumerate(zip(xs, ys))]
     d = regresion_diaria(pts)
     assert "conversion" in d and "prima_por_contacto" in d
+
+
+def test_eficiencia_antiguedad_real_hasta_ultimo_dia_con_datos():
+    """La antigüedad es calendario real: desde el primer día en llamadas hasta el último día
+    con datos del mes (no se proyecta a fin de mes en un mes en curso)."""
+    from app.services.analyzers.televentas_eficiencia import analizar_eficiencia
+    ll = {"por_vendedor": [
+        {"vendedor": "Vieja Pro", "llamadas": 900, "contestadas": 500, "dias_activos": 12, "primer_dia": "2026-09-01", "ultimo_dia": "2026-09-17"},
+        {"vendedor": "Leidy Lopez", "llamadas": 83, "contestadas": 40, "dias_activos": 3, "primer_dia": "2026-09-14", "ultimo_dia": "2026-09-17"},
+    ], "por_dia": [{"fecha": f"2026-09-{d:02d}", "llamadas": 50} for d in range(1, 18)]}
+    pr = {"kpis": {"prima_emitida": 60_000_000}, "por_dia": [], "por_vendedor": [{"vendedor": "VIEJA PRO", "polizas": 20, "prima_emitida": 60_000_000}]}
+    historia = {"Vieja Pro": "2026-01-10", "Leidy Lopez": "2026-09-14"}
+    r = analizar_eficiencia(ll, pr, historia, "2026-09", 500_000_000)
+    assert r["reglas"]["antiguedad_corte"] == "2026-09-17"
+    todos = r["operadores"] + r["en_observacion"]
+    leidy = next(o for o in todos if o["vendedor"] == "Leidy Lopez")
+    assert leidy["antiguedad_dias"] == 4 and leidy["antiguedad_desde"] == "2026-09-14" and leidy["antiguedad_hasta"] == "2026-09-17"
+    assert leidy["estado"] == "observacion"          # < 15 días: no se clasifica ni genera alerta
+    vieja = next(o for o in todos if o["vendedor"] == "Vieja Pro")
+    assert vieja["antiguedad_dias"] == (date(2026, 9, 17) - date(2026, 1, 10)).days + 1

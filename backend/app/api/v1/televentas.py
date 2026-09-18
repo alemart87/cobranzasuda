@@ -1421,6 +1421,7 @@ async def _generar_alertas_eficiencia(db: AsyncSession, reg: TeleventasEficienci
             "prima": o.get("prima"), "prima_dia": o.get("prima_dia"),
             "conversion_pct": o.get("conversion_pct"), "llamadas_dia": o.get("llamadas_dia"),
             "dias_activos": o.get("dias_activos"), "antiguedad_dias": o.get("antiguedad_dias"),
+            "antiguedad_desde": o.get("antiguedad_desde"), "antiguedad_hasta": o.get("antiguedad_hasta"),
             "motivo": o.get("motivo"), "medias_equipo": equipo.get("medias"),
             "cuota_por_operador": equipo.get("cuota_por_operador"),
         }
