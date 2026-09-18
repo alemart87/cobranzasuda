@@ -292,8 +292,8 @@ export default function EficienciaPage() {
                   <th className="px-3 py-2 text-right">Prima/día</th>
                   <th className="px-3 py-2 text-right">Conv.%</th>
                   <th className="px-3 py-2 text-right">Llam/día</th>
-                  <th className="px-3 py-2 text-right">Días</th>
-                  <th className="px-3 py-2 text-right">Antigüedad</th>
+                  <th className="px-3 py-2 text-right" title="Días con llamadas en el mes: los que estuvo trabajando">Días activos</th>
+                  <th className="px-3 py-2 text-right" title="Calendario real: desde el primer día en que aparece en el reporte de llamadas hasta el último día con datos del mes">Antigüedad</th>
                 </tr>
               </thead>
               <tbody>
@@ -317,7 +317,7 @@ export default function EficienciaPage() {
                       <td className="px-3 py-2 text-right font-mono">{o.conversion_pct}%</td>
                       <td className="px-3 py-2 text-right">{o.llamadas_dia}</td>
                       <td className="px-3 py-2 text-right">{o.dias_activos}</td>
-                      <td className="px-3 py-2 text-right whitespace-nowrap">{o.antiguedad_dias != null ? `${o.antiguedad_dias} d` : "—"}</td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap" title={o.antiguedad_desde ? `desde ${o.antiguedad_desde} hasta ${o.antiguedad_hasta}` : undefined}>{o.antiguedad_dias != null ? `${o.antiguedad_dias} d` : "—"}{o.antiguedad_desde && <div className="text-[10px] text-brand-slate">desde {String(o.antiguedad_desde).slice(8, 10)}/{String(o.antiguedad_desde).slice(5, 7)}</div>}</td>
                     </tr>
                   );
                 })}

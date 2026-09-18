@@ -14,6 +14,8 @@ import { monthLabel } from "@/lib/month";
 const FLUJO = ["activa", "en_mitigacion", "mitigada"];
 
 /** Informe específico de una alerta de eficiencia — imprimible, con flujo y seguimiento. */
+const fmtDia = (iso: string) => { const [y, m, d] = String(iso).slice(0, 10).split("-"); return `${d}/${m}/${y}`; };
+
 export default function InformeAlertaPage() {
   const params = useParams<{ id: string }>();
   const [alerta, setAlerta] = useState<any>(null);
@@ -92,8 +94,9 @@ export default function InformeAlertaPage() {
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <KpiCard label="Llamadas por día" value={`${d.llamadas_dia ?? "—"}`} hint={d.medias_equipo?.llamadas_dia ? `media: ${d.medias_equipo.llamadas_dia}` : undefined} accent="neutral" />
-        <KpiCard label="Días activos" value={formatInt(d.dias_activos ?? 0)} accent="neutral" />
-        <KpiCard label="Antigüedad" value={d.antiguedad_dias != null ? `${d.antiguedad_dias} días` : "—"} accent="neutral" />
+        <KpiCard label="Días activos" value={formatInt(d.dias_activos ?? 0)} hint="días con llamadas: los que estuvo trabajando" accent="neutral" />
+        <KpiCard label="Antigüedad" value={d.antiguedad_dias != null ? `${d.antiguedad_dias} días` : "—"}
+          hint={d.antiguedad_desde ? `calendario real: desde ${fmtDia(d.antiguedad_desde)}${d.antiguedad_hasta ? ` hasta ${fmtDia(d.antiguedad_hasta)} (último día con datos)` : ""}` : "desde el primer día en el reporte de llamadas"} accent="neutral" />
         <KpiCard label="Objetivo del mes (equipo)" value={d.objetivo_prima ? formatGs(d.objetivo_prima) : "—"} accent="neutral" />
       </div>
 
