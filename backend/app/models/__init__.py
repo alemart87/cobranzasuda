@@ -33,6 +33,7 @@ from .televentas_reunion import TeleventasReunionSemanal
 from .televentas_eficiencia import TeleventasEficiencia, TeleventasEficienciaNota
 from .televentas_alerta import TeleventasAlerta
 from .televentas_monitoreo import TeleventasMonitoreo, TeleventasMonitoreoUpload
+from .televentas_operador_baja import TeleventasOperadorBaja
 
 __all__ = [
     "User", "Upload", "Report", "AuditLog",
@@ -49,5 +50,5 @@ __all__ = [
     "TeleventasProduccionItem",
     "TeleventasCrmUpload", "TeleventasCrmReport", "TeleventasCrmItem", "TeleventasAnalisis",
     "TeleventasCompromiso", "TeleventasReunionSemanal", "TeleventasEficiencia", "TeleventasEficienciaNota", "TeleventasAlerta",
-    "TeleventasMonitoreo", "TeleventasMonitoreoUpload",
+    "TeleventasMonitoreo", "TeleventasMonitoreoUpload", "TeleventasOperadorBaja",
 ]

@@ -25,6 +25,7 @@ from ...models.televentas_compromiso import TeleventasCompromiso
 from ...models.televentas_reunion import TeleventasReunionSemanal
 from ...models.televentas_alerta import TeleventasAlerta
 from ...models.televentas_monitoreo import TeleventasMonitoreo, TeleventasMonitoreoUpload
+from ...models.televentas_operador_baja import TeleventasOperadorBaja
 from ...models.televentas_eficiencia import TeleventasEficiencia, TeleventasEficienciaNota
 from ...models.televentas_crm_report import TeleventasCrmReport
 from ...models.televentas_crm_upload import TeleventasCrmUpload
@@ -42,7 +43,7 @@ from ...schemas.televentas import (
     TeleventasLlamadasReportDetail, TeleventasLlamadasReportList, TeleventasLlamadasReportSummary,
     TeleventasLlamadasUploadList, TeleventasLlamadasUploadRead,
     TeleventasProduccionReportDetail, TeleventasProduccionReportList, TeleventasProduccionReportSummary,
-    TeleventasProduccionUploadList, TeleventasProduccionUploadRead, MonitoreoDevolucionRequest,
+    TeleventasProduccionUploadList, TeleventasProduccionUploadRead, MonitoreoDevolucionRequest, OperadorBajaRequest,
 )
 from ...services.analyzers import (
     combine_televentas, comparativo_televentas, analizar_tendencia_mensual, simular, escenarios,
@@ -55,6 +56,7 @@ from ...services.analyzers.televentas_llamadas import por_dia_llamadas
 from ...services.analyzers.televentas_semanal import agrupar_semanas, analizar_semana, evaluar_semana
 from ...services.analyzers.televentas_simulador import regresion_diaria
 from ...services.parsers import parse_televentas_llamadas
+from ...services.parsers._text import strip_accents as _strip_accents
 from ...services.parsers.televentas_monitoreos_parser import parse_televentas_monitoreos
 from ...services.audit_service import record_action
 from ..deps import CurrentUser, client_ip, get_current_user, require_analyst_or_admin
@@ -943,9 +945,17 @@ async def televentas_semanal_gestion(
     comps = (await db.execute(select(TeleventasCompromiso))).scalars().all()
     alertas = (await db.execute(select(TeleventasAlerta))).scalars().all()
     monis = (await db.execute(select(TeleventasMonitoreo))).scalars().all()
-    return gestion_semanal([_compromiso_out(c) for c in comps], [_alerta_out(a) for a in alertas],
-                           semana, f_desde, f_hasta,
-                           monitoreos=[_monitoreo_out(m, breve=True) for m in monis], agentes_activos=agentes)
+    bajas = await _bajas_activas(db)
+    g = gestion_semanal([_compromiso_out(c) for c in comps], [_alerta_out(a) for a in alertas],
+                        semana, f_desde, f_hasta,
+                        monitoreos=[_monitoreo_out(m, breve=True) for m in monis], agentes_activos=agentes)
+    if bajas:   # operadores dados de baja: fuera del seguimiento por asesor y de "sin atender"
+        g["alertas"]["por_asesor"] = [x for x in g["alertas"]["por_asesor"] if _op_key(x["asesor"]) not in bajas]
+        g["alertas"]["sin_atender"] = [x for x in g["alertas"]["sin_atender"] if _op_key(x["asesor"]) not in bajas]
+        g["resumen"]["sin_atender"] = len(g["alertas"]["sin_atender"])
+        g["resumen"]["sin_atender_nunca"] = sum(1 for x in g["alertas"]["sin_atender"] if x.get("nunca_gestionada"))
+        g["resumen"]["operadores_baja"] = sorted(b.operador for b in bajas.values())
+    return g
 
 
 # ---- Monitoreos de calidad (carga, análisis semántico y devolución al asesor) ----
@@ -1369,12 +1379,34 @@ def _seguimiento_entry(autor: str, accion: str, estado: str, comentario: str) ->
             "accion": accion, "estado": estado, "comentario": comentario}
 
 
+def _op_key(nombre: str) -> str:
+    return " ".join(_strip_accents(nombre or "").lower().split())
+
+
+async def _bajas_activas(db: AsyncSession) -> dict[str, TeleventasOperadorBaja]:
+    """Operadores dados de baja (no reincorporados), indexados por nombre normalizado."""
+    rows = (await db.execute(select(TeleventasOperadorBaja).where(TeleventasOperadorBaja.reincorporado_at.is_(None)))).scalars().all()
+    return {_op_key(b.operador): b for b in rows}
+
+
+def _baja_out(b: TeleventasOperadorBaja) -> dict:
+    return {"id": b.id, "operador": b.operador, "fecha_baja": b.fecha_baja.isoformat() if b.fecha_baja else None,
+            "motivo": b.motivo, "alertas_apagadas": [x for x in (b.alertas_apagadas or "").split(",") if x],
+            "dado_de_baja_por": b.created_by_nombre or b.created_by,
+            "created_at": b.created_at.isoformat() if b.created_at else None,
+            "reincorporado_at": b.reincorporado_at.isoformat() if b.reincorporado_at else None,
+            "reincorporado_por": b.reincorporado_por, "activa": b.reincorporado_at is None}
+
+
 async def _generar_alertas_eficiencia(db: AsyncSession, reg: TeleventasEficiencia,
                                       resultado: dict, user: CurrentUser) -> list[dict]:
     """Crea (o actualiza) una alerta por cada operador FUERA DE OBJETIVO del análisis.
     Una alerta ABIERTA del mismo operador+mes no se duplica: se actualiza con el
-    nuevo análisis y queda constancia en el seguimiento."""
-    fuera = [o for o in resultado.get("operadores", []) if o.get("estado") in _ALERTA_ESTADOS_OPERADOR]
+    nuevo análisis y queda constancia en el seguimiento. Los operadores dados de
+    baja no generan alertas."""
+    bajas = await _bajas_activas(db)
+    fuera = [o for o in resultado.get("operadores", []) if o.get("estado") in _ALERTA_ESTADOS_OPERADOR
+             and _op_key(o.get("vendedor", "")) not in bajas]
     abiertas = {(a.operador, a.mes): a for a in (await db.execute(
         select(TeleventasAlerta).where(TeleventasAlerta.mes == reg.mes,
                                        TeleventasAlerta.estado.in_(_ALERTA_ABIERTAS))
@@ -1430,6 +1462,73 @@ def _alerta_out(a: TeleventasAlerta) -> dict:
             "updated_at": a.updated_at.isoformat() if a.updated_at else None}
 
 
+# ---- Bajas de operadores: salen de pendientes y se apagan sus alertas ----
+@router.get("/eficiencia/bajas")
+async def eficiencia_bajas_list(
+    todas: bool = Query(False, description="Incluir reincorporados"),
+    user: CurrentUser = Depends(get_current_user), db: AsyncSession = Depends(get_db),
+) -> dict:
+    q = select(TeleventasOperadorBaja).order_by(TeleventasOperadorBaja.created_at.desc())
+    if not todas:
+        q = q.where(TeleventasOperadorBaja.reincorporado_at.is_(None))
+    rows = (await db.execute(q)).scalars().all()
+    return {"bajas": [_baja_out(b) for b in rows]}
+
+
+@router.post("/eficiencia/bajas", status_code=status.HTTP_201_CREATED)
+async def eficiencia_baja_crear(
+    payload: OperadorBajaRequest, request: Request,
+    user: CurrentUser = Depends(require_analyst_or_admin), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Marca al operador como dado de baja: se apagan TODAS sus alertas abiertas (queda en el
+    seguimiento de cada una) y los próximos análisis no le generan alertas."""
+    operador = payload.operador.strip()
+    if not operador:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Falta el nombre del operador.")
+    bajas = await _bajas_activas(db)
+    if _op_key(operador) in bajas:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{operador} ya está dado de baja.")
+    autor = user.full_name or user.id
+    motivo = (payload.motivo or "").strip() or "Operador dado de baja"
+    abiertas = [a for a in (await db.execute(
+        select(TeleventasAlerta).where(TeleventasAlerta.estado.in_(_ALERTA_ABIERTAS)))).scalars().all()
+        if _op_key(a.operador) == _op_key(operador)]
+    for a in abiertas:
+        a.seguimiento = list(a.seguimiento or []) + [_seguimiento_entry(
+            autor, "apagar", "apagada", f"Operador dado de baja{f' el {payload.fecha_baja.isoformat()}' if payload.fecha_baja else ''}: {motivo}")]
+        a.estado = "apagada"
+    b = TeleventasOperadorBaja(operador=operador, fecha_baja=payload.fecha_baja, motivo=motivo,
+                               alertas_apagadas=",".join(a.id for a in abiertas),
+                               created_by=user.id, created_by_nombre=user.full_name)
+    db.add(b)
+    await db.commit()
+    await db.refresh(b)
+    await record_action(db, user_id=user.id, action="televentas_operador_baja", resource_type="televentas_operador_baja",
+                        resource_id=b.id, ip=client_ip(request), extra={"operador": operador, "alertas_apagadas": len(abiertas)})
+    return {**_baja_out(b), "alertas_apagadas_n": len(abiertas)}
+
+
+@router.delete("/eficiencia/bajas/{baja_id}")
+async def eficiencia_baja_reincorporar(
+    baja_id: str, request: Request,
+    user: CurrentUser = Depends(require_analyst_or_admin), db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Reincorpora al operador: vuelve a entrar al circuito de alertas. Las alertas apagadas
+    por la baja quedan apagadas (se pueden reactivar a mano)."""
+    b = await db.get(TeleventasOperadorBaja, baja_id)
+    if not b:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Baja no encontrada")
+    if b.reincorporado_at:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Ese operador ya fue reincorporado.")
+    b.reincorporado_at = datetime.utcnow()
+    b.reincorporado_por = user.full_name or user.id
+    await db.commit()
+    await db.refresh(b)
+    await record_action(db, user_id=user.id, action="televentas_operador_reincorporar", resource_type="televentas_operador_baja",
+                        resource_id=b.id, ip=client_ip(request), extra={"operador": b.operador})
+    return _baja_out(b)
+
+
 @router.get("/eficiencia/alertas")
 async def eficiencia_alertas_list(
     estado: Optional[str] = Query(None, description="Filtro: abiertas | activa | en_mitigacion | mitigada | apagada"),
@@ -1445,7 +1544,8 @@ async def eficiencia_alertas_list(
     if mes:
         q = q.where(TeleventasAlerta.mes == mes.strip()[:7])
     rows = (await db.execute(q.limit(200))).scalars().all()
-    return {"alertas": [_alerta_out(a) for a in rows]}
+    bajas = await _bajas_activas(db)
+    return {"alertas": [{**_alerta_out(a), "operador_baja": _op_key(a.operador) in bajas} for a in rows]}
 
 
 @router.get("/eficiencia/alertas/{alerta_id}")

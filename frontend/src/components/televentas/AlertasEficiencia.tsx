@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { monthLabel } from "@/lib/month";
+import { Baja, BotonBaja, ListaBajas } from "./BajasOperadores";
 
 export const ALERTA_ESTADO: Record<string, { label: string; cls: string; pulso?: boolean }> = {
   activa: { label: "Activa", cls: "bg-brand-primary text-white", pulso: true },
@@ -69,15 +70,19 @@ export function AlertaAcciones({ alerta, onChange }: { alerta: any; onChange: (a
 }
 
 /** Panel de alertas de eficiencia (control de costos). Visible en la pestaña Eficiencia. */
-export function AlertasEficiencia({ refreshKey }: { refreshKey?: any }) {
+export function AlertasEficiencia({ refreshKey, bajas: bajasProp, onBajasChange }: { refreshKey?: any; bajas?: Baja[]; onBajasChange?: () => void }) {
   const [alertas, setAlertas] = useState<any[]>([]);
   const [verTodas, setVerTodas] = useState(false);
+  const [bajasLocal, setBajasLocal] = useState<Baja[]>([]);
+  const bajas = bajasProp ?? bajasLocal;
 
   const cargar = (todas: boolean) =>
     apiFetch<any>(`/api/v1/televentas/eficiencia/alertas${todas ? "" : "?estado=abiertas"}`)
       .then((d) => setAlertas(d.alertas ?? [])).catch(() => setAlertas([]));
+  const cargarBajas = () => apiFetch<any>("/api/v1/televentas/eficiencia/bajas").then((d) => setBajasLocal(d.bajas ?? [])).catch(() => setBajasLocal([]));
+  const bajasCambiaron = () => { cargar(verTodas); if (onBajasChange) onBajasChange(); else cargarBajas(); };
 
-  useEffect(() => { cargar(verTodas); }, [verTodas, refreshKey]);
+  useEffect(() => { cargar(verTodas); if (!bajasProp) cargarBajas(); }, [verTodas, refreshKey]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const abiertas = alertas.filter((a) => a.estado === "activa" || a.estado === "en_mitigacion").length;
 
@@ -99,8 +104,11 @@ export function AlertasEficiencia({ refreshKey }: { refreshKey?: any }) {
       <p className="text-xs text-brand-slate mb-4 max-w-3xl">
         El costo por hora se controla acá: cada operador fuera de objetivo genera una alerta con su informe.
         Flujo: <b>Activa → En mitigación → Mitigada</b>, o <b>Apagada</b> con justificación — toda acción exige
-        comentario y queda en el seguimiento.
+        comentario y queda en el seguimiento. Si el operador <b>ya no está</b>, usá <b>Dar de baja</b>: sale de
+        pendientes y sus alertas se apagan solas.
       </p>
+      <ListaBajas bajas={bajas} onChange={bajasCambiaron} />
+      <div className="mb-3" />
 
       {alertas.length === 0 ? (
         <p className="text-sm text-brand-slate">
@@ -121,9 +129,12 @@ export function AlertasEficiencia({ refreshKey }: { refreshKey?: any }) {
                   </span>
                   <span className="text-sm font-semibold text-brand-ink">{a.titulo}</span>
                   <span className="text-[11px] text-brand-slate">· {monthLabel(a.mes)}</span>
-                  <Link href={`/televentas/eficiencia/alertas/${a.id}`} className="ml-auto text-xs font-semibold text-brand-primary hover:underline no-print">
-                    Ver informe de alerta →
-                  </Link>
+                  <span className="ml-auto flex items-center gap-2">
+                    <BotonBaja operador={a.operador} bajas={bajas} onChange={bajasCambiaron} compacto />
+                    <Link href={`/televentas/eficiencia/alertas/${a.id}`} className="text-xs font-semibold text-brand-primary hover:underline no-print">
+                      Ver informe de alerta →
+                    </Link>
+                  </span>
                 </div>
                 {a.seguimiento?.length > 0 && (
                   <p className="text-[11px] text-brand-slate mb-2">

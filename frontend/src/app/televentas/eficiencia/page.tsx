@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover, PrintHeader } from "@/components/PrintButton";
 import { AlertasEficiencia } from "@/components/televentas/AlertasEficiencia";
+import { Baja, BotonBaja, estaDeBaja } from "@/components/televentas/BajasOperadores";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch, getUser } from "@/lib/api";
 import { formatGs, formatInt } from "@/lib/format";
@@ -36,6 +37,10 @@ export default function EficienciaPage() {
   const [nuevaNota, setNuevaNota] = useState("");
   const [verAlgoritmo, setVerAlgoritmo] = useState(false);
   const [alertasKey, setAlertasKey] = useState(0);
+  const [bajas, setBajas] = useState<Baja[]>([]);
+  const cargarBajas = () => apiFetch<any>("/api/v1/televentas/eficiencia/bajas").then((d) => setBajas(d.bajas ?? [])).catch(() => setBajas([]));
+  useEffect(() => { cargarBajas(); }, []);
+  const bajasCambiaron = () => { cargarBajas(); setAlertasKey((k) => k + 1); };
 
   const user = getUser();
   const puedeGenerar = user && user.role !== "client";
@@ -157,7 +162,7 @@ export default function EficienciaPage() {
         {error && <p className="text-sm text-brand-primary mt-2">{error}</p>}
       </section>
 
-      <AlertasEficiencia refreshKey={alertasKey} />
+      <AlertasEficiencia refreshKey={alertasKey} bajas={bajas} onBajasChange={bajasCambiaron} />
 
       {/* Explicación del algoritmo y compromiso — visible a demanda y SIEMPRE en el PDF */}
       {(verAlgoritmo || res) && (
@@ -297,11 +302,14 @@ export default function EficienciaPage() {
                   return (
                     <tr key={o.vendedor} className="border-t border-brand-border hover:bg-brand-bg-soft align-top">
                       <td className="px-3 py-2">
-                        <div className="font-medium text-brand-ink">{o.vendedor}</div>
+                        <div className="font-medium text-brand-ink flex items-center gap-2">{o.vendedor}{estaDeBaja(bajas, o.vendedor) && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-ink text-white">BAJA</span>}</div>
                         <div className="text-[11px] text-brand-slate max-w-[420px] leading-snug mt-0.5">{o.motivo}</div>
                       </td>
                       <td className="px-3 py-2 text-center whitespace-nowrap">
                         <span className={`px-2 py-1 rounded text-[10px] font-bold ${e.cls}`}>{e.label}</span>
+                        {puedeGenerar && (o.estado === "critico" || o.estado === "baja" || o.estado === "nuevo_critico") && !estaDeBaja(bajas, o.vendedor) && (
+                          <div className="mt-1"><BotonBaja operador={o.vendedor} bajas={bajas} onChange={bajasCambiaron} compacto /></div>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-right font-mono font-bold">{o.indice ?? "—"}</td>
                       <td className="px-3 py-2 text-right">{formatGs(o.prima)}</td>

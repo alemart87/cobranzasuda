@@ -213,3 +213,10 @@ class MonitoreoDevolucionRequest(BaseModel):
     comentar_operador (el asesor deja su comentario) · comentar_lider · reabrir (→ pendiente)."""
     accion: str                           # devolver | comentar_lider | comentar_operador | reabrir
     comentario: str
+
+
+class OperadorBajaRequest(BaseModel):
+    """Dar de baja a un operador: sale de pendientes y se apagan sus alertas abiertas."""
+    operador: str
+    motivo: Optional[str] = None
+    fecha_baja: Optional[date] = None
