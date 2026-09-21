@@ -467,6 +467,37 @@ POR DEUDA + REVERSO ACTIVACION + CANCELACIONES + PENALIZACIÓN POR MIGRACIÓN DE
 Devolución bono efectividad ← DESCUENTO INCENTIVOS POR PENALIDAD · Recálculo ← RECALCULO INCENTIVO PRODUCTIVIDAD.
 No modelados: CAMBIO DE PLAN, CONCEPTO INICIO DE PRESUSPENSION POR DEUDA y la devolución de documentación al día 365.
 
+### 4b. Negocio GPON (fibra + TV) — modelo propio
+
+Página **Televentas Claro → GPON** (`/televentas-claro/gpon`), motor `facturacion_gpon.py`, endpoints
+`GET /facturacion/gpon/parametros`, `POST /facturacion/gpon/simulador` (una cohorte) y
+`POST /facturacion/gpon/anual` (12 / 18 / 24 meses). Calibrado fila por fila con las liquidaciones GPON
+385–389 (entidad 300383, ene–may 2026: 1.100 activaciones, 7.927 filas).
+
+| Liq. | Mes | Activaciones | Créditos | Débitos | Neto | Neto por activación |
+|---|---|---|---|---|---|---|
+| 385 | ene-26 | 239 | 256,3 M | −128,7 M | 127,6 M | 534.000 |
+| 386 | feb-26 | 204 | 229,8 M | −159,0 M | 70,7 M | 347.000 |
+| 387 | mar-26 | 238 | 272,3 M | −145,1 M | 127,2 M | 534.000 |
+| 388 | abr-26 | 231 | 253,5 M | −152,5 M | 101,0 M | 437.000 |
+| 389 | may-26 | 188 | 243,0 M | −155,8 M | 87,2 M | 464.000 |
+
+| Concepto | Regla calibrada |
+|---|---|
+| Cuota 1 | Al activar, por plan: Fibra 60 (IF60/BAF7) 400.000 · Fibra 30 (IF30/BAF3) 325.000 · TV 120.000. Mezcla real 70 / 18 / 12 %. |
+| Cuota 2 | Día 59–91 (mediana 73 → liquidación del mes 2): 280.000 / 200.000 / 120.000. La mitad con legajo incompleto. Cobra el 86–97 % de las líneas (90 %, 82 % completa). |
+| Bono fijo (1771) | Escala vigente ≥110 % 130.000 · ≥105 % 125.000 · ≥100 % 120.000 · ≥95 % 40.000. Historial ene–may: 100.000 (ene, mar), 50.000 (abr), 0 (feb, may). Se paga en el 91 % de las activaciones. |
+| Recálculo (1871) | Día 150–180: 100 % del bono de las líneas caídas, 23–26 % de la cohorte. |
+| Legajos | Documentación faltante en el mes 1: 50 % de la cuota 1 en el 11 % de las líneas. |
+| Mora | PENALIZACION POR DEUDA / REVERSO: penalidad tabulada por plan (Fibra 60: 630.000 / 350.000 / 315.000; Fibra 30: 475.000; TV: 190.000), revertida si el cliente paga (75 % en la misma liquidación). Neto: 26 % de las líneas de la cohorte quedan con deuda a los 6 meses, 15,6 % de lo cobrado. Primera penalización: p25 día 65, mediana 93, p75 132, máximo 180 → curva acumulada 0 / 3 / 22 / 52 / 78 / 95 / 100 %. |
+| Chargeback | 180 días exactos; después del mes 6 no hay débitos. **Sin residual, sin portabilidad, sin bono efectividad.** |
+| Costos | Misma estructura que pospago (vendedores por ratio, supervisor cada 12, backoffice cada 120, 1 controller); sin logística de entregas (la instalación la hace Claro). |
+
+Unidad económica real (cohorte ene-26 a 5 meses): 515.000 por línea = 1,46 × cuota 1; el modelo da 511.000.
+Con la escala vigente, ~496.000 por línea de por vida. La anualidad es idéntica en lógica a pospago: cada mes es
+una cohorte, el mes N suma su facturación más los ajustes de todas las anteriores, la estructura se fija en el
+mes 1, y al cierre queda la cola (cuota 2 por cobrar, mora y recálculo por devolver).
+
 ### 5. Herramientas del módulo
 
 - **Simulador mensual** (`/televentas-claro/simulador`): una cohorte; EERR a mes 0 / 6 / 12 meses, estructura

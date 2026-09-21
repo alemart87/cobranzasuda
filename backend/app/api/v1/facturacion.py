@@ -25,9 +25,10 @@ from ...models.facturacion_upload import FacturacionUpload
 from ...schemas.facturacion import (
     CompareRequest, CompareResponse, FacturacionReportDetail, FacturacionReportList,
     FacturacionReportSummary, FacturacionUploadList, FacturacionUploadRead, PublishRequest,
-    SimulacionCreate, SimulacionUpdate, SimuladorAnualRequest, SimuladorRequest,
+    GponAnualRequest, SimulacionCreate, SimulacionUpdate, SimuladorAnualRequest, SimuladorRequest,
 )
 from ...services.analyzers.facturacion_compare import compare_facturacion
+from ...services.analyzers.facturacion_gpon import PARAMETROS_GPON_DEFAULT, simular_gpon, simular_gpon_anual
 from ...services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, simular_anual, simular_facturacion
 from ...services.audit_service import record_action
 from ..deps import (
@@ -203,6 +204,34 @@ async def simulador_parametros(user: CurrentUser = Depends(require_facturacion_a
     """Variables de negocio y componentes de facturación (todas editables), sembradas
     con las liquidaciones reales y los criterios de Claro (bonos, cuota 2, zafra)."""
     return {"parametros": PARAMETROS_DEFAULT}
+
+
+# ---- Negocio GPON (fibra + TV): motor propio, calibrado con las liquidaciones GPON 385–389 ----
+@router.get("/gpon/parametros")
+async def gpon_parametros(user: CurrentUser = Depends(require_facturacion_access)) -> dict:
+    """Variables del negocio GPON (planes, cuota 2, bono fijo, mora, recálculo, costos)."""
+    return {"parametros": PARAMETROS_GPON_DEFAULT}
+
+
+@router.post("/gpon/simulador")
+async def gpon_simulador_run(payload: SimuladorRequest, user: CurrentUser = Depends(require_facturacion_access)) -> dict:
+    """UNA cohorte GPON: facturación del mes, cuota 2, legajos, mora, recálculo y margen a 6/12 meses."""
+    try:
+        return simular_gpon(payload.parametros)
+    except (TypeError, ValueError, KeyError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
+
+
+@router.post("/gpon/anual")
+async def gpon_anual_run(payload: GponAnualRequest, user: CurrentUser = Depends(require_facturacion_access)) -> dict:
+    """Proyección anual GPON (12, 18 o 24 meses), multicohorte, con cola posterior."""
+    if payload.horizonte not in (12, 18, 24):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12, 18 o 24 meses.")
+    try:
+        return simular_gpon_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte,
+                                  payload.bonos_adicionales_por_mes, payload.nombres_meses)
+    except (TypeError, ValueError, KeyError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 
 
 @router.post("/simulador")
