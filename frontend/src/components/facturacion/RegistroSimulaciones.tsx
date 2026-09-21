@@ -59,8 +59,9 @@ function Seccion({ titulo, extra, abierta = true, children }: { titulo: string; 
   );
 }
 
-export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, onAbrir, actual, setActual, marcas, setMarcas, postits, setPostits, notas, setNotas, nombresMeses }: {
+export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, onAbrir, actual, setActual, marcas, setMarcas, postits, setPostits, notas, setNotas, nombresMeses, negocio = "movil" }: {
   abierta: boolean; setAbierta: (v: boolean) => void;
+  negocio?: "movil" | "gpon";                        // cada negocio ve solo sus simulaciones guardadas
   listo: boolean;                                   // hay simulación en pantalla para guardar
   getSnapshot: () => Snapshot;
   onAbrir: (sim: any) => void;
@@ -85,7 +86,8 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
   const [piItem, setPiItem] = useState("");
   const skipSync = useRef(false);
 
-  const cargarLista = () => apiFetch<any>("/api/v1/facturacion/simulaciones").then((d) => setLista(d.simulaciones ?? [])).catch(() => setLista([]));
+  const esDelNegocio = (s: any) => ((s?.negocio === "GPON" || s?.parametros?.negocio === "GPON") ? "gpon" : "movil") === negocio;
+  const cargarLista = () => apiFetch<any>("/api/v1/facturacion/simulaciones").then((d) => setLista((d.simulaciones ?? []).filter(esDelNegocio))).catch(() => setLista([]));
   useEffect(() => { cargarLista(); }, []);
 
   // En el celular la barra ocupa toda la pantalla: bloquear el scroll de fondo mientras está abierta.

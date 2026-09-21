@@ -45,7 +45,28 @@ def test_gpon_anual_aditivo_y_cola():
     assert an["resultado"] == ms[-1]["acumulado"] == sum(f["resultado"] for f in ms)
     assert ms[0]["ajustes"] == 0 and ms[2]["cuota2"] > 0            # mes 1 sin herencia; cuota 2 desde el mes 3
     assert ms[6]["mora"] == ms[11]["mora"] and ms[6]["recalculo"] < 0  # régimen desde el mes 7
-    assert an["cola_post"]["cobros"] > 0 and an["cola_post"]["devoluciones"] < 0
-    assert an["resultado_con_cola"] == an["resultado"] + an["cola_post"]["total"]
+    assert an["cola_post_12"]["cobros"] > 0 and an["cola_post_12"]["devoluciones"] < 0
+    assert an["resultado_con_cola"] == an["resultado"] + an["cola_post_12"]["total"]
     a18 = simular_gpon_anual({"ventas": 230, "objetivo": 230}, [230] * 18, 18)
     assert len(a18["meses"]) == 18 and a18["meses"][17]["resultado"] == ms[11]["resultado"]
+
+
+def test_gpon_anual_compatible_con_pospago_y_meses_afectados():
+    a = simular_gpon_anual({"ventas": 230, "objetivo": 230}, [230] * 12, 12,
+                           meses_afectados={"7": {"mora_pct_lineas": 40, "costos": {"comision_por_venta": 90000}}})
+    m = a["meses"][6]
+    assert m["afectado"] and m["variaciones"]["mora_pct_lineas"] == 40 and not a["meses"][5]["afectado"]
+    # claves compatibles con el anual de pospago
+    for k in ("residual", "portabilidad", "bono_productividad", "bono_efectividad", "clawbacks", "clawback_bonos",
+              "recalculo_productividad", "monto_bono_productividad", "escalon_productividad", "ola_cobros", "ventas_equilibrio", "en_riesgo", "lineas_activas"):
+        assert k in m
+    assert m["clawbacks"] == m["mora"] + m["otros"] and m["recalculo_productividad"] == m["recalculo"]
+    an = a["anual"]
+    for k in ("cola_post_12", "veredicto", "meses_en_riesgo", "ola_maxima", "ola_maxima_mes", "ventas_equilibrio_max",
+              "devoluciones_periodo", "cobros_periodo", "devolucion_bonos", "meses_sin_bono_productividad", "costos_fijos_mes"):
+        assert k in an
+    assert an["resultado_con_cola"] == an["veredicto"]["resultado_final"] == an["resultado"] + an["cola_post_12"]["total"]
+    assert all(f["ventas_equilibrio"] is None or f["ventas_equilibrio"] >= 0 for f in a["meses"])
+    # la mora del mes afectado (cohorte 7) pega en los meses siguientes
+    b = simular_gpon_anual({"ventas": 230, "objetivo": 230}, [230] * 12, 12)
+    assert a["meses"][9]["mora"] < b["meses"][9]["mora"] and a["meses"][5]["mora"] == b["meses"][5]["mora"]

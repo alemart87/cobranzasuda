@@ -469,7 +469,7 @@ No modelados: CAMBIO DE PLAN, CONCEPTO INICIO DE PRESUSPENSION POR DEUDA y la de
 
 ### 4b. Negocio GPON (fibra + TV) — modelo propio
 
-Página **Televentas Claro → GPON** (`/televentas-claro/gpon`), motor `facturacion_gpon.py`, endpoints
+Página **Televentas Claro → GPON** (`/televentas-claro/gpon`): es el MISMO simulador anual de pospago (setear mes 1, ventas por mes, nombres de meses, meses afectados, bono a mano, registro de simulaciones con marcas, post-its y notas, historia animada, cierre, EERR, bonos mes a mes) con el motor y las variables GPON; las simulaciones guardadas quedan separadas por negocio. Motor `facturacion_gpon.py`, endpoints
 `GET /facturacion/gpon/parametros`, `POST /facturacion/gpon/simulador` (una cohorte) y
 `POST /facturacion/gpon/anual` (12 / 18 / 24 meses). Calibrado fila por fila con las liquidaciones GPON
 385–389 (entidad 300383, ene–may 2026: 1.100 activaciones, 7.927 filas).

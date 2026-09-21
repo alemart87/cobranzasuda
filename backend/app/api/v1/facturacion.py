@@ -229,7 +229,7 @@ async def gpon_anual_run(payload: GponAnualRequest, user: CurrentUser = Depends(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12, 18 o 24 meses.")
     try:
         return simular_gpon_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte,
-                                  payload.bonos_adicionales_por_mes, payload.nombres_meses)
+                                  payload.bonos_adicionales_por_mes, payload.nombres_meses, payload.meses_afectados)
     except (TypeError, ValueError, KeyError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 
@@ -323,6 +323,8 @@ def _simulacion_out(s: FacturacionSimulacion, detalle: bool = True) -> dict:
         "created_at": s.created_at.isoformat() if s.created_at else None,
         "updated_by_nombre": s.updated_by_nombre,
         "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+        # negocio de la simulación: "GPON" o "MOVIL" (pospago); las viejas sin marca son móvil
+        "negocio": "GPON" if (s.parametros or {}).get("negocio") == "GPON" else "MOVIL",
     }
     if detalle:
         base["parametros"] = s.parametros or {}

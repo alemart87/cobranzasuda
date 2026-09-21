@@ -68,10 +68,11 @@ class SimuladorRequest(BaseModel):
 
 
 class GponAnualRequest(BaseModel):
-    """Proyección anual GPON: parámetros del mes 1 + activaciones de cada mes."""
+    """Proyección anual GPON: parámetros del mes 1 + activaciones de cada mes (mismas utilidades que pospago)."""
     parametros: dict[str, Any] = Field(default_factory=dict)
     ventas_por_mes: List[float] = Field(min_length=1, max_length=24)
     horizonte: int = 12                   # 12, 18 o 24 meses
+    meses_afectados: dict[str, dict[str, Any]] = Field(default_factory=dict)
     bonos_adicionales_por_mes: List[float] = Field(default_factory=list)
     nombres_meses: List[str] = Field(default_factory=list)
 

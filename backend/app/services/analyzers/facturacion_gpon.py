@@ -94,8 +94,6 @@ def parametros_gpon(overrides: dict | None) -> dict:
     p = copy.deepcopy(PARAMETROS_GPON_DEFAULT)
     for k, v in (overrides or {}).items():
         if v is None or k not in p:
-            if k == "_sin_breakeven":
-                p[k] = v
             continue
         if k == "costos" and isinstance(v, dict):
             p["costos"] = {**p["costos"], **{ck: cv for ck, cv in v.items() if cv is not None}}
@@ -203,12 +201,46 @@ def simular_gpon(params: dict | None = None) -> dict[str, Any]:
 _FLUJOS = ("cuota2", "legajos", "mora", "recalculo", "otros")
 
 
+def _normalizar_afectados(meses_afectados: dict | None, h: int) -> dict[int, dict]:
+    out: dict[int, dict] = {}
+    for k, v in (meses_afectados or {}).items():
+        try:
+            m = int(k)
+        except (TypeError, ValueError):
+            continue
+        if 2 <= m <= h and isinstance(v, dict) and v:
+            out[m - 1] = v
+    return out
+
+
+def _aplicar_afectado(base: dict, ov: dict | None) -> dict:
+    """Parámetros del mes con sus variaciones propias: claves de negocio, costos y mix de planes."""
+    if not ov:
+        return base
+    p = copy.deepcopy(base)
+    for k, v in ov.items():
+        if v is None:
+            continue
+        if k == "costos" and isinstance(v, dict):
+            p["costos"] = {**p["costos"], **{ck: cv for ck, cv in v.items() if cv is not None}}
+        elif k == "planes" and isinstance(v, list):
+            mix = {str(x.get("plan") or x.get("nombre")): x.get("mix_pct") for x in v if isinstance(x, dict)}
+            p["planes"] = [{**pl, "mix_pct": float(mix.get(pl["nombre"], pl["mix_pct"]))} if mix.get(pl["nombre"]) is not None else pl for pl in p["planes"]]
+        elif k in p:
+            p[k] = v
+    return p
+
+
 def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
-                       bonos_adicionales_por_mes: list[float] | None = None, nombres_meses: list[str] | None = None) -> dict[str, Any]:
+                       bonos_adicionales_por_mes: list[float] | None = None, nombres_meses: list[str] | None = None,
+                       meses_afectados: dict | None = None) -> dict[str, Any]:
     """Proyección ANUAL GPON, igual que pospago: el mes 1 fija la estructura (headcount) y cada
     mes se superponen los flujos de todas las cohortes anteriores (cuota 2, legajos, mora,
     recálculo). Aditiva al guaraní. Después del horizonte queda la cola (cuota 2 por cobrar,
-    mora y recálculo por devolver)."""
+    mora y recálculo por devolver). La salida usa las MISMAS claves que el anual de pospago
+    (clawbacks = mora + otros reversos, recalculo_productividad = recálculo del bono fijo,
+    bono_productividad = bono fijo, residual / portabilidad / bono_efectividad = 0) para que
+    el simulador anual, la historia y el cierre sean los mismos."""
     base = parametros_gpon(params)
     h = int(horizonte) if int(horizonte) in (12, 18, 24) else 12
     ventas = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:h]
@@ -217,25 +249,40 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
     bonos_ad = [max(float(x or 0), 0) for x in (bonos_adicionales_por_mes or [])][:h]
     while len(bonos_ad) < h:
         bonos_ad.append(0.0)
-    nombres = list(nombres_meses or [])[:h]
+    nombres = [str(x or "").strip() for x in (nombres_meses or [])][:h]
     while len(nombres) < h:
         nombres.append("")
+    nombres = [n or f"Mes {i + 1}" for i, n in enumerate(nombres)]
+    afectados = _normalizar_afectados(meses_afectados, h)
 
-    cohortes = [simular_gpon({**base, "ventas": ventas[t], "bono_adicional": bonos_ad[t]}) for t in range(h)]
+    cohortes = []
+    for t in range(h):
+        pm = _aplicar_afectado(base, afectados.get(t))
+        cohortes.append(simular_gpon({**pm, "ventas": ventas[t], "bono_adicional": bonos_ad[t]}))
     headcount = cohortes[0]["costos"]["headcount"]
     filas: list[dict] = []
     acum = 0
     for t in range(h):
         c = cohortes[t]
-        fila = {"mes": t + 1, "nombre": nombres[t].strip() or f"Mes {t + 1}", "ventas": round(ventas[t]),
-                "cumplimiento_pct": c["derivados"]["cumplimiento_pct"], "monto_bono": c["derivados"]["monto_bono"],
-                "activaciones_cuota1": c["mes0"]["activaciones_cuota1"], "bono_fijo": c["mes0"]["bono_fijo"],
-                "bono_adicional": c["mes0"]["bono_adicional"], "facturacion_bruta": c["bruto_mes0"]}
+        pm_t = c["parametros"]
+        fila = {"mes": t + 1, "nombre": nombres[t], "ventas": round(ventas[t]), "afectado": t in afectados,
+                "variaciones": afectados.get(t, {}),
+                "cumplimiento_pct": c["derivados"]["cumplimiento_pct"],
+                "escalon_productividad": c["derivados"]["escalon_bono"], "monto_bono_productividad": c["derivados"]["monto_bono"],
+                "monto_bono": c["derivados"]["monto_bono"],
+                "activaciones_cuota1": c["mes0"]["activaciones_cuota1"], "portabilidad": 0,
+                "bono_productividad": c["mes0"]["bono_fijo"], "bono_fijo": c["mes0"]["bono_fijo"], "bono_efectividad": 0,
+                "bono_adicional": c["mes0"]["bono_adicional"], "facturacion_bruta": c["bruto_mes0"],
+                "ventas_por_vendedor": round(ventas[t] / headcount["vendedores"], 1) if headcount["vendedores"] else 0}
         for f in _FLUJOS:
             fila[f] = sum(cohortes[s]["meses"][t - s][f] for s in range(t) if t - s < len(cohortes[s]["meses"]))
+        fila["residual"] = 0
+        fila["clawbacks"] = fila["mora"] + fila["otros"]
+        fila["clawback_bonos"] = 0
+        fila["recalculo_productividad"] = fila["recalculo"]
         fila["ajustes"] = sum(fila[f] for f in _FLUJOS)
         fila["ingreso_neto"] = fila["facturacion_bruta"] + fila["ajustes"]
-        cst, _ = _costos_y_margen(c["parametros"]["costos"], ventas[t], c["mes0"], c["bruto_mes0"], c["neto_6"], c["neto_12"], headcount=headcount)
+        cst, _ = _costos_y_margen(pm_t["costos"], ventas[t], c["mes0"], c["bruto_mes0"], c["neto_6"], c["neto_12"], headcount=headcount)
         fila["costo_total"] = cst["total"]
         fila["costos"] = cst
         fila["resultado"] = fila["ingreso_neto"] - fila["costo_total"]
@@ -244,7 +291,30 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
         acum += fila["resultado"]
         fila["acumulado"] = acum
         fila["ola_devoluciones"] = fila["legajos"] + fila["mora"] + fila["recalculo"] + fila["otros"]
+        fila["ola_cobros"] = fila["cuota2"]
         fila["lineas_en_mora"] = round(sum(cohortes[s]["meses"][t - s]["lineas_en_mora"] for s in range(t + 1) if t - s < len(cohortes[s]["meses"])))
+        fila["lineas_activas"] = round(sum(ventas[s] for s in range(t + 1)) - fila["lineas_en_mora"])
+
+        # Ventas mínimas del mes para no perder con la estructura fija (bisección, como en pospago).
+        def _resultado_con(v: float) -> float:
+            c2 = simular_gpon({**pm_t, "ventas": v, "bono_adicional": bonos_ad[t]})
+            cst2, _ = _costos_y_margen(c2["parametros"]["costos"], v, c2["mes0"], c2["bruto_mes0"], c2["neto_6"], c2["neto_12"], headcount=headcount)
+            return c2["bruto_mes0"] + fila["ajustes"] - cst2["total"]
+        hi = max(ventas[t] * 3, 100.0)
+        if _resultado_con(0.0) >= 0:
+            fila["ventas_equilibrio"] = 0
+        elif _resultado_con(hi) < 0:
+            fila["ventas_equilibrio"] = None
+        else:
+            lo, up = 0.0, hi
+            for _ in range(24):
+                mid = (lo + up) / 2
+                if _resultado_con(mid) >= 0:
+                    up = mid
+                else:
+                    lo = mid
+            fila["ventas_equilibrio"] = int(math.ceil(up))
+        fila["en_riesgo"] = fila["ventas_equilibrio"] is None or ventas[t] < fila["ventas_equilibrio"]
         filas.append(fila)
 
     tot = lambda k: sum(f[k] for f in filas)  # noqa: E731
@@ -254,32 +324,64 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
             if k < len(cohortes[s]["meses"]):
                 for f in _FLUJOS:
                     cola[f] += cohortes[s]["meses"][k][f]
-    cola_cobros = cola["cuota2"]
-    cola_dev = cola["legajos"] + cola["mora"] + cola["recalculo"] + cola["otros"]
+    cola_cobros = round(cola["cuota2"])
+    cola_dev = round(cola["legajos"] + cola["mora"] + cola["recalculo"] + cola["otros"])
     resultado = tot("resultado")
+    ingreso_neto = tot("ingreso_neto")
+    chb, rec_mes, c2_mes = int(base["chargeback_meses"]), int(base["recalculo_mes"]), int(base["cuota2_mes"])
+    fijo = filas[0]["costo_total"] - filas[0]["costos"]["rrhh"]["operadores_comisiones"] - filas[0]["costos"]["plus_vendedores"] - filas[0]["costos"]["operativos"] - filas[0]["costos"]["logistica_entregas"]
+    final = resultado + cola_cobros + cola_dev
     anual = {
         "ventas": round(sum(ventas)), "facturacion_bruta": tot("facturacion_bruta"), "ajustes": tot("ajustes"),
-        "ingreso_neto": tot("ingreso_neto"), "costos": tot("costo_total"), "resultado": resultado,
-        "margen_pct": round(resultado / tot("ingreso_neto") * 100, 1) if tot("ingreso_neto") else 0.0,
+        "ingreso_neto": ingreso_neto, "costos": tot("costo_total"), "resultado": resultado,
+        "margen_pct": round(resultado / ingreso_neto * 100, 1) if ingreso_neto else 0.0,
         "bonos": tot("bono_fijo"), "bonos_adicionales": tot("bono_adicional"),
+        "devolucion_bonos": tot("recalculo"),
         "cuota2": tot("cuota2"), "legajos": tot("legajos"), "mora": tot("mora"), "recalculo": tot("recalculo"), "otros": tot("otros"),
-        "costos_fijos_mes": filas[0]["costo_total"] - filas[0]["costos"]["rrhh"]["operadores_comisiones"] - filas[0]["costos"]["plus_vendedores"] - filas[0]["costos"]["operativos"] - filas[0]["costos"]["logistica_entregas"],
-        "horizonte": h, "meses_negativos": sum(1 for f in filas if f["resultado"] < 0),
+        "costos_fijos_mes": round(fijo), "horizonte": h,
+        "devoluciones_periodo": round(tot("legajos") + tot("mora") + tot("recalculo") + tot("otros")),
+        "cobros_periodo": round(tot("cuota2")),
+        "meses_negativos": sum(1 for f in filas if f["resultado"] < 0),
         "mejor_mes": max(filas, key=lambda f: f["resultado"])["mes"], "peor_mes": min(filas, key=lambda f: f["resultado"])["mes"],
-        "cola_post": {"cobros": round(cola_cobros), "devoluciones": round(cola_dev), "total": round(cola_cobros + cola_dev),
-                      "ultimo_mes_caidas": h + max(int(base["chargeback_meses"]), int(base["recalculo_mes"])),
-                      "ultimo_mes_cobros": h + int(base["cuota2_mes"])},
-        "resultado_con_cola": round(resultado + cola_cobros + cola_dev),
+        "meses_sin_bono_productividad": sum(1 for f in filas if f["monto_bono"] == 0),
+        "ola_maxima": round(min(f["ola_devoluciones"] for f in filas)),
+        "ola_maxima_mes": min(filas, key=lambda f: f["ola_devoluciones"])["mes"],
+        "meses_en_riesgo": [f["mes"] for f in filas if f["en_riesgo"]],
+        "ventas_equilibrio_max": max((f["ventas_equilibrio"] or 0) for f in filas),
+        "cola_post_12": {"cobros": cola_cobros, "devoluciones": cola_dev, "total": cola_cobros + cola_dev,
+                         "ultimo_mes_caidas": h + max(chb, rec_mes), "ultimo_mes_residual": h + c2_mes},
+        "resultado_con_cola": round(final),
+        "veredicto": {"gana": final >= 0, "resultado_final": round(final),
+                      "pct_sobre_ingreso": round(final / (ingreso_neto + cola_cobros + cola_dev) * 100, 1) if (ingreso_neto + cola_cobros + cola_dev) else 0.0,
+                      "periodo_gana": resultado >= 0, "la_cola_lo_da_vuelta": (resultado >= 0) != (final >= 0)},
         "regimen": {"resultado_mes": filas[-1]["resultado"], "margen_pct": filas[-1]["margen_pct"],
                     "ingreso_neto_mes": filas[-1]["ingreso_neto"], "ola_devoluciones_mes": filas[-1]["ola_devoluciones"]},
     }
     gs = lambda v: "Gs " + f"{round(v):,}".replace(",", ".")  # noqa: E731
     n = lambda v: f"{round(v):,}".replace(",", ".")  # noqa: E731
-    conclusion = (f"{h} meses GPON con estructura fija del mes 1 ({headcount['vendedores']} vendedores, {headcount['supervisores']} supervisores, "
-                  f"{headcount['backoffice']} backoffice) y objetivo {n(float(base['objetivo']))} líneas. Activaciones del período: {n(anual['ventas'])}. "
-                  f"Facturación bruta {gs(anual['facturacion_bruta'])}; con cuota 2, legajos, mora y recálculo el ingreso neto es {gs(anual['ingreso_neto'])}. "
-                  f"Costos {gs(anual['costos'])}. Resultado {gs(resultado)} ({anual['margen_pct']}%). "
-                  f"Cola después del mes {h}: {gs(cola_cobros)} de cuota 2 por cobrar y {gs(abs(cola_dev))} por devolver (mora y recálculo hasta el mes {anual['cola_post']['ultimo_mes_caidas']}). "
-                  f"Con la cola el negocio {'GANA' if anual['resultado_con_cola'] >= 0 else 'PIERDE'} {gs(abs(anual['resultado_con_cola']))}.")
-    return {"negocio": "GPON", "parametros": base, "horizonte": h, "ventas_por_mes": ventas, "nombres_meses": nombres,
-            "headcount": headcount, "meses": filas, "anual": anual, "cohorte_mes1": cohortes[0], "conclusion": conclusion}
+    partes = [
+        f"{h} meses GPON con estructura fija del mes 1 ({headcount['vendedores']} vendedores, {headcount['supervisores']} supervisores, "
+        f"{headcount['backoffice']} backoffice; costo fijo {gs(fijo)}/mes) y objetivo de {n(float(base['objetivo']))} líneas.",
+        f"Activaciones del período: {n(anual['ventas'])}. Facturación bruta {gs(anual['facturacion_bruta'])}; con cuota 2, legajos, mora y recálculo "
+        f"el ingreso neto liquidado es {gs(ingreso_neto)}. Costos {gs(anual['costos'])}. Resultado del período {gs(resultado)} ({anual['margen_pct']}%).",
+    ]
+    if anual["meses_negativos"]:
+        partes.append(f"{anual['meses_negativos']} mes(es) con resultado negativo; el peor es {nombres[anual['peor_mes'] - 1]} y el mejor {nombres[anual['mejor_mes'] - 1]}.")
+    if anual["meses_en_riesgo"]:
+        partes.append(f"Riesgo por bajar productividad: en {len(anual['meses_en_riesgo'])} mes(es) las activaciones no cubren la ola de mora y recálculo heredada más la estructura fija "
+                      f"(ola máxima {gs(abs(anual['ola_maxima']))} en {nombres[anual['ola_maxima_mes'] - 1]}; hacen falta hasta {n(anual['ventas_equilibrio_max'])} activaciones/mes para no perder).")
+    if afectados:
+        partes.append(f"{len(afectados)} mes(es) con variaciones propias: " + ", ".join(nombres[t] for t in sorted(afectados)) + ".")
+    if anual["bonos_adicionales"]:
+        partes.append(f"Incluye {gs(anual['bonos_adicionales'])} de bono adicional cargado a mano.")
+    if anual["meses_sin_bono_productividad"] and base.get("bonos_activos", True):
+        esc_min = min(float(e["desde_pct"]) for e in base["escala_bono"]) if base.get("escala_bono") else 0
+        partes.append(f"En {anual['meses_sin_bono_productividad']} mes(es) las activaciones quedaron bajo el {esc_min:.0f}% del objetivo y el bono fijo no se liquidó.")
+    partes.append(f"Cierre con todas las caídas: después del mes {h} las cohortes todavía tienen {gs(cola_cobros)} de cuota 2 por cobrar (hasta el mes {h + c2_mes}) "
+                  f"y {gs(abs(cola_dev))} por devolver (mora y recálculo hasta el mes {h + max(chb, rec_mes)}). "
+                  f"Con esa cola el negocio {'GANA' if final >= 0 else 'PIERDE'} {gs(abs(final))}"
+                  + (" — el período cerraba en pérdida y la cola lo da vuelta." if anual["veredicto"]["la_cola_lo_da_vuelta"] and final >= 0
+                     else " — el período cerraba en ganancia pero las devoluciones pendientes la consumen." if anual["veredicto"]["la_cola_lo_da_vuelta"] else "."))
+    return {"negocio": "GPON", "parametros": base, "horizonte": h, "ventas_por_mes": [round(v) for v in ventas], "nombres_meses": nombres,
+            "meses_afectados": {str(t + 1): v for t, v in afectados.items()}, "bonos_adicionales_por_mes": bonos_ad,
+            "headcount": headcount, "meses": filas, "anual": anual, "cohorte_mes1": cohortes[0], "conclusion": " ".join(partes)}

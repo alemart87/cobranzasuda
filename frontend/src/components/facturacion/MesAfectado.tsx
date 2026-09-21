@@ -12,7 +12,7 @@ import { recalcSegunZafra } from "./VariablesNegocio";
 export type Variaciones = Record<string, any>;
 export type Afectados = Record<string, Variaciones>;   // {"7": {...}}
 
-type CampoDef = { key: string; label: string; suffix?: string; step?: number; grupo: string; costo?: boolean; bool?: boolean };
+export type CampoDef = { key: string; label: string; suffix?: string; step?: number; grupo: string; costo?: boolean; bool?: boolean };
 
 export const CAMPOS_AFECTABLES: CampoDef[] = [
   { key: "porta_pct", label: "Portabilidad", suffix: "%", step: 1, grupo: "Ventas del mes" },
@@ -34,6 +34,24 @@ export const CAMPOS_AFECTABLES: CampoDef[] = [
   { key: "operativo_por_venta", label: "Costo operativo por venta", step: 500, grupo: "Costos variables", costo: true },
 ];
 
+/** Campos afectables del negocio GPON (fibra + TV). */
+export const CAMPOS_AFECTABLES_GPON: CampoDef[] = [
+  { key: "objetivo", label: "Objetivo de líneas", step: 5, grupo: "Activaciones del mes" },
+  { key: "pct_bono_cobrado", label: "Activaciones que cobran el bono", suffix: "%", step: 1, grupo: "Activaciones del mes" },
+  { key: "ajuste_comisiones_pct", label: "Ajuste de comisiones", suffix: "%", step: 0.5, grupo: "Comisiones y bonos" },
+  { key: "bonos_activos", label: "Bonos activos", grupo: "Comisiones y bonos", bool: true },
+  { key: "cuota2_pct_lineas", label: "Líneas que cobran cuota 2", suffix: "%", step: 1, grupo: "Calidad y mora" },
+  { key: "cuota2_pct_completa", label: "Cuota 2 completa", suffix: "%", step: 1, grupo: "Calidad y mora" },
+  { key: "legajo_pct", label: "Documentación faltante", suffix: "%", step: 0.5, grupo: "Calidad y mora" },
+  { key: "mora_pct_lineas", label: "Líneas en mora", suffix: "%", step: 1, grupo: "Calidad y mora" },
+  { key: "mora_penalidad_pct", label: "Penalidad de mora que se pierde", suffix: "%", step: 5, grupo: "Calidad y mora" },
+  { key: "pct_recalculo", label: "Líneas castigadas en el recálculo", suffix: "%", step: 1, grupo: "Calidad y mora" },
+  { key: "comision_por_venta", label: "Comisión al vendedor por venta", step: 1000, grupo: "Costos variables", costo: true },
+  { key: "plus_por_venta", label: "Plus al vendedor por venta", step: 1000, grupo: "Costos variables", costo: true },
+  { key: "operativo_por_venta", label: "Costo operativo por venta", step: 500, grupo: "Costos variables", costo: true },
+];
+const nombrePlan = (pl: any) => String(pl?.plan ?? pl?.nombre ?? "");
+
 const valorBase = (base: any, c: CampoDef) => {
   if (c.key === "pct_recalculo_productividad" && base?.pct_recalculo_productividad == null) return recalcSegunZafra(base);
   return c.costo ? base?.costos?.[c.key] : base?.[c.key];
@@ -42,22 +60,23 @@ const valorOv = (ov: Variaciones | undefined, c: CampoDef) => (c.costo ? ov?.cos
 const fmtV = (v: any, c?: CampoDef) => (typeof v === "boolean" ? (v ? "sí" : "no") : v == null ? "—" : `${typeof v === "number" ? formatInt(v) : v}${c?.suffix ?? ""}`);
 
 /** Texto corto de las variaciones de un mes: "porta 45% → 30% · efectividad 89% → 85%". */
-export function describirVariaciones(ov: Variaciones, base: any): string[] {
+export function describirVariaciones(ov: Variaciones, base: any, campos: CampoDef[] = CAMPOS_AFECTABLES): string[] {
   const out: string[] = [];
-  for (const c of CAMPOS_AFECTABLES) {
+  for (const c of campos) {
     const v = valorOv(ov, c);
     if (v === undefined || v === null) continue;
     out.push(`${c.label} ${fmtV(valorBase(base, c), c)} → ${fmtV(v, c)}`);
   }
   if (Array.isArray(ov.planes)) {
-    const mix = ov.planes.filter((p: any) => p.mix_pct != null).map((p: any) => `${p.plan} ${p.mix_pct}%`).join(" / ");
+    const mix = ov.planes.filter((p: any) => p.mix_pct != null).map((p: any) => `${nombrePlan(p)} ${p.mix_pct}%`).join(" / ");
     if (mix) out.push(`Mix de planes → ${mix}`);
   }
   return out;
 }
 
-export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, ventas, actual, onAplicar, onQuitar, onCerrar }: {
+export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, ventas, actual, onAplicar, onQuitar, onCerrar, campos = CAMPOS_AFECTABLES }: {
   mes: number;                              // 1-based (≥ 2)
+  campos?: CampoDef[];
   nombre?: string; nombres?: string[];      // nombres editables de los meses
   horizonte: number;
   base: any;                                // parámetros del mes 1
@@ -79,7 +98,7 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
     setOv(init);
     setMixOn(!!planes);
     const m: Record<string, number> = {};
-    for (const pl of base?.planes ?? []) m[pl.plan] = Number(planes?.find((x: any) => x.plan === pl.plan)?.mix_pct ?? pl.mix_pct);
+    for (const pl of base?.planes ?? []) m[nombrePlan(pl)] = Number(planes?.find((x: any) => nombrePlan(x) === nombrePlan(pl))?.mix_pct ?? pl.mix_pct);
     setMix(m);
     setOtros([]);
   }, [mes, actual, base]);
@@ -101,7 +120,7 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
     return out;
   };
   const cantidad = Object.keys(ov).filter((k) => k !== "costos").length + Object.keys(ov.costos ?? {}).length + (mixOn ? 1 : 0);
-  const grupos = Array.from(new Set(CAMPOS_AFECTABLES.map((c) => c.grupo)));
+  const grupos = Array.from(new Set(campos.map((c) => c.grupo)));
 
   return (
     <div className="fixed inset-0 z-[80] flex items-end sm:items-center justify-center bg-brand-ink/40 sm:p-4 no-print" onClick={onCerrar}>
@@ -123,7 +142,7 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
           {grupos.map((g) => (
             <div key={g}>
               <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate border-b border-brand-border pb-1 mb-2">{g}</div>
-              {CAMPOS_AFECTABLES.filter((c) => c.grupo === g).map((c) => {
+              {campos.filter((c) => c.grupo === g).map((c) => {
                 const v = valorOv(ov, c);
                 const activo = v !== undefined && v !== null;
                 const b = valorBase(base, c);
@@ -157,9 +176,9 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
             </label>
             <div className={`grid grid-cols-2 sm:grid-cols-5 gap-2 ${mixOn ? "" : "opacity-40 pointer-events-none"}`}>
               {(base?.planes ?? []).map((pl: any) => (
-                <label key={pl.plan} className="text-[11px] text-brand-slate">
-                  {pl.plan} <span className="text-[10px]">(base {pl.mix_pct}%)</span>
-                  <input type="number" step={0.5} value={mix[pl.plan] ?? 0} onChange={(e) => setMix({ ...mix, [pl.plan]: Number(e.target.value) })}
+                <label key={nombrePlan(pl)} className="text-[11px] text-brand-slate">
+                  {nombrePlan(pl)} <span className="text-[10px]">(base {pl.mix_pct}%)</span>
+                  <input type="number" step={0.5} value={mix[nombrePlan(pl)] ?? 0} onChange={(e) => setMix({ ...mix, [nombrePlan(pl)]: Number(e.target.value) })}
                     className="input w-full !py-1 text-sm text-right" />
                 </label>
               ))}
@@ -196,9 +215,9 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
 }
 
 /** Resumen visible (e imprimible) de los meses afectados y sus variaciones. */
-export function ResumenAfectados({ afectados, base, ventas, nombres, onEditar, onQuitar, sinCard }: {
+export function ResumenAfectados({ afectados, base, ventas, nombres, onEditar, onQuitar, sinCard, campos = CAMPOS_AFECTABLES }: {
   afectados: Afectados; base: any; ventas: number[]; nombres?: string[];
-  onEditar: (mes: number) => void; onQuitar: (mes: number) => void; sinCard?: boolean;
+  onEditar: (mes: number) => void; onQuitar: (mes: number) => void; sinCard?: boolean; campos?: CampoDef[];
 }) {
   const meses = Object.keys(afectados).map(Number).sort((a, b) => a - b);
   if (!meses.length && !sinCard) return null;
@@ -225,7 +244,7 @@ export function ResumenAfectados({ afectados, base, ventas, nombres, onEditar, o
               </div>
             </div>
             <ul className="mt-1 text-[12px] text-brand-graphite leading-snug">
-              {describirVariaciones(afectados[String(m)], base).map((t, i) => <li key={i}>· {t}</li>)}
+              {describirVariaciones(afectados[String(m)], base, campos).map((t, i) => <li key={i}>· {t}</li>)}
             </ul>
           </div>
         ))}
