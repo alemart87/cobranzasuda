@@ -420,6 +420,15 @@ lo que las últimas cohortes todavía tienen por cobrar (residual, cuota 2) y po
 por flujo y deriva lo demás de los redondeados, así cada puente cierra exacto: bruta + ajustes = neto;
 neto − costos = resultado; acumulado anterior + resultado = acumulado; resultado + cola = resultado final.
 
+**Valores iniciales y escenario IDEAL (móvil)**: el simulador anual abre con los valores iniciales definidos por la
+dirección (`frontend/src/components/facturacion/presets.ts`): 1.700 ventas y objetivo CO 1.700, efectividad 85%,
+bono efectividad cobrado 87,5%, estado A 100%, porta 90%, y estructura de 17 ventas por vendedor, 1 supervisor cada 14,
+1 backoffice cada 180 ventas, 1 coordinador, 2 controllers, operador 14.635 × 7 h × 23 días, comisión 95.000 y plus
+12.500 por venta. La zafra inicial es la real. El botón **IDEAL** aplica todo eso más la **zafra ideal**
+(99,9 · 82,6 · 75 · 70 · 67 · 63 · 60 · 58 · 56 · 54 · 53 · 51 · 49); en la zafra hay también un enlace "Zafra ideal"
+para cambiar solo la curva. **Restaurar valores reales** vuelve a los parámetros calibrados del backend
+(`PARAMETROS_DEFAULT`), que no cambian.
+
 **La ola de la zafra (riesgo potencial por bajar productividad)**: cada cohorte deja comprometidas devoluciones
 para los meses siguientes. Por mes calendario el motor informa `ola_devoluciones` (legajos + caídas + devolución de
 bonos + recálculo heredados), `ola_cobros` (residual + cuota 2 heredados) y `ventas_equilibrio`: las ventas mínimas
