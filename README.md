@@ -274,7 +274,7 @@ aparece en las liquidaciones móviles.
 | INCENTIVO EFECTIVIDAD DISTRIBUCION (1891) | 50.000 / 45.000 / 35.000 por venta según efectividad de entregas (≥85 / ≥82 / ≥80%). Se paga en una parte de las activaciones (87,5%). | Mes de la venta |
 | DESCUENTO INCENTIVOS POR PENALIDAD | Devuelve el bono efectividad de la línea que cae dentro del chargeback. | Con la caída |
 | RESIDUAL | 14,5% del **monto acreditado** (lo que el cliente pagó), durante 12 liquidaciones. Las líneas que no pagan salen con "LINEA INACTIVA" en 0. | Meses 1 a 12 |
-| SUSPENSIONES | "Suspensión penalizable, primera factura impaga" (**PFI**, razón P9-735, 96% de las suspensiones): descuenta cuota 1 + un residual (214.431 en CG15G). Las suspensiones estándar salen en 0. PFI real por cohorte de venta: nov-25 26,9% · dic-25 27,3% · ene-26 26,9% · feb-26 28,5% · mar-26 34,1% → 28,7% de las ventas; el 16% se reconecta. En el modelo vive dentro de la zafra (caída del mes 1 al mes 2). | ~60 días (p50 61) |
+| SUSPENSIONES | "Suspensión penalizable, primera factura impaga" (**PFI**, razón P9-735, 96% de las suspensiones): descuenta cuota 1 + un residual (214.431 en CG15G). Las suspensiones estándar salen en 0. PFI real por mes de venta (8 liquidaciones 2026): ene 26,9% · feb 28,5% · mar 28,7% · abr 35,3% · may 37,6% → 31,4% de las ventas en cohortes maduras; el 16% se reconecta. En el modelo vive dentro de la zafra (caída del mes 1 al mes 2). | ~60 días (p10 57 · p90 83) |
 | RECONEXIONES | Devuelve lo descontado por suspensiones y cancelaciones si la línea se reconecta dentro del chargeback. | ~130 días |
 | DESCUENTO PORTABILIDAD NUMERICA | Devuelve el plus porta de la línea que cae dentro del chargeback (falta de pago, port out, primera factura impaga). | Con la caída |
 | REVERSO DESCUENTO PORTABILIDAD NUMERICA | Devuelve el descuento anterior si la línea se reconecta. | ~140 días |
@@ -393,9 +393,20 @@ recalculo_6    = − ventas × pct_estado_a × bono_prod_por_linea × pct_recalc
                  se re-acredita (472) en ~8–11% de las devoluciones al reconectar. Nada después del día 180.
 ```
 
-`pen` (caídas que pierden la cuota 1) se aplica solo a la cuota 1 y su residual; el plus porta y el bono efectividad
-se devuelven en el 100% de las caídas del chargeback. El ajuste de comisiones negociado con Claro escala cuota 1,
-cuota 2 y porta (también sus devoluciones) y no toca bonos, residual ni la remuneración del vendedor.
+**Caídas que devuelven la cuota 1 (`pen`, 85%)**, explicado en llano. La zafra dice cuántas líneas caen (con la
+zafra tipo, 49 de cada 100 en 6 meses). Pero no toda caída devuelve lo mismo:
+
+- Claro descuenta la **cuota 1** (más un residual) solo cuando la línea se suspende por falta de pago (PFI o deuda) o
+  se reversa la activación. Si el cliente se va por port out o se cancela fuera del chargeback, la cuota 1 no se
+  descuenta. En las liquidaciones reales, de cada 100 ventas 46 devolvieron la cuota 1 (29,7 suspensión + 8,8 deuda +
+  4,8 reverso + 3,2 migración) contra 51 caídas de la zafra → 46 ÷ 51 ≈ **85% de las caídas**.
+- El **plus porta** y el **bono efectividad** se descuentan en el **100%** de las caídas del chargeback.
+
+Con 1.950 ventas: caen 955 líneas en 6 meses → 812 devuelven cuota 1 + residual, 860 (las portadas) devuelven el plus
+porta y 836 (las que lo cobraron) devuelven el bono efectividad; al total se le resta el recupero por reconexión (12%).
+El panel "Chargeback y recuperos" del simulador muestra esta cuenta con los valores cargados. Ponerlo en 100%
+supone que toda caída pierde la cuota 1, algo que Claro no hace. El ajuste de comisiones negociado con Claro escala
+cuota 1, cuota 2 y porta (también sus devoluciones) y no toca bonos, residual ni la remuneración del vendedor.
 
 **Salidas de la cohorte**: facturación bruta; "queda a 6 meses" (ya cayeron todas las caídas, residual a medias:
 la cifra que decide); "queda a 12 meses" (residual completo); peso de los bonos sobre la facturación; cierre
@@ -447,7 +458,8 @@ facturación (mes 0, 6 y 12 meses) − costo de la estructura; punto de equilibr
 | Residual | 14,5% × 48% del abono, 12 meses, curva real | 78.400 Gs por activación en 12 meses |
 | Zafra | 99,9 · 82,6 · 58,5 · 53,8 · 53,1 · 49,2 · 51,1 · 46,2 · 41,9 · 40,7 · 40,1 · 40,4 · 41,8 | Cohortes jul-25 a ene-26 informadas por Claro |
 | Chargeback | 6 meses | Manual (180 días); descuento de porta 100% dentro de la ventana |
-| Caídas que pierden la cuota 1 | 85% de las caídas | 46% de las activaciones (susp. 29,7 + deuda 8,8 + reverso 4,8 + migración 3,2) contra 51% de caídas |
+| Caídas que devuelven la cuota 1 | 85% de las caídas | 46% de las activaciones (susp. 29,7 + deuda 8,8 + reverso 4,8 + migración 3,2) contra 51% de caídas de la zafra; el resto de las caídas devuelve solo porta y bono |
+| PFI real por mes de venta (8 liq. 2026) | vive en la zafra (M1 → M2) | ene 26,9% · feb 28,5% · mar 28,7% · abr 35,3% · may 37,6% (31,4% ponderado en cohortes maduras); jun 30,4% con 2 liquidaciones. Suspensión a los 60 días (p10 57, p90 83) |
 | Migración de negocio | 3,2% en el mes 3 | 2,2–4,3% por liquidación, ~207.000 por línea |
 | Recálculo del bono productividad | 100% del bono de las líneas caídas al día 180 = 100 − zafra[6] (48,9%), mes 6 | Concepto 1871, una fila por línea de la cohorte, entre el día 152 y 184: líneas castigadas jul-25 41%, ago 45%, sep 52%, oct 51%, nov 52% (promedio 48,5%). Ningún descuento de bonos después del día 184 (cohortes observadas hasta 12 meses) |
 | Recupero por reconexión | 12% | Ver definición abajo |

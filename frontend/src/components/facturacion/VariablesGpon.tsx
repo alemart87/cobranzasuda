@@ -2,18 +2,10 @@
 
 import { useState } from "react";
 import { NumeroInput } from "./NumeroInput";
+import { Campo } from "./Campo";
 
 /** Variables del negocio GPON (fibra + TV): activaciones y objetivo, planes y mezcla, cuota 2 y
  *  legajos, bono fijo y recálculo, mora, costos. Misma función que VariablesNegocio para pospago. */
-
-function Campo({ label, hint, value, onChange, step = 1, suffix }: { label: string; hint?: string; value: number; onChange: (v: number) => void; step?: number; suffix?: string }) {
-  return (
-    <label className="flex items-center gap-3">
-      <span className="flex-1"><span className="block text-sm text-brand-ink">{label}</span>{hint && <span className="block text-[10px] text-brand-slate">{hint}</span>}</span>
-      <span className="flex items-center gap-1"><NumeroInput step={step} value={value} onChange={onChange} className="input max-w-[120px] !py-1 text-sm text-right" />{suffix && <span className="text-xs text-brand-slate w-4">{suffix}</span>}</span>
-    </label>
-  );
-}
 
 function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hint?: string; abierto?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(abierto);
@@ -46,7 +38,7 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON" }: 
         <Campo label="Activaciones del mes 1" hint="real ene–may 2026: 188 a 239" value={p.ventas} onChange={(v) => set("ventas", v)} step={5} />
         <Campo label="Objetivo de líneas (bono fijo)" hint="% cumplimiento = activaciones ÷ objetivo" value={p.objetivo} onChange={(v) => set("objetivo", v)} step={5} />
         <Campo label="Activaciones que cobran el bono" hint="real 91% (218 de 239)" value={p.pct_bono_cobrado} onChange={(v) => set("pct_bono_cobrado", v)} suffix="%" />
-        <Campo label="Bono adicional (a mano)" hint="Gs del mes 1; no se devuelve" value={p.bono_adicional} onChange={(v) => set("bono_adicional", v)} step={1000000} />
+        <Campo destacado="orange" label="Bono adicional (a mano)" hint="Gs del mes 1; no se devuelve" value={p.bono_adicional} onChange={(v) => set("bono_adicional", v)} step={1000000} min={0} />
       </Grupo>
       <Grupo titulo="Planes, cuotas y mezcla" hint={`mix ${Math.round(mixTotal)}%`}>
         {p.planes.map((pl: any, i: number) => (
