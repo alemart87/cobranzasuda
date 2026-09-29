@@ -126,6 +126,7 @@ class CompareResponse(BaseModel):
     creditos: list[float]
     debitos: list[float]
     ventas: list[int]
+    gross: dict[str, Any] = Field(default_factory=dict)   # Desc Gross / Netas / %Gross por mes (criterio Claro)
     variaciones: list[Optional[float]]
     drivers: list[dict[str, Any]]
     descomposicion: list[dict[str, Any]] = []
