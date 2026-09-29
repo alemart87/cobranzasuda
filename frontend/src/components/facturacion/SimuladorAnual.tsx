@@ -17,7 +17,7 @@ import { NumeroInput } from "@/components/facturacion/NumeroInput";
 import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { VariablesGpon } from "@/components/facturacion/VariablesGpon";
-import { aplicarPreset, PRESET_INICIAL_MOVIL } from "@/components/facturacion/presets";
+import { aplicarPreset, PRESET_INICIAL_MOVIL, ZAFRA_IDEAL } from "@/components/facturacion/presets";
 import { CAMPOS_AFECTABLES, CAMPOS_AFECTABLES_GPON, CampoDef } from "@/components/facturacion/MesAfectado";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
@@ -181,6 +181,89 @@ function GrossClaro({ meses, anual, nombreMes, nombreCorto, pctBajas }: {
         porcentaje salta. Con ventas estables el %Gross queda en {String(data[0]?.pct ?? 0).replace(".", ",")}% con la zafra cargada; para entrar
         en la banda hay que bajar la caída de la zafra en los meses 1 y 2 (PFI). El mes 1 arranca en régimen: se asume que los meses
         anteriores vendieron lo mismo que el mes 1.
+      </Lectura>
+    </section>
+  );
+}
+
+/** Evolución de la zafra cargada (% de líneas activas por mes de antigüedad) contra la banda del IDEAL
+ *  (la zafra ideal ± ZAFRA_TOLERANCIA puntos) y la zafra real de referencia. */
+const ZAFRA_TOLERANCIA = 3.5;
+function ZafraEvolucion({ zafra, zafraReal, ventas }: { zafra: number[]; zafraReal?: number[]; ventas: number }) {
+  const n = Math.max(zafra.length, ZAFRA_IDEAL.length);
+  const data = Array.from({ length: n }, (_, i) => {
+    const ideal = ZAFRA_IDEAL[Math.min(i, ZAFRA_IDEAL.length - 1)];
+    const lo = Math.max(0, ideal - ZAFRA_TOLERANCIA), hi = Math.min(100, ideal + ZAFRA_TOLERANCIA);
+    const z = Number(zafra[Math.min(i, zafra.length - 1)] ?? 0);
+    const real = zafraReal ? Number(zafraReal[Math.min(i, zafraReal.length - 1)] ?? 0) : null;
+    return { mes: i, etiqueta: `M${i}`, zafra: z, ideal, banda: [lo, hi], real, fuera: z < lo ? "abajo" : z > hi ? "arriba" : "" };
+  });
+  const fueraAbajo = data.filter((d) => d.fuera === "abajo");
+  const fueraArriba = data.filter((d) => d.fuera === "arriba");
+  const peor = fueraAbajo.length ? fueraAbajo.reduce((a, d) => ((d.ideal - d.zafra) > (a.ideal - a.zafra) ? d : a), fueraAbajo[0]) : null;
+  const pct = (v: number) => `${v.toFixed(1).replace(".", ",")}%`;
+  const dif = (i: number) => data[i] ? data[i].zafra - data[i].ideal : 0;
+  const lineas = (v: number) => formatInt(Math.round(ventas * v / 100));
+  const estado = fueraAbajo.length === 0
+    ? (fueraArriba.length ? `Dentro o por encima de la banda del Ideal en los ${n} meses.` : `Dentro de la banda del Ideal (±${String(ZAFRA_TOLERANCIA).replace(".", ",")} puntos) en los ${n} meses.`)
+    : `${fueraAbajo.length} de ${n} meses por debajo de la banda del Ideal; el peor es M${peor!.mes} (${pct(peor!.zafra)} contra ${pct(peor!.ideal)} ideal).`;
+  return (
+    <section className="card p-5 print:mb-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+        <div>
+          <h2 className="font-display text-lg text-brand-ink uppercase">Evolución de la zafra · contra el Ideal</h2>
+          <p className="text-xs text-brand-slate">% de líneas de una cohorte que siguen activas en cada mes de antigüedad. La banda verde es la zafra Ideal ±{String(ZAFRA_TOLERANCIA).replace(".", ",")} puntos (la marca); la línea punteada gris es la zafra real medida en las liquidaciones.</p>
+        </div>
+        <div className={`rounded-md border px-3 py-1.5 text-xs font-semibold ${fueraAbajo.length ? "border-brand-primary text-brand-primary bg-brand-primary/5" : "border-emerald-500 text-emerald-700 bg-emerald-50"}`}>{estado}</div>
+      </div>
+      <ResponsiveContainer width="100%" height={260}>
+        <ComposedChart data={data} margin={{ top: 8, right: 16, left: -8 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} />
+          <XAxis dataKey="etiqueta" fontSize={10} interval={0} />
+          <YAxis fontSize={10} domain={[0, 100]} tickFormatter={(v: number) => `${v}%`} />
+          <Tooltip
+            labelFormatter={(l) => `Mes ${String(l).replace("M", "")} de antigüedad`}
+            formatter={(v: any, name: any) => {
+              if (name === "Banda del Ideal") return [`${pct(Number(v[0]))} a ${pct(Number(v[1]))}`, name];
+              return [pct(Number(v)), name];
+            }} />
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          <Area dataKey="banda" name="Banda del Ideal" stroke="none" fill="#10B981" fillOpacity={0.2} type="monotone" />
+          <Line dataKey="ideal" name="Zafra Ideal" stroke="#047857" strokeWidth={1.5} strokeDasharray="5 3" dot={false} type="monotone" />
+          {zafraReal && <Line dataKey="real" name="Zafra real (liquidaciones)" stroke="#9CA3AF" strokeWidth={1.5} strokeDasharray="3 3" dot={false} type="monotone" />}
+          <Line dataKey="zafra" name="Zafra cargada" stroke="#0F1116" strokeWidth={2.5} type="monotone"
+            dot={(props: any) => {
+              const { cx, cy, payload, index } = props;
+              const fill = payload.fuera === "abajo" ? "#E6332A" : payload.fuera === "arriba" ? "#10B981" : "#0F1116";
+              return <circle key={index} cx={cx} cy={cy} r={payload.fuera ? 4.5 : 3} fill={fill} stroke="#fff" strokeWidth={1} />;
+            }} />
+          <ReferenceLine x="M2" stroke="#E6332A" strokeDasharray="4 3" label={{ value: "PFI", position: "insideTopLeft", fill: "#E6332A", fontSize: 10, fontWeight: 700 }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+        {[
+          { t: "Activas al M2 (después del PFI)", i: 2 },
+          { t: "Activas al M3", i: 3 },
+          { t: "Activas al M6 (fin del chargeback)", i: 6 },
+          { t: "Activas al M12", i: 12 },
+        ].filter((k) => data[k.i]).map((k) => {
+          const d = data[k.i]; const df = dif(k.i);
+          return (
+            <div key={k.t} className={`rounded-md border bg-white px-3 py-2 ${d.fuera === "abajo" ? "border-brand-primary" : "border-brand-border"}`}>
+              <div className="text-[9px] uppercase tracking-wider2 text-brand-slate font-bold">{k.t}</div>
+              <div className={`font-display text-2xl leading-tight ${d.fuera === "abajo" ? "text-brand-primary" : "text-brand-ink"}`}>{pct(d.zafra)}</div>
+              <div className="text-[10px] text-brand-slate">{lineas(d.zafra)} líneas de {formatInt(ventas)} · ideal {pct(d.ideal)} ({df >= 0 ? "+" : ""}{df.toFixed(1).replace(".", ",")} pts)</div>
+            </div>
+          );
+        })}
+      </div>
+      <Lectura>
+        La curva negra es la zafra con la que se está simulando: de cada 100 líneas vendidas, cuántas siguen activas al mes 1, 2, 3… La
+        banda verde es la marca: la zafra Ideal con una tolerancia de {String(ZAFRA_TOLERANCIA).replace(".", ",")} puntos hacia arriba y hacia abajo.
+        Un punto rojo es un mes por debajo de la banda (más caídas que lo admitido); un punto verde, por encima (mejor que el Ideal).
+        El escalón entre M1 y M2 es el PFI: ahí se decide casi todo, porque cada línea que cae antes del M2 devuelve cuota 1, plus porta y
+        bono efectividad. La línea gris punteada es lo que hoy pasa en las liquidaciones: la distancia entre la gris y la banda es lo que hay
+        que corregir en calidad de venta y cobranza de la primera factura para que el Gross entre en su banda de 22–27%.
       </Lectura>
     </section>
   );
@@ -459,7 +542,12 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
           </section>
 
           {meses.length > 0 && meses[0].pct_gross != null && (
-            <GrossClaro meses={meses} anual={a} nombreMes={nombreMes} nombreCorto={nombreCorto} pctBajas={Number(p.pct_bajas_gross ?? 60)} />
+            <>
+              <GrossClaro meses={meses} anual={a} nombreMes={nombreMes} nombreCorto={nombreCorto} pctBajas={Number(p.pct_bajas_gross ?? 60)} />
+              {Array.isArray(p.zafra_pct) && p.zafra_pct.length > 0 && (
+                <ZafraEvolucion zafra={p.zafra_pct.map(Number)} zafraReal={defaults?.zafra_pct?.map(Number)} ventas={Number(ventas[0] ?? p.ventas ?? 0)} />
+              )}
+            </>
           )}
 
           <NotasSimulacion notas={notas} setNotas={setNotas} nombres={ventas.map((_, i) => nombreMes(i))} guardaSola={!!actual} soloImpresion />
