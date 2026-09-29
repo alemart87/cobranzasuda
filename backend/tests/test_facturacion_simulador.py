@@ -1,5 +1,5 @@
 """Simulador de facturación (Televentas Claro): invariantes del motor."""
-from app.services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, simular_facturacion
+from app.services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, simular_anual, simular_facturacion
 
 
 def test_mes0_y_retencion_a_6_y_12_meses():
@@ -374,3 +374,24 @@ def test_ola_de_devoluciones_y_ventas_de_equilibrio():
     if eq:
         r2 = simular_anual({"objetivo_co": 1750}, ventas[:8] + [eq] + ventas[9:])
         assert r2["meses"][8]["resultado"] >= -1
+
+
+def test_gross_criterio_claro_en_la_anual():
+    """Bajas del mes = caídas de la zafra un mes antes × pct_bajas_gross, de cualquier cohorte (arranque en régimen)."""
+    r = simular_anual({"objetivo_co": 1750}, [1900] * 12)
+    m = r["meses"]
+    # Con ventas constantes y régimen, el Gross es estable desde el mes 1 y netas = ventas − bajas.
+    assert all(f["netas_gross"] == f["ventas"] - f["bajas_gross"] for f in m)
+    assert max(f["pct_gross"] for f in m) - min(f["pct_gross"] for f in m) < 0.2
+    # Zafra real: 60% de las caídas a 6 meses (48,9%) ≈ 29–31% de las ventas, como los meses estables de Claro (28–32%).
+    assert 28 <= m[0]["pct_gross"] <= 32
+    # Zafra ideal (M2 75 … M12 49): entra en la banda de referencia 22–27%.
+    ideal = simular_anual({"objetivo_co": 1700, "zafra_pct": [99.9, 82.6, 75, 70, 67, 63, 60, 58, 56, 54, 53, 51, 49]}, [1700] * 12)
+    assert 22 <= ideal["meses"][5]["pct_gross"] <= 27
+    assert ideal["anual"]["meses_gross_sobre_banda"] == []
+    # Mes de ventas bajas: las bajas vienen de los meses anteriores y el % salta (el artefacto de agosto).
+    caida = simular_anual({"objetivo_co": 1750}, [1900] * 7 + [1400] + [1900] * 4)
+    assert caida["meses"][7]["pct_gross"] > caida["meses"][6]["pct_gross"] + 8
+    assert caida["anual"]["pct_gross_max_mes"] == 8
+    # Sin bajas gross si el parámetro es 0.
+    assert simular_anual({"pct_bajas_gross": 0}, [1900] * 12)["anual"]["bajas_gross"] == 0

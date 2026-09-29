@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Area, Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
 import { PrintButton, PrintCover } from "@/components/PrintButton";
@@ -92,6 +92,100 @@ const NEGOCIOS: Record<Negocio, Cfg> = {
 
 /** Simulador ANUAL (móvil o GPON): el mes 1 fija estructura y objetivo; los meses
  *  2..12 solo cambian las ventas. Balance de 12 meses con todas las cohortes. */
+/** Los tres gráficos de Claro ("Ventas Móv", "Netas Móv", "%Gross/Vta") con los números de la simulación.
+ *  Desc Gross = bajas del mes de cualquier cohorte (caídas de la zafra un mes antes × % que termina en baja),
+ *  Netas = ventas − Desc Gross, %Gross/Vta = Desc Gross ÷ ventas. Banda de referencia 22–27%. */
+const GROSS_BANDA = { desde: 22, hasta: 27 };
+function GrossClaro({ meses, anual, nombreMes, nombreCorto, pctBajas }: {
+  meses: any[]; anual: any; nombreMes: (i: number) => string; nombreCorto: (i: number) => string; pctBajas: number;
+}) {
+  const data = meses.map((m: any) => ({ mes: m.mes, ventas: m.ventas, netas: m.netas_gross, bajas: m.bajas_gross, pct: m.pct_gross }));
+  const maxPct = Math.max(GROSS_BANDA.hasta + 5, ...data.map((d) => d.pct));
+  const topPct = Math.ceil((maxPct + 3) / 5) * 5;
+  const sobre: number[] = anual?.meses_gross_sobre_banda ?? [];
+  const enBanda = data.filter((d) => d.pct >= GROSS_BANDA.desde && d.pct <= GROSS_BANDA.hasta).length;
+  const bajo = data.filter((d) => d.pct < GROSS_BANDA.desde).length;
+  const estado = sobre.length === 0 ? (bajo === data.length ? "Todo el período por debajo de la banda: mejor que la referencia." : "Todo el período dentro o por debajo de la banda 22–27%.")
+    : `${sobre.length} de ${data.length} meses por encima del 27%.`;
+  const ultimo = data[data.length - 1];
+  return (
+    <section className="card p-5 print:mb-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
+        <div>
+          <h2 className="font-display text-lg text-brand-ink uppercase">Gross y netas · criterio Claro</h2>
+          <p className="text-xs text-brand-slate">Los mismos gráficos que presenta Claro, con la simulación. Desc Gross = bajas del mes (de cualquier cohorte, sin port out); Netas = ventas − Desc Gross; %Gross/Vta = Desc Gross ÷ ventas. Referencia: banda 22–27% (otros calls 12–27%).</p>
+        </div>
+        <div className={`rounded-md border px-3 py-1.5 text-xs font-semibold ${sobre.length ? "border-brand-primary text-brand-primary bg-brand-primary/5" : "border-emerald-500 text-emerald-700 bg-emerald-50"}`}>{estado}</div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        {[
+          { t: "Ventas del período", v: formatInt(anual?.ventas ?? 0), s: `${formatInt(ultimo?.ventas ?? 0)} en ${nombreCorto(data.length - 1)}` },
+          { t: "Desc Gross del período", v: formatInt(anual?.bajas_gross ?? 0), s: `${pctBajas}% de las caídas de la zafra terminan en baja`, rojo: true },
+          { t: "Netas del período", v: formatInt(anual?.netas_gross ?? 0), s: `${formatInt(ultimo?.netas ?? 0)} en ${nombreCorto(data.length - 1)}`, verde: true },
+          { t: "%Gross / Vta", v: `${String(anual?.pct_gross ?? 0).replace(".", ",")}%`, s: `máximo ${String(anual?.pct_gross_max ?? 0).replace(".", ",")}% en ${nombreCorto((anual?.pct_gross_max_mes ?? 1) - 1)}`, accent: true },
+        ].map((k) => (
+          <div key={k.t} className={`rounded-md border border-brand-border bg-white px-3 py-2 ${k.accent ? "border-l-4 border-l-brand-ink" : ""}`}>
+            <div className="text-[9px] uppercase tracking-wider2 text-brand-slate font-bold">{k.t}</div>
+            <div className={`font-display text-2xl leading-tight ${k.rojo ? "text-brand-primary" : k.verde ? "text-emerald-700" : "text-brand-ink"}`}>{k.v}</div>
+            <div className="text-[10px] text-brand-slate">{k.s}</div>
+          </div>
+        ))}
+      </div>
+      <div className="grid md:grid-cols-3 gap-4">
+        <div>
+          <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate text-center mb-1">Ventas</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart data={data} margin={{ top: 8, right: 12, left: -8 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="mes" fontSize={9} tickFormatter={(v: number) => nombreCorto(v - 1)} interval={0} angle={-35} textAnchor="end" height={44} />
+              <YAxis fontSize={9} domain={[0, "auto"]} allowDecimals={false} />
+              <Tooltip labelFormatter={(l) => nombreMes(Number(l) - 1)} formatter={(v: any) => [formatInt(Number(v)), "Ventas"]} />
+              <Line dataKey="ventas" name="Ventas" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3, fill: "#0F1116" }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate text-center mb-1">Netas</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart data={data} margin={{ top: 8, right: 12, left: -8 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="mes" fontSize={9} tickFormatter={(v: number) => nombreCorto(v - 1)} interval={0} angle={-35} textAnchor="end" height={44} />
+              <YAxis fontSize={9} domain={[0, "auto"]} allowDecimals={false} />
+              <Tooltip labelFormatter={(l) => nombreMes(Number(l) - 1)} formatter={(v: any, name: any) => [formatInt(Number(v)), name]} />
+              <Line dataKey="ventas" name="Ventas" stroke="#9CA3AF" strokeWidth={1} strokeDasharray="4 3" dot={false} />
+              <Line dataKey="netas" name="Netas" stroke="#E6332A" strokeWidth={2.5} dot={{ r: 3, fill: "#E6332A" }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate text-center mb-1">%Gross / Vta</div>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart data={data} margin={{ top: 8, right: 12, left: -8 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="mes" fontSize={9} tickFormatter={(v: number) => nombreCorto(v - 1)} interval={0} angle={-35} textAnchor="end" height={44} />
+              <YAxis fontSize={9} domain={[0, topPct]} tickFormatter={(v: number) => `${v}%`} />
+              <Tooltip labelFormatter={(l) => nombreMes(Number(l) - 1)} formatter={(v: any) => [`${String(v).replace(".", ",")}%`, "%Gross/Vta"]} />
+              <ReferenceArea y1={GROSS_BANDA.hasta} y2={topPct} fill="#E6332A" fillOpacity={0.07} />
+              <ReferenceArea y1={GROSS_BANDA.desde} y2={GROSS_BANDA.hasta} fill="#10B981" fillOpacity={0.18}
+                label={{ value: "banda 22–27%", position: "insideTopRight", fontSize: 9, fill: "#047857", fontWeight: 700 }} />
+              <ReferenceLine y={GROSS_BANDA.desde} stroke="#10B981" strokeDasharray="4 3" />
+              <ReferenceLine y={GROSS_BANDA.hasta} stroke="#E6332A" strokeDasharray="4 3" />
+              <Line dataKey="pct" name="%Gross/Vta" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 3, fill: "#0F1116" }} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+      <Lectura>
+        Las bajas de un mes son ventas de 1 a 3 meses antes (el PFI suspende a los 60 días y Claro cancela un mes después),
+        así que el Gross no juzga las ventas de ese mes: si un mes vende menos, las bajas de los meses anteriores llegan igual y el
+        porcentaje salta. Con ventas estables el %Gross queda en {String(data[0]?.pct ?? 0).replace(".", ",")}% con la zafra cargada; para entrar
+        en la banda hay que bajar la caída de la zafra en los meses 1 y 2 (PFI). El mes 1 arranca en régimen: se asume que los meses
+        anteriores vendieron lo mismo que el mes 1.
+      </Lectura>
+    </section>
+  );
+}
+
 export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const cfg = NEGOCIOS[negocio];
   const [p, setP] = useState<any>(null);
@@ -363,6 +457,10 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               )}
             </div>
           </section>
+
+          {meses.length > 0 && meses[0].pct_gross != null && (
+            <GrossClaro meses={meses} anual={a} nombreMes={nombreMes} nombreCorto={nombreCorto} pctBajas={Number(p.pct_bajas_gross ?? 60)} />
+          )}
 
           <NotasSimulacion notas={notas} setNotas={setNotas} nombres={ventas.map((_, i) => nombreMes(i))} guardaSola={!!actual} soloImpresion />
           {editandoMes != null && (

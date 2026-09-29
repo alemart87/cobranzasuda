@@ -26,6 +26,7 @@ export const CAMPOS_AFECTABLES: CampoDef[] = [
   { key: "legajo_no_presentado_pct", label: "Legajos no presentados", suffix: "%", step: 0.5, grupo: "Calidad y caídas" },
   { key: "pct_caidas_penalizables", label: "Caídas penalizables", suffix: "%", step: 5, grupo: "Calidad y caídas" },
   { key: "recupero_pct", label: "Recupero por reconexión", suffix: "%", step: 5, grupo: "Calidad y caídas" },
+  { key: "pct_bajas_gross", label: "Caídas que terminan en baja (Gross Claro)", suffix: "%", step: 5, grupo: "Calidad y caídas" },
   { key: "pct_recalculo_productividad", label: "Líneas castigadas en el recálculo", suffix: "%", step: 1, grupo: "Calidad y caídas" },
   { key: "migracion_negocio_pct", label: "Migración de negocio", suffix: "%", step: 0.1, grupo: "Calidad y caídas" },
   { key: "comision_por_venta", label: "Comisión al vendedor por venta", step: 1000, grupo: "Costos variables", costo: true },
