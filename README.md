@@ -528,11 +528,25 @@ mes 1, y al cierre queda la cola (cuota 2 por cobrar, mora y recálculo por devo
   del trabajo** (simulaciones guardadas con nombre y comentario, notas tipificadas, ítems marcados y post-its
   arrastrables), en una barra lateral ocultable. Todo se imprime como informe.
 - **Reportes de liquidación** (`/televentas-claro`): carga del `.txt`, resumen por concepto, comparación entre
-  liquidaciones con descomposición del delta.
+  liquidaciones con descomposición del delta, y **Gross y netas con el criterio de Claro** (abajo).
+- **Gross y netas (criterio Claro)**. Los gráficos de Claro "Ventas Móv", "Netas Móv", "Desc Gross" y "%Gross/Vta"
+  se replican desde la liquidación así: *Ventas* = activaciones cuota 1 del mes (coincide con Claro a ±10 líneas);
+  *Desc Gross* = líneas dadas de baja **en el mes** (concepto CANCELACIONES, una vez por línea), de **cualquier cohorte**,
+  por razón de Claro (PFI P9-735, falta de pago P7, contratación dudosa P9-722, usurpación P9-787…), **sin los port
+  out** (PNPOUT); *Netas* = ventas − Desc Gross; *%Gross/Vta* = Desc Gross ÷ ventas. No es una métrica de la cohorte
+  del mes: ~85% de las bajas son ventas de 1 a 3 meses antes (el PFI pega a los 60 días), así que mide caja del mes y
+  en un mes de ventas bajas el % salta aunque la venta no haya empeorado (agosto 2026: 62% en Claro con 1.410 ventas).
+  Replicación 2026 (liquidación vs gráfico de Claro): ene 28% vs 32 · feb 31 vs 32 · mar 27 vs 29 · abr 27 vs 28 ·
+  may 30 vs 30 · jun 33 vs 35 · jul 36 vs 45 · ago 53 vs 62. La diferencia de julio y agosto es que la liquidación
+  solo lista cancelaciones de líneas de hasta 6 meses; las bajas de líneas más viejas (cohortes de enero a junio
+  cumpliendo 7 a 12 meses) están en el reporte de base de Claro y no en la liquidación. La calidad de la venta del mes
+  se mide por cohorte (PFI por mes de venta, "Cohorte x Liquidación"). Se muestra en cada reporte (`data.gross`:
+  activaciones, desc_gross, pfi, port_out, netas, pct_gross, por_razon, por_edad, por_cohorte) y en el comparativo
+  (`gross` con las series por mes). Los reportes procesados antes de esta métrica hay que volver a subirlos.
 - Endpoints: `GET /api/v1/facturacion/simulador/parametros`, `POST /api/v1/facturacion/simulador`,
   `POST /api/v1/facturacion/simulador/anual`, CRUD en `/api/v1/facturacion/simulaciones`.
-- Tests: `backend/tests/test_facturacion_simulador.py` (invariantes del motor, aditividad al guaraní, calibración) y
-  `test_facturacion_simulaciones.py` (registro del trabajo).
+- Tests: `backend/tests/test_facturacion_simulador.py` (invariantes del motor, aditividad al guaraní, calibración),
+  `test_facturacion_simulaciones.py` (registro del trabajo) y `test_facturacion_gross.py` (Desc Gross / netas).
 
 ## 🚧 Pendientes inmediatos
 
