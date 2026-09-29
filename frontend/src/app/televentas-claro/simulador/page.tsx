@@ -514,7 +514,7 @@ export default function SimuladorFacturacionPage() {
                   <Lectura>
                     La línea negra es el porcentaje de la cohorte que sigue activa cada mes; las barras, cuántas líneas
                     son. El punto rojo en M2 es la PFI (primera factura impaga): la suspensión penalizable a los ~60 días,
-                    medida en 28,7% de las ventas por cohorte, que se lleva cuota 1, un residual y el plus porta de cada línea.
+                    medida en 27% a 38% de las ventas según el mes (31% ponderado en 2026), que se lleva cuota 1, un residual y el plus porta de cada línea.
                     Cada escalón hacia abajo antes de la línea naranja (fin del chargeback) genera devoluciones; después
                     solo deja de cobrarse el residual. La caída del mes 1 es la primera factura impaga: la palanca más grande.
                   </Lectura>
