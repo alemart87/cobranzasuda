@@ -445,6 +445,13 @@ dan 28–32%); con la zafra ideal, ~24%. Banda de referencia en el gráfico: **2
 informa `pct_gross`, `pct_gross_max`, `pct_gross_max_mes` y `meses_gross_sobre_banda`. Un mes de ventas bajas dispara el
 % aunque la venta no haya empeorado, porque las bajas vienen de los meses anteriores (agosto 2026).
 
+**Evolución de la zafra contra el Ideal** (debajo del Gross): la zafra cargada (% de líneas activas por mes de
+antigüedad, M0 a M12) sobre la banda de la zafra Ideal **±3,5 puntos** (la marca), con la zafra real de las
+liquidaciones punteada como referencia y el M2 marcado como PFI. Los meses por debajo de la banda se pintan en rojo
+(más caídas que lo admitido) y los que están por encima en verde; cuatro tarjetas muestran activas al M2, M3, M6 y M12
+en % y en líneas, con la diferencia en puntos contra el Ideal. Tolerancia en `ZAFRA_TOLERANCIA` (SimuladorAnual.tsx)
+y zafra Ideal en `presets.ts`.
+
 **La ola de la zafra (riesgo potencial por bajar productividad)**: cada cohorte deja comprometidas devoluciones
 para los meses siguientes. Por mes calendario el motor informa `ola_devoluciones` (legajos + caídas + devolución de
 bonos + recálculo heredados), `ola_cobros` (residual + cuota 2 heredados) y `ventas_equilibrio`: las ventas mínimas
