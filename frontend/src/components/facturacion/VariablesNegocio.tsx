@@ -6,6 +6,7 @@ import { NumeroInput } from "./NumeroInput";
 import { Verificado } from "./ConceptosLiquidacion";
 import { Campo } from "./Campo";
 import { PFI_DIAS, PFI_REAL_COHORTES } from "./pfiReal";
+import { aplicarPreset, coincidePreset, PRESET_IDEAL_MOVIL, ZAFRA_IDEAL } from "./presets";
 
 function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hint?: string; abierto?: boolean; children: React.ReactNode }) {
   return (
@@ -154,11 +155,21 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
     && JSON.stringify((p.escala_productividad ?? []).map((e: any) => [Number(e.desde_pct), Number(e.monto)]))
       !== JSON.stringify(defaults.escala_productividad.map((e: any) => [Number(e.desde_pct), Number(e.monto)])));
   if (!p) return null;
+  const esIdeal = coincidePreset(p, PRESET_IDEAL_MOVIL);
+  const zafraIdeal = JSON.stringify((p.zafra_pct ?? []).map(Number)) === JSON.stringify(ZAFRA_IDEAL);
+  const vendedores = Number(p.costos?.ventas_por_vendedor) > 0 ? Math.ceil(Number(p.ventas) / Number(p.costos.ventas_por_vendedor)) : 0;
   return (
     <section className="space-y-2 no-print">
-            <div className="flex items-baseline justify-between mb-1">
+            <div className="flex items-center justify-between gap-3 mb-1">
               <h2 className="font-display text-xl text-brand-ink uppercase">{titulo}</h2>
-              {defaults && <button onClick={() => setP(defaults)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar valores reales</button>}
+              <div className="flex items-center gap-3">
+                <button onClick={() => setP((prev: any) => aplicarPreset(prev, PRESET_IDEAL_MOVIL))}
+                  title="Escenario ideal: 1.700 ventas y objetivo 1.700, efectividad 85%, estado A 100%, zafra ideal (M2 75% … M12 49%), 17 ventas por vendedor, comisión 95.000 y plus 12.500"
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-bold uppercase tracking-wider2 border ${esIdeal ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-600 hover:bg-emerald-50"}`}>
+                  {esIdeal ? "✓ Ideal" : "Ideal"}
+                </button>
+                {defaults && <button onClick={() => setP(defaults)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar valores reales</button>}
+              </div>
             </div>
 
             <Grupo titulo="Ventas y objetivo" abierto>
@@ -266,7 +277,12 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
                   );
                 })}
               </div>
-              {defaults && <button onClick={() => set("zafra_pct", defaults.zafra_pct)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar zafra tipo</button>}
+              <div className="flex flex-wrap items-center gap-3">
+                {defaults && <button onClick={() => set("zafra_pct", defaults.zafra_pct)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar zafra tipo</button>}
+                <button onClick={() => set("zafra_pct", [...ZAFRA_IDEAL])} className={`text-[11px] font-semibold hover:underline ${zafraIdeal ? "text-emerald-700" : "text-emerald-600"}`}>
+                  {zafraIdeal ? "✓ Zafra ideal" : "Zafra ideal"}
+                </button>
+              </div>
               <ZonaPFI p={p} />
             </Grupo>
 
@@ -284,7 +300,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
             </Grupo>
 
             <Grupo titulo="Costos de la estructura" hint="indicador principal: ventas por vendedor" abierto>
-              <Campo label="Ventas por vendedor" hint="define la dotación (1.900 ventas ÷ 20 = 95 vendedores)" value={p.costos.ventas_por_vendedor} onChange={(v) => setC("ventas_por_vendedor", v)} />
+              <Campo label="Ventas por vendedor" hint={`define la dotación (${num(Number(p.ventas))} ventas ÷ ${num(Number(p.costos.ventas_por_vendedor))} = ${num(vendedores)} vendedores)`} value={p.costos.ventas_por_vendedor} onChange={(v) => setC("ventas_por_vendedor", v)} />
               <Campo label="Vendedores por supervisor" hint="1 supervisor cada N vendedores" value={p.costos.supervisor_cada_vendedores} onChange={(v) => setC("supervisor_cada_vendedores", v)} />
               <Campo label="Ventas por backoffice" hint="1 backoffice cada N ventas" value={p.costos.backoffice_cada_ventas} onChange={(v) => setC("backoffice_cada_ventas", v)} step={10} />
               <Campo label="Coordinadores" value={p.costos.coordinadores} onChange={(v) => setC("coordinadores", v)} />

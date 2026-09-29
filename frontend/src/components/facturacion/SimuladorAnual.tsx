@@ -17,6 +17,7 @@ import { NumeroInput } from "@/components/facturacion/NumeroInput";
 import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { VariablesGpon } from "@/components/facturacion/VariablesGpon";
+import { aplicarPreset, PRESET_INICIAL_MOVIL } from "@/components/facturacion/presets";
 import { CAMPOS_AFECTABLES, CAMPOS_AFECTABLES_GPON, CampoDef } from "@/components/facturacion/MesAfectado";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
@@ -126,9 +127,12 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
 
   useEffect(() => {
     apiFetch<any>(cfg.paramsPath).then((d) => {
-      setP(d.parametros); setDefaults(d.parametros);
+      // Móvil abre con los valores iniciales definidos por la dirección (ventas/objetivo y estructura del
+      // escenario IDEAL); "Restaurar valores reales" vuelve a los calibrados del backend.
+      setP(negocio === "movil" ? aplicarPreset(d.parametros, PRESET_INICIAL_MOVIL) : d.parametros);
+      setDefaults(d.parametros);
     }).catch((e) => setError(e.message));
-  }, [cfg.paramsPath]);
+  }, [cfg.paramsPath, negocio]);
 
   const simular = useCallback((params: any, vpm: number[], h: number, af: Afectados, bad: number[], nm: string[]) => {
     apiFetch<any>(cfg.anualPath, {
