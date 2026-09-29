@@ -292,6 +292,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <ExplicacionCaidas p={p} />
               <Campo label="Migración de negocio" hint="% de activaciones que pierden la cuota 1 completa por migrar de negocio (real 7 liq: 2,2–4,3%)" value={Number(p.migracion_negocio_pct ?? 0)} onChange={(v) => set("migracion_negocio_pct", v)} step={0.1} suffix="%" />
               <Campo label="Recupero por reconexión" hint="% de los descuentos que Claro devuelve después (real 7 liq: 12,1%)" value={p.recupero_pct} onChange={(v) => set("recupero_pct", v)} step={0.5} suffix="%" />
+              <Campo label="Caídas que terminan en baja (Gross Claro)" hint="de cada 100 líneas que caen según la zafra, cuántas Claro registra como baja por su razón (PFI, deuda, fraude) sin port out, un mes después. Alimenta los gráficos Gross y Netas. Real 2026: 60–75%" value={Number(p.pct_bajas_gross ?? 60)} onChange={(v) => set("pct_bajas_gross", v)} step={5} suffix="%" />
               <ObservacionRecupero />
               <label className="flex items-center gap-2 text-sm text-brand-ink">
                 <input type="checkbox" checked={!!p.clawback_incluye_residual} onChange={(e) => set("clawback_incluye_residual", e.target.checked)} className="accent-brand-primary" />

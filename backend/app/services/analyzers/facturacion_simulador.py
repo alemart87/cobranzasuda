@@ -100,6 +100,11 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     # Calibrado con 7 liquidaciones reales (383-389): 21,0 · 14,4 · 3,0 · 9,2 · 6,5 · 9,9 · 21,2% → ponderado 12,1%.
     "recupero_pct": 12.0,
     "clawback_incluye_residual": True,  # suspensión penalizable = cuota 1 + 1 residual (214.431)
+    # Gross con el criterio de Claro ("Desc Gross", "Netas Móv", "%Gross/Vta"): de cada 100 líneas que
+    # caen según la zafra, cuántas Claro registra como BAJA por su razón (PFI, falta de pago, fraude), sin
+    # port out, un mes después de la caída (la suspensión se cancela a los ~30 días). Real 2026 por
+    # cohorte: bajas 29–38% de las ventas contra 48,9% de caídas de la zafra a 6 meses → 60–75%.
+    "pct_bajas_gross": 60.0,
     # ---- COSTOS de la estructura (el indicador principal: ventas por vendedor) ----
     "costos": {
         "ventas_por_vendedor": 20,          # 1.900 ventas → 95 vendedores
@@ -641,6 +646,35 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                                      "bono_adicional": bonos_ad[t], "_sin_breakeven": True})
                 for t, v in enumerate(ventas)]
 
+    # ---- Gross con el criterio de Claro: bajas del mes de cualquier cohorte, sin port out ----
+    # Las bajas de la cohorte a la edad k son las caídas de la zafra a la edad k−1 (la suspensión se
+    # cancela ~30 días después) por `pct_bajas_gross`. Antes del mes 1 se asume régimen: cohortes
+    # previas iguales a las ventas del mes 1 con la zafra base, para que el mes 1 no muestre 0 bajas.
+    rho = min(max(float(base.get("pct_bajas_gross") or 0), 0), 100) / 100.0
+    chb_g = int(base["chargeback_meses"])
+
+    def _zafra_de(pm: dict) -> list[float]:
+        z = [min(max(float(v), 0), 100) / 100.0 for v in pm["zafra_pct"]]
+        while len(z) < 14:
+            z.append(z[-1] if z else 0.0)
+        return z
+
+    def _bajas_edad(pm: dict, v: float, edad: int) -> float:
+        if edad < 2 or edad > chb_g + 1:
+            return 0.0
+        z = _zafra_de(pm)
+        return v * rho * max(0.0, z[edad - 2] - z[edad - 1])
+
+    def bajas_gross_mes(t: int) -> tuple[float, float]:
+        propias, heredadas = 0.0, 0.0
+        for m in range(t - chb_g - 1, t + 1):
+            edad = t - m
+            if m >= 0:
+                propias += _bajas_edad(cohortes[m]["parametros"], ventas[m], edad)
+            else:
+                heredadas += _bajas_edad(base, ventas[0], edad)
+        return propias, heredadas
+
     meses: list[dict] = []
     acumulado = 0
     for t in range(h):
@@ -711,6 +745,12 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                     lo = mid
             fila["ventas_equilibrio"] = int(math.ceil(up))
         fila["en_riesgo"] = fila["ventas_equilibrio"] is None or ventas[t] < fila["ventas_equilibrio"]
+        # Gross / netas / %Gross del mes (criterio Claro).
+        propias, heredadas = bajas_gross_mes(t)
+        fila["bajas_gross"] = round(propias + heredadas)
+        fila["bajas_gross_regimen"] = round(heredadas)      # parte que viene del arranque en régimen (cohortes previas al mes 1)
+        fila["netas_gross"] = fila["ventas"] - fila["bajas_gross"]
+        fila["pct_gross"] = round(fila["bajas_gross"] / fila["ventas"] * 100, 1) if fila["ventas"] else 0.0
         meses.append(fila)
 
     # Cola después del horizonte: flujos de las cohortes que caen fuera de él.
@@ -765,6 +805,13 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "ola_maxima_mes": min(meses, key=lambda f: f["ola_devoluciones"])["mes"],
         "meses_en_riesgo": [f["mes"] for f in meses if f["en_riesgo"]],
         "ventas_equilibrio_max": max((f["ventas_equilibrio"] or 0) for f in meses),
+        # Gross (criterio Claro): promedio del período, máximo y meses fuera de la banda de referencia 22–27%.
+        "bajas_gross": round(tot("bajas_gross")),
+        "netas_gross": round(tot("ventas") - tot("bajas_gross")),
+        "pct_gross": round(tot("bajas_gross") / tot("ventas") * 100, 1) if tot("ventas") else 0.0,
+        "pct_gross_max": max(f["pct_gross"] for f in meses),
+        "pct_gross_max_mes": max(meses, key=lambda f: f["pct_gross"])["mes"],
+        "meses_gross_sobre_banda": [f["mes"] for f in meses if f["pct_gross"] > 27],
     }
 
     def gs(v: float) -> str:

@@ -429,6 +429,22 @@ bono efectividad cobrado 87,5%, estado A 100%, porta 90%, y estructura de 17 ven
 para cambiar solo la curva. **Restaurar valores reales** vuelve a los parámetros calibrados del backend
 (`PARAMETROS_DEFAULT`), que no cambian.
 
+**Gross y netas con el criterio de Claro (en el simulador anual, debajo de las ventas por mes)**: los tres gráficos
+de Claro ("Ventas Móv", "Netas Móv", "%Gross/Vta") con los números de la simulación. Por mes calendario *t*:
+
+```
+bajas_gross_t = Σ_cohortes ventas_c × pct_bajas_gross × max(0, z[edad−2] − z[edad−1])    (edad = t − c, 2 ≤ edad ≤ chargeback+1)
+netas_gross_t = ventas_t − bajas_gross_t          pct_gross_t = bajas_gross_t ÷ ventas_t
+```
+
+Las bajas de la cohorte a la edad *k* son las caídas de la zafra a la edad *k−1* (Claro cancela ~30 días después de
+suspender) por `pct_bajas_gross` (60%: de cada 100 caídas de la zafra, las que Claro registra como baja por su razón,
+sin port out; real 2026 por cohorte 60–75%). Antes del mes 1 se asume régimen (cohortes previas iguales al mes 1), así
+el mes 1 no muestra cero bajas. Con la zafra real y ventas estables el %Gross queda en ~30% (los meses estables de Claro
+dan 28–32%); con la zafra ideal, ~24%. Banda de referencia en el gráfico: **22–27%** (otros calls 12–27%); `anual`
+informa `pct_gross`, `pct_gross_max`, `pct_gross_max_mes` y `meses_gross_sobre_banda`. Un mes de ventas bajas dispara el
+% aunque la venta no haya empeorado, porque las bajas vienen de los meses anteriores (agosto 2026).
+
 **La ola de la zafra (riesgo potencial por bajar productividad)**: cada cohorte deja comprometidas devoluciones
 para los meses siguientes. Por mes calendario el motor informa `ola_devoluciones` (legajos + caídas + devolución de
 bonos + recálculo heredados), `ola_cobros` (residual + cuota 2 heredados) y `ventas_equilibrio`: las ventas mínimas
@@ -472,6 +488,7 @@ facturación (mes 0, 6 y 12 meses) − costo de la estructura; punto de equilibr
 | Migración de negocio | 3,2% en el mes 3 | 2,2–4,3% por liquidación, ~207.000 por línea |
 | Recálculo del bono productividad | 100% del bono de las líneas caídas al día 180 = 100 − zafra[6] (48,9%), mes 6 | Concepto 1871, una fila por línea de la cohorte, entre el día 152 y 184: líneas castigadas jul-25 41%, ago 45%, sep 52%, oct 51%, nov 52% (promedio 48,5%). Ningún descuento de bonos después del día 184 (cohortes observadas hasta 12 meses) |
 | Recupero por reconexión | 12% | Ver definición abajo |
+| Caídas que terminan en baja (Gross Claro) | 60% de las caídas de la zafra | Bajas por razón de Claro sin port out ÷ caídas de la zafra a 6 meses: 29–38% contra 48,9% por cohorte 2026 |
 | Comisión / plus del vendedor | 102.000 / 32.000 Gs por venta | Promedio real pagado |
 
 **Recupero por reconexión** = devuelto ÷ descontado, ponderado sobre las 7 liquidaciones (21,0 · 14,4 · 3,0 · 9,2 ·
