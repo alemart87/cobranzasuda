@@ -750,10 +750,12 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
             </div>
             <div className="flex flex-wrap items-center gap-3 no-print">
               {negocio === "movil" && (
-                <button onClick={() => setP((prev: any) => ({ ...prev, ajuste_comisiones_pct: AJUSTE_OPTIMIZAR_PCT }))}
-                  title={`Propuesta 2027: carga +${AJUSTE_OPTIMIZAR_PCT}% sobre cuota 1, cuota 2 y porta en todos los planes. Después se puede corregir el porcentaje antes de simular.`}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider2 border transition-colors ${Number(p.ajuste_comisiones_pct) === AJUSTE_OPTIMIZAR_PCT ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-600 hover:bg-emerald-50"}`}>
-                  {Number(p.ajuste_comisiones_pct) === AJUSTE_OPTIMIZAR_PCT ? `✓ Optimizado +${AJUSTE_OPTIMIZAR_PCT}%` : `Optimizar (+${AJUSTE_OPTIMIZAR_PCT}%)`}
+                <button onClick={() => setP((prev: any) => ({ ...prev, ajuste_comisiones_pct: Number(prev.ajuste_comisiones_pct || 0) !== 0 ? 0 : AJUSTE_OPTIMIZAR_PCT }))}
+                  title={Number(p.ajuste_comisiones_pct || 0) !== 0
+                    ? "Destildar: vuelve el ajuste a 0% (tarifa vigente)."
+                    : `Propuesta 2027: carga +${AJUSTE_OPTIMIZAR_PCT}% sobre cuota 1, cuota 2 y porta en todos los planes. Después se puede corregir el porcentaje antes de simular.`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider2 border transition-colors ${Number(p.ajuste_comisiones_pct || 0) !== 0 ? "bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700" : "bg-white text-emerald-700 border-emerald-600 hover:bg-emerald-50"}`}>
+                  {Number(p.ajuste_comisiones_pct || 0) !== 0 ? `✓ Optimizado ${Number(p.ajuste_comisiones_pct) > 0 ? "+" : ""}${Number(p.ajuste_comisiones_pct)}% · destildar` : `Optimizar (+${AJUSTE_OPTIMIZAR_PCT}%)`}
                 </button>
               )}
               <label className="flex items-center gap-2 text-sm">
