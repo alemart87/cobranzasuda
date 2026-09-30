@@ -311,10 +311,21 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
     }).catch((e) => setError(e.message));
   }, [cfg.paramsPath, negocio]);
 
+  // Escenario de negociación: Claro no descuenta el bono productividad (1871) y/o el bono efectividad (471).
+  const sinDescProd = negocio === "movil" && p?.devolver_bono_productividad === false;
+  const sinDescEfec = negocio === "movil" && p?.devolver_bono_efectividad === false;
+  const [resConDesc, setResConDesc] = useState<any>(null);   // misma simulación CON los descuentos, para comparar
+
   const simular = useCallback((params: any, vpm: number[], h: number, af: Afectados, bad: number[], nm: string[]) => {
-    apiFetch<any>(cfg.anualPath, {
-      method: "POST", body: JSON.stringify({ parametros: params, ventas_por_mes: vpm, horizonte: h, meses_afectados: af, bonos_adicionales_por_mes: bad, nombres_meses: nm }),
-    }).then((d) => { setRes(d); setError(null); }).catch((e) => setError(e.message));
+    const body = (pp: any) => JSON.stringify({ parametros: pp, ventas_por_mes: vpm, horizonte: h, meses_afectados: af, bonos_adicionales_por_mes: bad, nombres_meses: nm });
+    apiFetch<any>(cfg.anualPath, { method: "POST", body: body(params) })
+      .then((d) => { setRes(d); setError(null); }).catch((e) => setError(e.message));
+    if (params?.devolver_bono_productividad === false || params?.devolver_bono_efectividad === false) {
+      apiFetch<any>(cfg.anualPath, { method: "POST", body: body({ ...params, devolver_bono_productividad: true, devolver_bono_efectividad: true }) })
+        .then((d) => setResConDesc(d)).catch(() => setResConDesc(null));
+    } else {
+      setResConDesc(null);
+    }
   }, [cfg.anualPath]);
 
   useEffect(() => {
@@ -371,6 +382,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
       ventas: a.ventas, facturacion_bruta: a.facturacion_bruta, ingreso_neto: a.ingreso_neto, costos: a.costos,
       resultado: a.resultado, margen_pct: a.margen_pct, resultado_con_cola: a.resultado_con_cola,
       bonos_activos: p?.bonos_activos !== false, ajuste_comisiones_pct: Number(p?.ajuste_comisiones_pct || 0),
+      sin_descuento_bono_productividad: sinDescProd, sin_descuento_bono_efectividad: sinDescEfec,
     } : {},
   });
   const abrirSimulacion = (s: any) => {
@@ -393,7 +405,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   return (
     <AppShell>
       <PrintCover titulo={`${cfg.titulo} · ${horizonte} meses`}
-        periodo={a ? `${formatInt(a.ventas)} ${cfg.unidad} en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%)${p?.bonos_activos === false ? " · SIN BONOS" : ""} · ${cfg.nombre}` : undefined} />
+        periodo={a ? `${formatInt(a.ventas)} ${cfg.unidad} en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%)${p?.bonos_activos === false ? " · SIN BONOS" : ""}${sinDescProd || sinDescEfec ? ` · SIN DESCUENTO SOBRE BONO ${[sinDescProd && "PRODUCTIVIDAD", sinDescEfec && "LOGÍSTICA"].filter(Boolean).join(" Y ")}` : ""} · ${cfg.nombre}` : undefined} />
 
       <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/televentas-claro" className="hover:text-brand-primary">Televentas Claro</Link>
@@ -573,6 +585,49 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               {p.bonos_activos === false ? "Reactivar bonos" : "Simular sin bonos"}
             </button>
           </div>
+
+          {negocio === "movil" && p.bonos_activos !== false && (
+            <div className={`rounded-md border-2 px-4 py-3 ${sinDescProd || sinDescEfec ? "border-emerald-600 bg-emerald-50" : "border-brand-border bg-white"}`}>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className={`text-[10px] uppercase tracking-wider2 font-bold ${sinDescProd || sinDescEfec ? "text-emerald-700" : "text-brand-slate"}`}>Descuentos de Claro sobre los bonos · escenario de negociación</div>
+                  <div className="text-sm font-semibold text-brand-ink">
+                    {!sinDescProd && !sinDescEfec && "Claro descuenta los dos bonos en las caídas (así liquida hoy)"}
+                    {sinDescProd && !sinDescEfec && "Claro NO descuenta el bono productividad (sin recálculo al mes 6)"}
+                    {!sinDescProd && sinDescEfec && "Claro NO descuenta el bono efectividad / logística en las caídas"}
+                    {sinDescProd && sinDescEfec && "Claro NO descuenta ningún bono en las caídas"}
+                  </div>
+                  <div className="text-[11px] text-brand-slate">Los bonos se cobran igual en el mes; lo que cambia es que las líneas caídas no lo devuelven. Se guarda con la simulación.</div>
+                </div>
+                <div className="no-print flex flex-wrap gap-2">
+                  <button onClick={() => setP((prev: any) => ({ ...prev, devolver_bono_productividad: prev.devolver_bono_productividad === false }))}
+                    className={`px-3 py-2 rounded-md text-xs font-bold border transition-colors ${sinDescProd ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-brand-ink border-brand-border hover:bg-brand-bg"}`}>
+                    {sinDescProd ? "✓ Sin descuento sobre bono productividad" : "No aplicar descuento sobre bono productividad"}
+                  </button>
+                  <button onClick={() => setP((prev: any) => ({ ...prev, devolver_bono_efectividad: prev.devolver_bono_efectividad === false }))}
+                    className={`px-3 py-2 rounded-md text-xs font-bold border transition-colors ${sinDescEfec ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-brand-ink border-brand-border hover:bg-brand-bg"}`}>
+                    {sinDescEfec ? "✓ Sin descuento sobre bono logística" : "No aplicar descuento sobre bono logística"}
+                  </button>
+                </div>
+              </div>
+              {(sinDescProd || sinDescEfec) && a && resConDesc?.anual && (
+                <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[
+                    { t: "Devolución de bonos evitada", v: formatGs((a.devolucion_bonos ?? 0) - (resConDesc.anual.devolucion_bonos ?? 0)), s: `en ${horizonte} meses · con descuentos era ${formatGs(resConDesc.anual.devolucion_bonos ?? 0)}` },
+                    { t: "Resultado del período", v: formatGs(a.resultado), s: `con descuentos ${formatGs(resConDesc.anual.resultado)}`, delta: a.resultado - resConDesc.anual.resultado },
+                    { t: "Margen del período", v: `${String(a.margen_pct).replace(".", ",")}%`, s: `con descuentos ${String(resConDesc.anual.margen_pct).replace(".", ",")}%` },
+                    { t: "Resultado con cola", v: formatGs(a.resultado_con_cola), s: `con descuentos ${formatGs(resConDesc.anual.resultado_con_cola)}`, delta: a.resultado_con_cola - resConDesc.anual.resultado_con_cola },
+                  ].map((k) => (
+                    <div key={k.t} className="rounded-md border border-emerald-200 bg-white px-3 py-2">
+                      <div className="text-[9px] uppercase tracking-wider2 text-brand-slate font-bold">{k.t}</div>
+                      <div className="font-display text-xl leading-tight text-brand-ink">{k.v}</div>
+                      <div className="text-[10px] text-brand-slate">{k.s}{k.delta != null && <b className="ml-1 text-emerald-700">({k.delta >= 0 ? "+" : ""}{formatGs(k.delta)})</b>}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
 
           <div className="rounded-md border-2 border-brand-primary bg-brand-primary/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">

@@ -370,6 +370,9 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
                         <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-brand-slate">
                           <span>{s.horizonte} m</span>
                           {r.ventas != null && <span>{formatInt(r.ventas)} ventas</span>}
+                          {(r.sin_descuento_bono_productividad || r.sin_descuento_bono_efectividad) && (
+                            <span className="text-emerald-700 font-semibold">sin desc. {[r.sin_descuento_bono_productividad && "productividad", r.sin_descuento_bono_efectividad && "logística"].filter(Boolean).join(" + ")}</span>
+                          )}
                           {fin != null && <span className={`font-mono font-bold ${fin < 0 ? "text-brand-primary" : "text-emerald-700"}`}>{formatGs(fin)}</span>}
                           <span>{fecha(s.created_at)}{s.created_by_nombre ? ` · ${s.created_by_nombre}` : ""}</span>
                         </div>
@@ -401,7 +404,11 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
                       return (
                         <tr key={s.id} className={`border-t border-brand-border ${activa ? "bg-amber-50" : "hover:bg-brand-bg-soft"}`}>
                           <td className="px-4 py-2">
-                            <div className="text-[13px] font-semibold text-brand-ink">{s.nombre}{activa && <span className="ml-2 text-[9px] font-bold uppercase text-amber-700">abierta</span>}</div>
+                            <div className="text-[13px] font-semibold text-brand-ink">{s.nombre}{activa && <span className="ml-2 text-[9px] font-bold uppercase text-amber-700">abierta</span>}
+                              {(r.sin_descuento_bono_productividad || r.sin_descuento_bono_efectividad) && (
+                                <span className="ml-2 text-[9px] font-bold uppercase text-emerald-700">sin desc. {[r.sin_descuento_bono_productividad && "productividad", r.sin_descuento_bono_efectividad && "logística"].filter(Boolean).join(" + ")}</span>
+                              )}
+                            </div>
                             {s.comentario && <div className="text-[11px] text-brand-slate line-clamp-2 max-w-md">{s.comentario}</div>}
                           </td>
                           <td className="px-3 py-2 text-right">{s.horizonte} m</td>

@@ -49,6 +49,9 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "objetivo_co": 1750,            # objetivo mensual de líneas CO (lo comunica Claro)
     "pct_estado_a": 99.5,           # activaciones en estado A (no S/P/C) al liquidar
     "bonos_activos": True,          # False = simular SIN bonos (productividad y efectividad en 0)
+    # Escenarios de negociación con Claro: False = Claro NO descuenta ese bono en las caídas.
+    "devolver_bono_productividad": True,   # False = sin RECALCULO INCENTIVO PRODUCTIVIDAD (1871) al mes 6
+    "devolver_bono_efectividad": True,     # False = sin DESCUENTO INCENTIVOS POR PENALIDAD (471) del bono efectividad/logística
     "bono_adicional": 0.0,          # BONO ADICIONAL a mano (Gs totales del mes): campañas, premios o acuerdos puntuales
     "ajuste_comisiones_pct": 0.0,   # ajuste negociado sobre cuota 1, cuota 2 y plus de portabilidad (+5 = mejora 5%)
     # ---- tarifas por plan (Gs sin IVA) y mix ----
@@ -244,14 +247,15 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
             caidas = act * max(0.0, z[k - 1] - z[k])
             row["caidas"] = caidas
             row["clawbacks"] = -caidas * clawback_linea_base * (1 - recupero)
-            row["clawback_bonos"] = -caidas * pct_bef * monto_efect * (1 - recupero)
+            if p.get("devolver_bono_efectividad", True):
+                row["clawback_bonos"] = -caidas * pct_bef * monto_efect * (1 - recupero)
         if k == int(p.get("migracion_mes") or 3) and migr > 0:
             # Migración de negocio: pierde la cuota 1 completa, sin recupero (la línea deja el pospago).
             row["clawbacks"] += -act * migr * cuota1_w
         if k == int(p["cuota2_mes"]):
             # Cuota 2: línea activa al día 90; legajo incompleto cobra la mitad y legajo no presentado cobra 0.
             row["cuota2"] = act * z[k] * cuota2_w * (1 - leg_inc / 2 - leg_np)
-        if k == int(p["recalculo_productividad_mes"]):
+        if k == int(p["recalculo_productividad_mes"]) and p.get("devolver_bono_productividad", True):
             # Recálculo: % de líneas castigadas medido en las liquidaciones (las suspendidas sin cancelar cuentan activas).
             row["recalculo_productividad"] = -act_a * monto_prod * pct_recalc
         row["neto_mes"] = (row["residual"] + row["cuota2"] + row["legajos"] + row["clawbacks"]
