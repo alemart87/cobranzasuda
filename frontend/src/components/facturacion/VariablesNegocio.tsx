@@ -151,7 +151,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
   const setZafra = (i: number, v: number) => setP((prev: any) => ({ ...prev, zafra_pct: prev.zafra_pct.map((z: number, j: number) => (j === i ? v : z)) }));
   const setCurvaRes = (i: number, v: number) => setP((prev: any) => ({ ...prev, residual_curva_pct: (prev.residual_curva_pct ?? []).map((z: number, j: number) => (j === i ? v : z)) }));
   const mixTotal = p ? p.planes.reduce((s: number, pl: any) => s + Number(pl.mix_pct || 0), 0) : 0;
-  const escalaDistinta = !!(p && defaults?.escala_productividad
+  const escalaDistinta = !!(p && !p.bono_unico && defaults?.escala_productividad
     && JSON.stringify((p.escala_productividad ?? []).map((e: any) => [Number(e.desde_pct), Number(e.monto)]))
       !== JSON.stringify(defaults.escala_productividad.map((e: any) => [Number(e.desde_pct), Number(e.monto)])));
   if (!p) return null;
@@ -223,8 +223,13 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               {defaults?.residual_curva_pct && <button onClick={() => set("residual_curva_pct", defaults.residual_curva_pct)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar curva real</button>}
             </Grupo>
 
-            <Grupo titulo="Bono productividad (concepto 1771)" hint="escala editable">
-              <p className="text-[10px] text-brand-slate">Por línea en estado A. % cumplimiento = activaciones netas ÷ objetivo CO. Bajo la escala mínima liquida 0. Al 6º mes se descuenta el de las líneas castigadas (1871).</p>
+            <Grupo titulo={p.bono_unico ? "Bono único propuesto (reemplaza a productividad + efectividad)" : "Bono productividad (concepto 1771)"} hint="escala editable" abierto={!!p.bono_unico}>
+              {p.bono_unico && (
+                <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-[11px] text-emerald-900">
+                  <b>Bono único propuesto activo.</b> Esta escala es el único bono por línea, según cumplimiento del objetivo CO, y no se descuenta en las caídas (los descuentos 1871 y 471 están apagados). El bono efectividad queda en 0. Se puede editar acá; el botón del simulador vuelve a los bonos vigentes.
+                </div>
+              )}
+              <p className="text-[10px] text-brand-slate">Por línea en estado A. % cumplimiento = activaciones netas ÷ objetivo CO. Bajo la escala mínima liquida 0.{!p.bono_unico && " Al 6º mes se descuenta el de las líneas castigadas (1871)."}</p>
               <Campo label="Líneas castigadas en el recálculo"
                 hint={`Claro descuenta el 100% del bono de cada línea caída, una sola vez, al día 180 (real 7 liq: 41–52% de las líneas por cohorte, promedio 48,5%; nada después). Según la zafra cargada caen ${recalcSegunZafra(p)}%${p.pct_recalculo_productividad == null ? " · automático según zafra" : ""}`}
                 value={Number(p.pct_recalculo_productividad ?? recalcSegunZafra(p))} onChange={(v) => set("pct_recalculo_productividad", v)} step={1} suffix="%" />
@@ -251,7 +256,8 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="Mes del recálculo" hint="líneas no activas al día 180" value={p.recalculo_productividad_mes} onChange={(v) => set("recalculo_productividad_mes", v)} />
             </Grupo>
 
-            <Grupo titulo="Bono efectividad distribución (concepto 1891)" hint="escala editable">
+            <Grupo titulo="Bono efectividad distribución (concepto 1891)" hint={p.bono_unico ? "en 0 · incluido en el bono único" : "escala editable"}>
+              {p.bono_unico && <p className="text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-300 rounded-md px-3 py-2">Con el bono único propuesto este bono desaparece: su valor está dentro de la escala única.</p>}
               <p className="text-[10px] text-brand-slate">Por venta entregada (activación cuota 1), según efectividad = activaciones ÷ ventas. Bajo la escala mínima liquida 0; se descuenta en las líneas penalizadas.</p>
               {p.escala_efectividad.map((e: any, i: number) => (
                 <div key={i} className="flex items-center gap-2 text-sm">

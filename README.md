@@ -454,6 +454,15 @@ simulación con los descuentos y muestra la devolución evitada, el resultado, e
 dos casos. Viajan en `parametros`, así que se guardan con la simulación (el registro marca "sin desc. productividad /
 logística").
 
+**Propuesta 2027 en el simulador (móvil)**: en la barra "Escenario de bonos", el botón **Bono único propuesto** carga
+en `escala_productividad` la escala ≥110% 55.000 · ≥100% 50.000 · ≥95% 35.000 · ≥90% 25.000 (debajo de 90%: 0), deja el
+bono efectividad en 0 (queda dentro del único), apaga los dos descuentos y marca `bono_unico: true`; el mismo botón
+vuelve a los bonos vigentes. La escala se edita en "Bono productividad" de las variables. En la barra "Ajuste de
+comisiones", el botón **Optimizar** carga +40% sobre cuota 1, cuota 2 y porta (`AJUSTE_OPTIMIZAR_PCT` en presets.ts),
+editable antes de simular, y aparece la tarifa resultante por plan. Ambos viajan en `parametros` y se guardan con la
+simulación (el registro marca "bono único" y "comisiones +N%"). Con la zafra real y estructura real, bono único + 40%
+da en régimen +6,5% de margen a 1.900 ventas, +2,3% a 1.700 y +0,7% a 1.600: positivo en todos los niveles, sin acantilado.
+
 **Evolución de la zafra contra el Ideal** (debajo del Gross): la zafra cargada (% de líneas activas por mes de
 antigüedad, M0 a M12) sobre la banda de la zafra Ideal **±3,5 puntos** (la marca), con la zafra real de las
 liquidaciones punteada como referencia y el M2 marcado como PFI. Los meses por debajo de la banda se pintan en rojo

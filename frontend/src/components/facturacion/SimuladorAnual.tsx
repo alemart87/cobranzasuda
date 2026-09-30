@@ -17,7 +17,7 @@ import { NumeroInput } from "@/components/facturacion/NumeroInput";
 import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { VariablesGpon } from "@/components/facturacion/VariablesGpon";
-import { aplicarPreset, PRESET_INICIAL_MOVIL, ZAFRA_IDEAL } from "@/components/facturacion/presets";
+import { AJUSTE_OPTIMIZAR_PCT, aplicarBonoUnico, aplicarPreset, BONO_UNICO_ESCALA, PRESET_INICIAL_MOVIL, quitarBonoUnico, ZAFRA_IDEAL } from "@/components/facturacion/presets";
 import { CAMPOS_AFECTABLES, CAMPOS_AFECTABLES_GPON, CampoDef } from "@/components/facturacion/MesAfectado";
 import { Lectura } from "@/components/televentas/Lectura";
 import { apiFetch } from "@/lib/api";
@@ -312,6 +312,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   }, [cfg.paramsPath, negocio]);
 
   // Escenario de negociación: Claro no descuenta el bono productividad (1871) y/o el bono efectividad (471).
+  const bonoUnico = negocio === "movil" && p?.bono_unico === true;
   const sinDescProd = negocio === "movil" && p?.devolver_bono_productividad === false;
   const sinDescEfec = negocio === "movil" && p?.devolver_bono_efectividad === false;
   const [resConDesc, setResConDesc] = useState<any>(null);   // misma simulación CON los descuentos, para comparar
@@ -382,7 +383,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
       ventas: a.ventas, facturacion_bruta: a.facturacion_bruta, ingreso_neto: a.ingreso_neto, costos: a.costos,
       resultado: a.resultado, margen_pct: a.margen_pct, resultado_con_cola: a.resultado_con_cola,
       bonos_activos: p?.bonos_activos !== false, ajuste_comisiones_pct: Number(p?.ajuste_comisiones_pct || 0),
-      sin_descuento_bono_productividad: sinDescProd, sin_descuento_bono_efectividad: sinDescEfec,
+      sin_descuento_bono_productividad: sinDescProd, sin_descuento_bono_efectividad: sinDescEfec, bono_unico: bonoUnico,
     } : {},
   });
   const abrirSimulacion = (s: any) => {
@@ -405,7 +406,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   return (
     <AppShell>
       <PrintCover titulo={`${cfg.titulo} · ${horizonte} meses`}
-        periodo={a ? `${formatInt(a.ventas)} ${cfg.unidad} en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%)${p?.bonos_activos === false ? " · SIN BONOS" : ""}${sinDescProd || sinDescEfec ? ` · SIN DESCUENTO SOBRE BONO ${[sinDescProd && "PRODUCTIVIDAD", sinDescEfec && "LOGÍSTICA"].filter(Boolean).join(" Y ")}` : ""} · ${cfg.nombre}` : undefined} />
+        periodo={a ? `${formatInt(a.ventas)} ${cfg.unidad} en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%)${p?.bonos_activos === false ? " · SIN BONOS" : ""}${bonoUnico ? " · BONO ÚNICO PROPUESTO" : sinDescProd || sinDescEfec ? ` · SIN DESCUENTO SOBRE BONO ${[sinDescProd && "PRODUCTIVIDAD", sinDescEfec && "LOGÍSTICA"].filter(Boolean).join(" Y ")}` : ""}${Number(p?.ajuste_comisiones_pct || 0) ? ` · COMISIONES ${Number(p.ajuste_comisiones_pct) > 0 ? "+" : ""}${Number(p.ajuste_comisiones_pct)}%` : ""} · ${cfg.nombre}` : undefined} />
 
       <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/televentas-claro" className="hover:text-brand-primary">Televentas Claro</Link>
@@ -650,13 +651,50 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   : `Bonos activos — ${cfg.textoConBonos}`}
               </div>
             </div>
-            <button onClick={() => setP((prev: any) => ({ ...prev, bonos_activos: prev.bonos_activos === false }))}
-              className={`no-print px-4 py-2 rounded-md text-sm font-bold transition-colors ${p.bonos_activos === false ? "bg-white text-brand-ink hover:bg-brand-bg" : "bg-brand-primary text-white hover:bg-brand-primary/90"}`}>
-              {p.bonos_activos === false ? "Reactivar bonos" : "Simular sin bonos"}
-            </button>
+            <div className="no-print flex flex-wrap gap-2">
+              {negocio === "movil" && p.bonos_activos !== false && (
+                <button onClick={() => setP((prev: any) => (prev.bono_unico ? quitarBonoUnico(prev, defaults) : aplicarBonoUnico(prev)))}
+                  title="Propuesta 2027: un solo bono por línea que reemplaza a productividad + efectividad, sin descuento en las caídas. Escala: ≥110% 55.000 · ≥100% 50.000 · ≥95% 35.000 · ≥90% 25.000"
+                  className={`px-4 py-2 rounded-md text-sm font-bold border transition-colors ${bonoUnico ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-600 hover:bg-emerald-50"}`}>
+                  {bonoUnico ? "✓ Bono único propuesto" : "Bono único propuesto"}
+                </button>
+              )}
+              <button onClick={() => setP((prev: any) => ({ ...prev, bonos_activos: prev.bonos_activos === false }))}
+                className={`px-4 py-2 rounded-md text-sm font-bold transition-colors ${p.bonos_activos === false ? "bg-white text-brand-ink hover:bg-brand-bg" : "bg-brand-primary text-white hover:bg-brand-primary/90"}`}>
+                {p.bonos_activos === false ? "Reactivar bonos" : "Simular sin bonos"}
+              </button>
+            </div>
           </div>
 
-          {negocio === "movil" && p.bonos_activos !== false && (
+          {bonoUnico && p.bonos_activos !== false && (
+            <div className="rounded-md border-2 border-emerald-600 bg-emerald-50 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider2 font-bold text-emerald-700">Bono único propuesto · propuesta 2027</div>
+                  <div className="text-sm font-semibold text-brand-ink">Un solo bono por línea, según cumplimiento del objetivo CO, que reemplaza a productividad y efectividad. No se descuenta en las caídas.</div>
+                  <div className="text-[11px] text-brand-slate">Por debajo del 90% liquida 0. La escala se puede editar en "Bono productividad" de las variables del mes 1.</div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {BONO_UNICO_ESCALA.map((e) => {
+                    const actual = (p.escala_productividad ?? []).find((x: any) => Number(x.desde_pct) === e.desde_pct);
+                    return (
+                      <div key={e.desde_pct} className="rounded-md border border-emerald-300 bg-white px-3 py-1.5 text-center">
+                        <div className="text-[9px] uppercase tracking-wider2 text-brand-slate font-bold">≥ {e.desde_pct}%</div>
+                        <div className="font-display text-lg leading-tight text-emerald-700">{formatGs(Number(actual?.monto ?? e.monto))}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {a && meses.length > 0 && (
+                <div className="mt-2 text-[11px] text-brand-graphite">
+                  En esta simulación el bono único liquida <b>{formatGs(a.bonos)}</b> en {horizonte} meses ({formatGs(a.bonos / Math.max(a.ventas, 1))} por venta) y no devuelve nada; hoy los dos bonos devolverían cerca de la mitad.
+                </div>
+              )}
+            </div>
+          )}
+
+          {negocio === "movil" && p.bonos_activos !== false && !bonoUnico && (
             <div className={`rounded-md border-2 px-4 py-3 ${sinDescProd || sinDescEfec ? "border-emerald-600 bg-emerald-50" : "border-brand-border bg-white"}`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -710,14 +748,44 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               </div>
               <div className="text-[11px] text-brand-slate">{cfg.ajusteHint}</div>
             </div>
-            <label className="flex items-center gap-2 text-sm no-print">
-              <span className="text-brand-graphite">Ajuste</span>
-              <input type="number" step={0.5} value={p.ajuste_comisiones_pct ?? 0}
-                onChange={(e) => setP((prev: any) => ({ ...prev, ajuste_comisiones_pct: Number(e.target.value) }))}
-                className="input max-w-[90px] !py-1.5 text-right font-bold text-brand-primary" />
-              <span className="text-brand-graphite">%</span>
-            </label>
+            <div className="flex flex-wrap items-center gap-3 no-print">
+              {negocio === "movil" && (
+                <button onClick={() => setP((prev: any) => ({ ...prev, ajuste_comisiones_pct: AJUSTE_OPTIMIZAR_PCT }))}
+                  title={`Propuesta 2027: carga +${AJUSTE_OPTIMIZAR_PCT}% sobre cuota 1, cuota 2 y porta en todos los planes. Después se puede corregir el porcentaje antes de simular.`}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider2 border transition-colors ${Number(p.ajuste_comisiones_pct) === AJUSTE_OPTIMIZAR_PCT ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-600 hover:bg-emerald-50"}`}>
+                  {Number(p.ajuste_comisiones_pct) === AJUSTE_OPTIMIZAR_PCT ? `✓ Optimizado +${AJUSTE_OPTIMIZAR_PCT}%` : `Optimizar (+${AJUSTE_OPTIMIZAR_PCT}%)`}
+                </button>
+              )}
+              <label className="flex items-center gap-2 text-sm">
+                <span className="text-brand-graphite">Ajuste</span>
+                <input type="number" step={0.5} value={p.ajuste_comisiones_pct ?? 0}
+                  onChange={(e) => setP((prev: any) => ({ ...prev, ajuste_comisiones_pct: Number(e.target.value) }))}
+                  className="input max-w-[90px] !py-1.5 text-right font-bold text-brand-primary" />
+                <span className="text-brand-graphite">%</span>
+              </label>
+            </div>
           </div>
+          {negocio === "movil" && Number(p.ajuste_comisiones_pct || 0) !== 0 && (
+            <div className="rounded-md border border-brand-border bg-white px-4 py-2 overflow-x-auto">
+              <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate mb-1">Tarifa resultante por plan · cuota 1 / cuota 2 / porta plus (hoy → con {Number(p.ajuste_comisiones_pct) > 0 ? "+" : ""}{Number(p.ajuste_comisiones_pct)}%)</div>
+              <table className="text-xs w-full">
+                <tbody>
+                  {(p.planes ?? []).map((pl: any) => {
+                    const f = 1 + Number(p.ajuste_comisiones_pct) / 100;
+                    return (
+                      <tr key={pl.plan} className="border-t border-brand-border/50">
+                        <td className="py-1 font-semibold text-brand-ink w-20">{pl.plan}</td>
+                        <td className="py-1 text-brand-slate">mix {Number(pl.mix_pct)}% · abono {formatGs(Number(pl.abono))}</td>
+                        <td className="py-1 text-right">{formatGs(Number(pl.cuota1))} → <b className="text-brand-primary">{formatGs(Number(pl.cuota1) * f)}</b></td>
+                        <td className="py-1 text-right">{formatGs(Number(pl.cuota2))} → <b className="text-brand-primary">{formatGs(Number(pl.cuota2) * f)}</b></td>
+                        <td className="py-1 text-right">{formatGs(Number(pl.porta_plus))} → <b className="text-brand-primary">{formatGs(Number(pl.porta_plus) * f)}</b></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           <Bloque titulo="Detalle de meses y variables" accent="purple" abierto={Object.keys(afectados).length > 0}
             hint={Object.keys(afectados).length ? `${Object.keys(afectados).length} mes(es) con variaciones propias` : "ningún mes con variaciones"}>
