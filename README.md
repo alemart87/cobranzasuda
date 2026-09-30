@@ -445,6 +445,15 @@ dan 28–32%); con la zafra ideal, ~24%. Banda de referencia en el gráfico: **2
 informa `pct_gross`, `pct_gross_max`, `pct_gross_max_mes` y `meses_gross_sobre_banda`. Un mes de ventas bajas dispara el
 % aunque la venta no haya empeorado, porque las bajas vienen de los meses anteriores (agosto 2026).
 
+**Descuentos de Claro sobre los bonos (escenario de negociación)**: dos interruptores debajo del escenario de bonos,
+"No aplicar descuento sobre bono productividad" (`devolver_bono_productividad: false` → sin RECALCULO INCENTIVO
+PRODUCTIVIDAD 1871 al mes 6) y "No aplicar descuento sobre bono logística" (`devolver_bono_efectividad: false` → sin
+DESCUENTO INCENTIVOS POR PENALIDAD 471 del bono efectividad/distribución en las caídas). Los bonos se cobran igual en
+el mes; lo que deja de devolverse pasa íntegro al resultado. Con uno activo, el simulador corre en paralelo la misma
+simulación con los descuentos y muestra la devolución evitada, el resultado, el margen y el resultado con cola de los
+dos casos. Viajan en `parametros`, así que se guardan con la simulación (el registro marca "sin desc. productividad /
+logística").
+
 **Evolución de la zafra contra el Ideal** (debajo del Gross): la zafra cargada (% de líneas activas por mes de
 antigüedad, M0 a M12) sobre la banda de la zafra Ideal **±3,5 puntos** (la marca), con la zafra real de las
 liquidaciones punteada como referencia y el M2 marcado como PFI. Los meses por debajo de la banda se pintan en rojo

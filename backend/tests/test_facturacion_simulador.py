@@ -395,3 +395,21 @@ def test_gross_criterio_claro_en_la_anual():
     assert caida["anual"]["pct_gross_max_mes"] == 8
     # Sin bajas gross si el parámetro es 0.
     assert simular_anual({"pct_bajas_gross": 0}, [1900] * 12)["anual"]["bajas_gross"] == 0
+
+
+def test_sin_descuento_sobre_bonos():
+    """Escenarios de negociación: Claro no descuenta el bono productividad (1871) y/o el bono efectividad (471)."""
+    base = simular_anual({"objetivo_co": 1750}, [1900] * 12)
+    sin_prod = simular_anual({"objetivo_co": 1750, "devolver_bono_productividad": False}, [1900] * 12)
+    sin_efec = simular_anual({"objetivo_co": 1750, "devolver_bono_efectividad": False}, [1900] * 12)
+    sin_ambos = simular_anual({"objetivo_co": 1750, "devolver_bono_productividad": False, "devolver_bono_efectividad": False}, [1900] * 12)
+    assert base["anual"]["devolucion_bonos"] < 0
+    assert all(f["recalculo_productividad"] == 0 for f in sin_prod["meses"]) and any(f["clawback_bonos"] < 0 for f in sin_prod["meses"])
+    assert all(f["clawback_bonos"] == 0 for f in sin_efec["meses"]) and any(f["recalculo_productividad"] < 0 for f in sin_efec["meses"])
+    assert sin_ambos["anual"]["devolucion_bonos"] == 0
+    # Lo que deja de devolverse pasa íntegro al resultado (los costos no cambian).
+    assert sin_ambos["anual"]["costos"] == base["anual"]["costos"]
+    assert sin_ambos["anual"]["resultado"] - base["anual"]["resultado"] == -base["anual"]["devolucion_bonos"]
+    assert sin_prod["anual"]["resultado"] > base["anual"]["resultado"] and sin_efec["anual"]["resultado"] > base["anual"]["resultado"]
+    # Los bonos cobrados en el mes 0 no cambian: solo se apaga el descuento.
+    assert sin_ambos["anual"]["bonos"] == base["anual"]["bonos"]
