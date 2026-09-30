@@ -561,6 +561,76 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               )}
             </>
           )}
+          {res && a && (
+            <div>
+            <Bloque titulo="Gráficos del período" abierto envuelto={false} hint="resultado mes a mes · ventas vs estructura · ola de la zafra en rojo">
+            <div className="grid xl:grid-cols-2 gap-6 print:block">
+              <section className="card p-5 print:mb-5">
+                <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Resultado mes a mes</h2>
+                <p className="text-xs text-brand-slate mb-3">Ingreso neto liquidado (con ajustes de cohortes anteriores) vs costos; barras de resultado y línea de margen del mes (%, eje derecho). El área roja es la ola: las devoluciones que las cohortes anteriores ya dejaron comprometidas para ese mes, venda lo que venda.</p>
+                <ResponsiveContainer width="100%" height={260}>
+                  <ComposedChart data={meses} margin={{ top: 8, right: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
+                    <YAxis yAxisId="l" fontSize={10} tickFormatter={M} domain={ejesResultado.izq} allowDataOverflow />
+                    <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${Math.round(v)}%`} domain={ejesResultado.der} ticks={ejesResultado.ticksDer} allowDataOverflow />
+                    <Tooltip
+                      formatter={(v: any, name: any) => (name === "Margen del mes" ? `${Number(v).toFixed(1)}%` : formatGs(Number(v)))}
+                      labelFormatter={(l) => nombreMes(Number(l) - 1)}
+                    />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <ReferenceLine yAxisId="l" y={0} stroke="#0F1116" />
+                    <Bar yAxisId="l" dataKey="ingreso_neto" name="Ingreso neto" fill="#0EA5E9" fillOpacity={0.6} />
+                    <Bar yAxisId="l" dataKey="costo_total" name="Costos" fill="#F39200" fillOpacity={0.6} />
+                    <Area yAxisId="l" dataKey="ola_devoluciones" name="Ola de devoluciones heredadas" stroke="#E6332A" fill="#E6332A" fillOpacity={0.28} strokeWidth={1.5} type="monotone" />
+                    <Bar yAxisId="l" dataKey="resultado" name="Resultado">
+                      {meses.map((m: any) => <Cell key={m.mes} fill={m.resultado >= 0 ? "#10B981" : "#E6332A"} />)}
+                    </Bar>
+                    <Line yAxisId="r" dataKey="margen_pct" name="Margen del mes" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 2.5 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <Lectura>
+                  Cada mes liquida la facturación de sus ventas más lo que devuelven o suman las cohortes anteriores. El mes 1
+                  no tiene ajustes (todavía no cayó nada); desde el mes 2 llegan los chargebacks y desde el 3 la cuota 2. Por
+                  eso el mes 1 suele verse mejor que el resto. La línea negra es el margen de cada mes (resultado sobre
+                  ingreso neto, eje derecho): cuando se estabiliza, ese es el margen real del negocio en régimen. El
+                  acumulado del período está en la tabla de abajo y en el cierre.
+                </Lectura>
+              </section>
+  
+              <section className="card p-5">
+                <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Ventas vs estructura fija</h2>
+                <p className="text-xs text-brand-slate mb-3">{negocio === "gpon" ? "Activaciones" : "Ventas"} de cada mes contra el {cfg.objetivoLabel} y la capacidad de la estructura ({hc?.vendedores} vendedores × {p.costos.ventas_por_vendedor}).</p>
+                <ResponsiveContainer width="100%" height={260}>
+                  <ComposedChart data={meses.map((m: any) => ({ ...m, capacidad: (hc?.vendedores ?? 0) * Number(p.costos.ventas_por_vendedor) }))} margin={{ top: 8, right: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
+                    <YAxis yAxisId="l" fontSize={10} />
+                    <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${v}`} />
+                    <Tooltip labelFormatter={(l) => nombreMes(Number(l) - 1)} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar yAxisId="l" dataKey="ventas" name="Ventas">
+                      {meses.map((m: any) => <Cell key={m.mes} fill={m.en_riesgo ? "#E6332A" : m.monto_bono_productividad > 0 ? "#0EA5E9" : "#F39200"} />)}
+                    </Bar>
+                    <Area yAxisId="l" dataKey="ventas_equilibrio" name="Ventas mínimas para no perder (ola + estructura)" stroke="#E6332A" fill="#E6332A" fillOpacity={0.18} strokeWidth={2} strokeDasharray="5 3" type="monotone" connectNulls={false} />
+                    <ReferenceLine yAxisId="l" y={Number(p[cfg.objetivoKey])} stroke="#E6332A" strokeDasharray="6 3" label={{ value: `Objetivo ${formatInt(Number(p[cfg.objetivoKey]))}`, position: "insideTopRight", fill: "#E6332A", fontSize: 10, fontWeight: 700 }} />
+                    <Line yAxisId="l" dataKey="capacidad" name="Capacidad de la estructura" stroke="#0F1116" strokeDasharray="4 3" dot={false} />
+                    <Line yAxisId="r" dataKey="ventas_por_vendedor" name="Ventas por vendedor" stroke="#662483" strokeWidth={2} dot={{ r: 2.5 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+                <Lectura>
+                  Barras: ventas del mes (rojas cuando quedan por debajo del área roja, naranjas cuando pierden el bono productividad). El área roja
+                  es el riesgo potencial por bajar productividad: las ventas mínimas que cada mes necesita para cubrir la ola de devoluciones
+                  heredadas de los meses anteriores más la estructura fija. Crece con meses de ventas estables y no baja cuando bajan las ventas:
+                  por eso una caída de productividad después de una racha alta pierde plata aunque la estructura sea la misma. La línea punteada
+                  negra es lo que la estructura fija puede vender; la violeta, las ventas reales por vendedor.
+                </Lectura>
+              </section>
+            </div>
+  
+            </Bloque>
+            </div>
+          )}
 
           <NotasSimulacion notas={notas} setNotas={setNotas} nombres={ventas.map((_, i) => nombreMes(i))} guardaSola={!!actual} soloImpresion />
           {editandoMes != null && (
@@ -781,72 +851,6 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                 </section>
               )}
 
-              <Bloque titulo="Gráficos del período" abierto envuelto={false} hint="resultado mes a mes · ventas vs estructura · ola de la zafra en rojo">
-              <div className="grid xl:grid-cols-2 gap-6 print:block">
-                <section className="card p-5 print:mb-5">
-                  <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Resultado mes a mes</h2>
-                  <p className="text-xs text-brand-slate mb-3">Ingreso neto liquidado (con ajustes de cohortes anteriores) vs costos; barras de resultado y línea de margen del mes (%, eje derecho). El área roja es la ola: las devoluciones que las cohortes anteriores ya dejaron comprometidas para ese mes, venda lo que venda.</p>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <ComposedChart data={meses} margin={{ top: 8, right: 12 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
-                      <YAxis yAxisId="l" fontSize={10} tickFormatter={M} domain={ejesResultado.izq} allowDataOverflow />
-                      <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${Math.round(v)}%`} domain={ejesResultado.der} ticks={ejesResultado.ticksDer} allowDataOverflow />
-                      <Tooltip
-                        formatter={(v: any, name: any) => (name === "Margen del mes" ? `${Number(v).toFixed(1)}%` : formatGs(Number(v)))}
-                        labelFormatter={(l) => nombreMes(Number(l) - 1)}
-                      />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <ReferenceLine yAxisId="l" y={0} stroke="#0F1116" />
-                      <Bar yAxisId="l" dataKey="ingreso_neto" name="Ingreso neto" fill="#0EA5E9" fillOpacity={0.6} />
-                      <Bar yAxisId="l" dataKey="costo_total" name="Costos" fill="#F39200" fillOpacity={0.6} />
-                      <Area yAxisId="l" dataKey="ola_devoluciones" name="Ola de devoluciones heredadas" stroke="#E6332A" fill="#E6332A" fillOpacity={0.28} strokeWidth={1.5} type="monotone" />
-                      <Bar yAxisId="l" dataKey="resultado" name="Resultado">
-                        {meses.map((m: any) => <Cell key={m.mes} fill={m.resultado >= 0 ? "#10B981" : "#E6332A"} />)}
-                      </Bar>
-                      <Line yAxisId="r" dataKey="margen_pct" name="Margen del mes" stroke="#0F1116" strokeWidth={2.5} dot={{ r: 2.5 }} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                  <Lectura>
-                    Cada mes liquida la facturación de sus ventas más lo que devuelven o suman las cohortes anteriores. El mes 1
-                    no tiene ajustes (todavía no cayó nada); desde el mes 2 llegan los chargebacks y desde el 3 la cuota 2. Por
-                    eso el mes 1 suele verse mejor que el resto. La línea negra es el margen de cada mes (resultado sobre
-                    ingreso neto, eje derecho): cuando se estabiliza, ese es el margen real del negocio en régimen. El
-                    acumulado del período está en la tabla de abajo y en el cierre.
-                  </Lectura>
-                </section>
-
-                <section className="card p-5">
-                  <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Ventas vs estructura fija</h2>
-                  <p className="text-xs text-brand-slate mb-3">{negocio === "gpon" ? "Activaciones" : "Ventas"} de cada mes contra el {cfg.objetivoLabel} y la capacidad de la estructura ({hc?.vendedores} vendedores × {p.costos.ventas_por_vendedor}).</p>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <ComposedChart data={meses.map((m: any) => ({ ...m, capacidad: (hc?.vendedores ?? 0) * Number(p.costos.ventas_por_vendedor) }))} margin={{ top: 8, right: 12 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
-                      <YAxis yAxisId="l" fontSize={10} />
-                      <YAxis yAxisId="r" orientation="right" fontSize={10} tickFormatter={(v: number) => `${v}`} />
-                      <Tooltip labelFormatter={(l) => nombreMes(Number(l) - 1)} />
-                      <Legend wrapperStyle={{ fontSize: 11 }} />
-                      <Bar yAxisId="l" dataKey="ventas" name="Ventas">
-                        {meses.map((m: any) => <Cell key={m.mes} fill={m.en_riesgo ? "#E6332A" : m.monto_bono_productividad > 0 ? "#0EA5E9" : "#F39200"} />)}
-                      </Bar>
-                      <Area yAxisId="l" dataKey="ventas_equilibrio" name="Ventas mínimas para no perder (ola + estructura)" stroke="#E6332A" fill="#E6332A" fillOpacity={0.18} strokeWidth={2} strokeDasharray="5 3" type="monotone" connectNulls={false} />
-                      <ReferenceLine yAxisId="l" y={Number(p[cfg.objetivoKey])} stroke="#E6332A" strokeDasharray="6 3" label={{ value: `Objetivo ${formatInt(Number(p[cfg.objetivoKey]))}`, position: "insideTopRight", fill: "#E6332A", fontSize: 10, fontWeight: 700 }} />
-                      <Line yAxisId="l" dataKey="capacidad" name="Capacidad de la estructura" stroke="#0F1116" strokeDasharray="4 3" dot={false} />
-                      <Line yAxisId="r" dataKey="ventas_por_vendedor" name="Ventas por vendedor" stroke="#662483" strokeWidth={2} dot={{ r: 2.5 }} />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                  <Lectura>
-                    Barras: ventas del mes (rojas cuando quedan por debajo del área roja, naranjas cuando pierden el bono productividad). El área roja
-                    es el riesgo potencial por bajar productividad: las ventas mínimas que cada mes necesita para cubrir la ola de devoluciones
-                    heredadas de los meses anteriores más la estructura fija. Crece con meses de ventas estables y no baja cuando bajan las ventas:
-                    por eso una caída de productividad después de una racha alta pierde plata aunque la estructura sea la misma. La línea punteada
-                    negra es lo que la estructura fija puede vender; la violeta, las ventas reales por vendedor.
-                  </Lectura>
-                </section>
-              </div>
-
-              </Bloque>
 
               <Bloque titulo={`Estado de resultados a ${horizonte} meses (EERR)`} abierto envuelto={false} hint="liquidación mes a mes · estructura fija del mes 1">
               {/* ===== EERR anual ===== */}
