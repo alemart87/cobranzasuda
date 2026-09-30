@@ -35,6 +35,42 @@ export const PRESET_INICIAL_MOVIL: Record<string, any> = (() => {
   return resto;
 })();
 
+/** Propuesta 2027 · BONO ÚNICO: un solo bono por línea que reemplaza a productividad + efectividad,
+ *  escalonado por cumplimiento del objetivo CO y SIN descuento en las caídas. */
+export const BONO_UNICO_ESCALA = [
+  { desde_pct: 110, monto: 55000 },
+  { desde_pct: 100, monto: 50000 },
+  { desde_pct: 95, monto: 35000 },
+  { desde_pct: 90, monto: 25000 },
+];
+
+/** Propuesta 2027 · mejora de comisiones (cuota 1, cuota 2 y porta) que carga el botón "Optimizar". Editable después. */
+export const AJUSTE_OPTIMIZAR_PCT = 40;
+
+export function aplicarBonoUnico(p: any) {
+  if (!p) return p;
+  return {
+    ...p,
+    bono_unico: true,
+    escala_productividad: BONO_UNICO_ESCALA.map((e) => ({ ...e })),
+    escala_efectividad: [{ desde_pct: 0, monto: 0 }],     // el bono efectividad desaparece: queda dentro del único
+    devolver_bono_productividad: false,
+    devolver_bono_efectividad: false,
+  };
+}
+
+export function quitarBonoUnico(p: any, defaults: any) {
+  if (!p) return p;
+  return {
+    ...p,
+    bono_unico: false,
+    escala_productividad: (defaults?.escala_productividad ?? p.escala_productividad).map((e: any) => ({ ...e })),
+    escala_efectividad: (defaults?.escala_efectividad ?? p.escala_efectividad).map((e: any) => ({ ...e })),
+    devolver_bono_productividad: true,
+    devolver_bono_efectividad: true,
+  };
+}
+
 /** Aplica un preset sobre los parámetros actuales (los costos se mezclan campo a campo). */
 export function aplicarPreset(base: any, preset: Record<string, any>) {
   if (!base) return base;

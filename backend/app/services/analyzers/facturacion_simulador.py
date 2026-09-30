@@ -52,6 +52,9 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     # Escenarios de negociación con Claro: False = Claro NO descuenta ese bono en las caídas.
     "devolver_bono_productividad": True,   # False = sin RECALCULO INCENTIVO PRODUCTIVIDAD (1871) al mes 6
     "devolver_bono_efectividad": True,     # False = sin DESCUENTO INCENTIVOS POR PENALIDAD (471) del bono efectividad/logística
+    # Propuesta 2027 "bono único" (marca informativa: el frontend carga en escala_productividad la escala
+    # ≥110% 55.000 · ≥100% 50.000 · ≥95% 35.000 · ≥90% 25.000, anula el bono efectividad y apaga los descuentos).
+    "bono_unico": False,
     "bono_adicional": 0.0,          # BONO ADICIONAL a mano (Gs totales del mes): campañas, premios o acuerdos puntuales
     "ajuste_comisiones_pct": 0.0,   # ajuste negociado sobre cuota 1, cuota 2 y plus de portabilidad (+5 = mejora 5%)
     # ---- tarifas por plan (Gs sin IVA) y mix ----
