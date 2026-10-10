@@ -62,7 +62,7 @@ PARAMETROS_GPON_DEFAULT: dict[str, Any] = {
     #    (real ene–abr 2026: 2,8 % de las líneas IF; no hay devolución posterior en 6 meses).
     #  - LEGAJO INCOMPLETO U OBSERVADO: descuenta el 50 % de la cuota 1 y la cuota 2 se cobra a la mitad
     #    (real ene–abr: 7,7 %; enero 21 %).
-    "legajo_no_presentado_pct": 3.0,
+    "legajo_no_presentado_pct": 0.0,     # por defecto 0: se carga por mes con "meses afectados" (real ene–abr 2026: 2,8 %)
     "legajo_pct": 8.0,                   # líneas con legajo incompleto u observado (mes 1)
     "legajo_pct_cuota1": 50.0,           # descuento del incompleto = % de la cuota 1 (200.000 sobre 400.000)
     # ---- bono fijo (escala vigente comunicada por Claro) ----

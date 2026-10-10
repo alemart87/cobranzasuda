@@ -598,6 +598,11 @@ staff es convergente, cada asesor vende pospago y GPON. Motor en `facturacion_co
   bloque "GPON por asesor" por mes en el paso 2, KPIs GPON, EERR con secciones POSPAGO / GPON / COSTOS GPON, tabla
   "Bono fijo GPON mes a mes" y línea de activaciones GPON en el gráfico de ventas. Gross, zafra, bono único, descuentos
   y ajuste de comisiones siguen siendo de pospago (GPON tiene su propio ajuste en sus variables).
+- **Meses afectados GPON**: el ✎ de un mes (en la grilla de ventas o en el bloque "GPON por asesor") abre el mismo
+  editor con los grupos de pospago y los grupos **GPON ·** (`CAMPOS_AFECTABLES_CONVERGENTE`): legajos no presentados
+  (100 % de la cuota 1, sin cuota 2 ni mora), legajos incompletos, objetivo, mora, recálculo, costos variables GPON.
+  Las variaciones GPON se guardan en `meses_afectados[mes].gpon` y `separarAfectados` las reparte entre los dos
+  motores. `legajo_no_presentado_pct` arranca en 0 % y se carga por mes.
 - **Registro**: la configuración GPON viaja en `parametros.convergente` (el motor de pospago la ignora) y se guarda con
   la simulación; las simulaciones anteriores se abren como pospago puro.
 - Tests: `backend/tests/test_facturacion_convergente.py` (misma dotación, costos GPON solo variables, suma exacta de los
