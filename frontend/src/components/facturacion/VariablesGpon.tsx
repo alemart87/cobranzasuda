@@ -142,17 +142,52 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
         <Campo label="Mes del recálculo" hint="día 150–180" value={p.recalculo_mes} onChange={(v) => set("recalculo_mes", v)} />
         <Campo label="Líneas castigadas en el recálculo" hint="devuelven el 100% del bono · real 23–26%" value={p.pct_recalculo} onChange={(v) => set("pct_recalculo", v)} suffix="%" />
       </Grupo>
-      <Grupo titulo="Mora (penalización por deuda neta)" hint="el riesgo principal de GPON">
-        <Campo label="Líneas que quedan en mora" hint="deuda no revertida a los 6 meses · real: 27% de enero a 5 meses, 24% febrero, 18% marzo a 3 meses" value={p.mora_pct_lineas} onChange={(v) => set("mora_pct_lineas", v)} suffix="%" />
-        <Campo label="% de la penalidad que se pierde" hint="100 = tabla completa por plan" value={p.mora_penalidad_pct} onChange={(v) => set("mora_penalidad_pct", v)} suffix="%" />
-        <div className="text-[10px] text-brand-slate">Curva acumulada de la mora por mes (% del total final). Real: primera penalización p25 día 65, mediana 93, p75 132, máximo 180.</div>
-        <div className="grid grid-cols-7 gap-1">
-          {p.mora_curva_pct.map((x: number, i: number) => (
-            <label key={i} className="text-[10px] text-brand-slate">M{i}<NumeroInput step={1} value={Number(x)} onChange={(n) => setCurva(i, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" /></label>
-          ))}
-        </div>
-        <Campo label="Chargeback (meses)" hint="180 días exactos" value={p.chargeback_meses} onChange={(v) => set("chargeback_meses", v)} />
-        <Campo label="Otros reversos" hint="reversos de activación y cancelaciones · % de la cuota 1" value={p.otros_pct} onChange={(v) => set("otros_pct", v)} step={0.1} suffix="%" />
+      <Grupo titulo="Mora · qué descuenta Claro cuando el cliente no paga" hint="el riesgo principal de GPON" abierto={convergente}>
+        <p className="text-[11px] text-brand-graphite">
+          Cuando el cliente deja de pagar, Claro suspende la línea y nos <b>descuenta una penalidad por deuda</b> según el plan
+          (630.000 en Fibra 60, 475.000 en Fibra 30). Si el cliente después paga, Claro <b>devuelve</b> esa penalidad.
+          Lo que pesa es la neta: las líneas que a los 6 meses siguen sin pagar. Entre penalizar y devolver pasan
+          muchas filas por la liquidación, pero el modelo solo cuenta lo que queda.
+        </p>
+        <Campo label="Líneas que terminan sin pagar" hint="de cada 100 vendidas, a los 6 meses · real: 27% de enero a 5 meses, 24% febrero, 18% marzo a 3 meses" value={p.mora_pct_lineas} onChange={(v) => set("mora_pct_lineas", v)} suffix="%" />
+        <Campo label="Parte de la penalidad que se pierde" hint="100 = el promedio real por línea en mora (520.000 Fibra 60 · 430.000 Fibra 30, con pagos parciales)" value={p.mora_penalidad_pct} onChange={(v) => set("mora_penalidad_pct", v)} suffix="%" />
+        {(() => {
+          const act = convergente ? activacionesMes1 : Number(p.ventas) || 0;
+          const planes: any[] = p.planes ?? [];
+          const mixTot = planes.reduce((s: number, x: any) => s + Number(x.mix_pct || 0), 0) || 100;
+          const penW = planes.reduce((s: number, x: any) => s + Number(x.penalidad_mora || 0) * Number(x.mix_pct || 0), 0) / mixTot;
+          const cuota1W = planes.reduce((s: number, x: any) => s + Number(x.cuota1 || 0) * Number(x.mix_pct || 0), 0) / mixTot;
+          const sinLegajo = 1 - Math.min(Math.max(Number(p.legajo_no_presentado_pct ?? 0), 0), 100) / 100;
+          const lineasMora = act * sinLegajo * Number(p.mora_pct_lineas || 0) / 100;
+          const porLinea = penW * Number(p.mora_penalidad_pct ?? 100) / 100;
+          const total = lineasMora * porLinea;
+          const curva: number[] = (p.mora_curva_pct ?? []).map(Number);
+          const gs = (v: number) => `${(v / 1e6).toFixed(1).replace(".", ",")} M`;
+          return (
+            <>
+              <div className="rounded-md border border-brand-primary/40 bg-brand-primary/5 px-3 py-2 text-[11px] text-brand-graphite">
+                <b className="text-brand-ink">Con {act.toLocaleString("es-PY")} activaciones:</b> {Math.round(lineasMora)} líneas sin pagar × {Math.round(porLinea).toLocaleString("es-PY")} = <b className="text-brand-primary">{gs(total)}</b> por cohorte
+                {" "}→ <b>{act ? Math.round(total / act).toLocaleString("es-PY") : 0}</b> por línea vendida ({cuota1W ? Math.round(100 * (act ? total / act : 0) / cuota1W) : 0}% de la cuota 1).
+              </div>
+              <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold border-t border-brand-border pt-2">Cuándo aparece el descuento · acumulado por mes de antigüedad</div>
+              <p className="text-[10px] text-brand-slate">Claro penaliza al suspender, entre el día 55 y el 160 de la venta. A los 3 meses ya cayó la mitad; a los 6, todo. Editá el acumulado si cambia el ritmo.</p>
+              <div className="grid grid-cols-7 gap-1">
+                {curva.map((x: number, i: number) => {
+                  const prev = i > 0 ? curva[i - 1] : 0;
+                  const delMes = total * Math.max(0, x - prev) / 100;
+                  return (
+                    <label key={i} className="text-[10px] text-brand-slate">M{i}
+                      <NumeroInput step={1} value={x} onChange={(n) => setCurva(i, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
+                      <span className={`block text-right font-mono text-[10px] ${delMes > 0 ? "text-brand-primary" : "text-brand-slate"}`}>{i === 0 ? "—" : `−${gs(delMes)}`}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          );
+        })()}
+        <Campo label="Chargeback (meses)" hint="180 días exactos: después del mes 6 Claro no descuenta más" value={p.chargeback_meses} onChange={(v) => set("chargeback_meses", v)} />
+        <Campo label="Otros reversos" hint="mala venta y cancelaciones en el mes 1 · % de la cuota 1 · real 0,5%" value={p.otros_pct} onChange={(v) => set("otros_pct", v)} step={0.1} suffix="%" />
       </Grupo>
       {convergente ? (
         <Grupo titulo="Costos variables GPON" hint="la estructura es la de pospago">

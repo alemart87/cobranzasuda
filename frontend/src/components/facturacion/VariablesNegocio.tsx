@@ -212,15 +212,51 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="Abono acreditado" hint="% del abono del plan que Claro acredita" value={p.pct_abono_acreditado} onChange={(v) => set("pct_abono_acreditado", v)} step={1} suffix="%" />
               <Campo label="Meses de residual" value={p.residual_meses} onChange={(v) => set("residual_meses", v)} />
               <div className="border-t border-brand-border pt-2 text-[10px] uppercase tracking-wider2 text-brand-slate font-bold">Líneas que pagan residual (% por mes de antigüedad)</div>
-              <p className="text-[10px] text-brand-slate">El residual no lo cobra toda línea activa sino la que tiene monto acreditado. Curva real medida en 7 liquidaciones (146.000 filas RESIDUAL). Manda solo el residual; las caídas siguen la zafra.</p>
-              <div className="grid grid-cols-4 gap-1.5">
-                {(p.residual_curva_pct ?? []).map((z: number, i: number) => (
-                  <label key={i} className="text-[10px] text-brand-slate">M{i + 1}
-                    <NumeroInput step={0.5} value={Number(z)} onChange={(n) => setCurvaRes(i, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
-                  </label>
-                ))}
-              </div>
-              {defaults?.residual_curva_pct && <button onClick={() => set("residual_curva_pct", defaults.residual_curva_pct)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar curva real</button>}
+              <label className="flex items-center gap-2 text-sm text-brand-ink">
+                <input type="checkbox" checked={p.residual_segun_zafra !== false} onChange={(e) => set("residual_segun_zafra", e.target.checked)} className="accent-brand-primary" />
+                El residual sigue a la zafra <span className="text-[10px] text-brand-slate">(recomendado: si la zafra mejora, el residual sube)</span>
+              </label>
+              {p.residual_segun_zafra !== false ? (() => {
+                const z: number[] = (p.zafra_pct ?? []).map(Number);
+                const cob: number[] = (p.residual_cobrabilidad_pct ?? defaults?.residual_cobrabilidad_pct ?? []).map(Number);
+                const curva = Array.from({ length: 12 }, (_, i) => Math.min(100, (z[i + 1] ?? z[z.length - 1] ?? 0) * (cob[i] ?? cob[cob.length - 1] ?? 100) / 100));
+                return (
+                  <>
+                    <p className="text-[10px] text-brand-slate">Líneas que pagan residual = líneas activas de la zafra × cobrabilidad del mes (las activas con abono acreditado). Con la zafra real reproduce la curva medida en 7 liquidaciones.</p>
+                    <div className="grid grid-cols-6 gap-1">
+                      {curva.map((v, i) => (
+                        <div key={i} className="rounded border border-brand-border bg-brand-bg-soft px-1 py-0.5 text-center">
+                          <div className="text-[9px] text-brand-slate">M{i + 1}</div>
+                          <div className="text-[11px] font-mono font-semibold text-brand-ink">{v.toFixed(1).replace(".", ",")}%</div>
+                        </div>
+                      ))}
+                    </div>
+                    <details className="text-[10px] text-brand-slate">
+                      <summary className="cursor-pointer select-none">Cobrabilidad por mes (% de las activas que pagan) · editable</summary>
+                      <div className="grid grid-cols-6 gap-1 mt-1">
+                        {Array.from({ length: 12 }, (_, i) => (
+                          <label key={i} className="text-[10px] text-brand-slate">M{i + 1}
+                            <NumeroInput step={0.5} value={Number(cob[i] ?? 100)} onChange={(n) => set("residual_cobrabilidad_pct", Array.from({ length: 12 }, (_, k) => (k === i ? n : Number(cob[k] ?? 100))))} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
+                          </label>
+                        ))}
+                      </div>
+                      {defaults?.residual_cobrabilidad_pct && <button onClick={() => set("residual_cobrabilidad_pct", defaults.residual_cobrabilidad_pct)} className="mt-1 text-[11px] text-brand-primary font-semibold hover:underline">Restaurar cobrabilidad real</button>}
+                    </details>
+                  </>
+                );
+              })() : (
+                <>
+                  <p className="text-[10px] text-brand-slate">Curva fija: no cambia aunque cambies la zafra. Curva real medida en 7 liquidaciones (146.000 filas RESIDUAL).</p>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(p.residual_curva_pct ?? []).map((z: number, i: number) => (
+                      <label key={i} className="text-[10px] text-brand-slate">M{i + 1}
+                        <NumeroInput step={0.5} value={Number(z)} onChange={(n) => setCurvaRes(i, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
+                      </label>
+                    ))}
+                  </div>
+                  {defaults?.residual_curva_pct && <button onClick={() => set("residual_curva_pct", defaults.residual_curva_pct)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar curva real</button>}
+                </>
+              )}
             </Grupo>
 
             <Grupo titulo={p.bono_unico ? "Bono único propuesto (reemplaza a productividad + efectividad)" : "Bono productividad (concepto 1771)"} hint="escala editable" abierto={!!p.bono_unico}>
