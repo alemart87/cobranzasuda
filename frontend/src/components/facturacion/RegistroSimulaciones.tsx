@@ -374,6 +374,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
                             <span className="text-emerald-700 font-semibold">sin desc. {[r.sin_descuento_bono_productividad && "productividad", r.sin_descuento_bono_efectividad && "logística"].filter(Boolean).join(" + ")}</span>
                           )}
                           {Number(r.ajuste_comisiones_pct || 0) !== 0 && <span className="text-brand-primary font-semibold">comisiones {Number(r.ajuste_comisiones_pct) > 0 ? "+" : ""}{Number(r.ajuste_comisiones_pct)}%</span>}
+                          {r.convergente && <span className="text-brand-cyan font-semibold">convergente · GPON {r.gpon_por_asesor}/asesor</span>}
                           {fin != null && <span className={`font-mono font-bold ${fin < 0 ? "text-brand-primary" : "text-emerald-700"}`}>{formatGs(fin)}</span>}
                           <span>{fecha(s.created_at)}{s.created_by_nombre ? ` · ${s.created_by_nombre}` : ""}</span>
                         </div>
@@ -410,6 +411,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
                                 <span className="ml-2 text-[9px] font-bold uppercase text-emerald-700">sin desc. {[r.sin_descuento_bono_productividad && "productividad", r.sin_descuento_bono_efectividad && "logística"].filter(Boolean).join(" + ")}</span>
                               )}
                               {Number(r.ajuste_comisiones_pct || 0) !== 0 && <span className="ml-2 text-[9px] font-bold uppercase text-brand-primary">comisiones {Number(r.ajuste_comisiones_pct) > 0 ? "+" : ""}{Number(r.ajuste_comisiones_pct)}%</span>}
+                              {r.convergente && <span className="ml-2 text-[9px] font-bold uppercase text-brand-cyan">convergente · GPON {r.gpon_por_asesor}/asesor</span>}
                             </div>
                             {s.comentario && <div className="text-[11px] text-brand-slate line-clamp-2 max-w-md">{s.comentario}</div>}
                           </td>

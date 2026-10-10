@@ -254,7 +254,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Link href="/televentas-claro" className={mobilePill(pathname === "/televentas-claro")}>Inicio</Link>
                   <Link href="/televentas-claro/compare" className={mobilePill(isActive("/televentas-claro/compare"))}>Comparar</Link>
                   <Link href="/televentas-claro/simulador" className={mobilePill(pathname === "/televentas-claro/simulador")}>Simulador</Link>
-                  <Link href="/televentas-claro/simulador-anual" className={mobilePill(isActive("/televentas-claro/simulador-anual"))}>Simulador anual</Link>
+                  <Link href="/televentas-claro/simulador-anual" className={mobilePill(isActive("/televentas-claro/simulador-anual"))}>Simulador convergente</Link>
                   <Link href="/televentas-claro/criterios" className={mobilePill(isActive("/televentas-claro/criterios"))}>Criterios</Link>
                   <Link href="/televentas-claro/gpon" className={mobilePill(isActive("/televentas-claro/gpon"))}>GPON</Link>
                   <Link href="/televentas-claro/agente" className={mobilePill(isActive("/televentas-claro/agente"))}>Agente IA</Link>
@@ -571,7 +571,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 Simulador
               </Link>
               <Link href="/televentas-claro/simulador-anual" className={pill(isActive("/televentas-claro/simulador-anual"))}>
-                Simulador anual
+                Simulador convergente
               </Link>
               <Link href="/televentas-claro/criterios" className={pill(isActive("/televentas-claro/criterios"))}>
                 Criterios
