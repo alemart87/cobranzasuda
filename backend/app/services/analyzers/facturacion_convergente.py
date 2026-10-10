@@ -87,6 +87,9 @@ def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizo
     pg["negocio"] = "GPON"
     pg["costos"] = costos_gpon_compartidos(pg["costos"], base["costos"])
     pg["ventas"] = ventas_gpon[0]
+    # Objetivo del bono fijo GPON: si no viene uno explícito, el ideal de la estructura (vendedores × 3 → 100%).
+    if gpon.get("objetivo_auto", (gpon.get("parametros") or {}).get("objetivo") is None):
+        pg["objetivo"] = max(round(vendedores * GPON_POR_ASESOR_IDEAL), 1)
     gp = simular_gpon_anual(pg, ventas_gpon, h, gpon.get("bonos_adicionales_por_mes"), nombres_meses,
                             gpon.get("meses_afectados"), headcount_costos=HEADCOUNT_COMPARTIDO,
                             vendedores_compartidos=vendedores)

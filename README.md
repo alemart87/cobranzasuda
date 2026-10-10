@@ -572,7 +572,8 @@ staff es convergente, cada asesor vende pospago y GPON. Motor en `facturacion_co
   costos son solo comisión y plus por venta GPON (con el IPS y aguinaldo de pospago), operativos y logística GPON
   (`costos_gpon_compartidos`, headcount GPON = 0 en `_costos_y_margen`).
 - **Ventas GPON = vendedores × GPON por asesor**, editable por mes (ideal 3). El objetivo del bono fijo GPON se setea
-  solo en vendedores × 3 (desmarcable). GPON se puede excluir del balance con "Incluir GPON".
+  solo en vendedores × 3 (desmarcable en pantalla; en el motor, si `gpon.parametros.objetivo` no viene, se usa ese
+  ideal). GPON se puede excluir del balance con "Incluir GPON".
 - **GPON entra con su modelo de facturación completo** (`simular_gpon_anual`): cuota 1 y bono fijo en el mes de la
   venta; cuota 2 al mes 2, legajos, mora neta con su curva (26% de líneas a 6 meses: 0 · 3 · 22 · 52 · 78 · 95 · 100%),
   recálculo del bono al mes 6 y otros reversos de las cohortes anteriores; cola posterior y líneas en mora.

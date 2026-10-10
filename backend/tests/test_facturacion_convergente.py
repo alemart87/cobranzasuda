@@ -32,7 +32,10 @@ def test_convergente_suma_los_dos_negocios_con_gpon_completo():
     c = simular_convergente({"objetivo_co": 1750}, VENTAS, 12, gpon={"activo": True, "por_asesor_por_mes": [3]})
     m = simular_anual({"objetivo_co": 1750}, VENTAS, 12)
     vend = c["headcount"]["vendedores"]
-    pg = {**PARAMETROS_GPON_DEFAULT, "costos": costos_gpon_compartidos(PARAMETROS_GPON_DEFAULT["costos"], PARAMETROS_DEFAULT["costos"])}
+    # Sin objetivo explícito, el convergente fija el objetivo GPON en vendedores × 3 (el ideal rinde 100%).
+    assert c["parametros_gpon"]["objetivo"] == vend * 3
+    pg = {**PARAMETROS_GPON_DEFAULT, "objetivo": vend * 3,
+          "costos": costos_gpon_compartidos(PARAMETROS_GPON_DEFAULT["costos"], PARAMETROS_DEFAULT["costos"])}
     g = simular_gpon_anual(pg, [vend * 3] * 12, 12, headcount_costos=HEADCOUNT_COMPARTIDO, vendedores_compartidos=vend)
     for f, fm, fg in zip(c["meses"], m["meses"], g["meses"]):
         # GPON entra con su facturación completa: cuota 1 + bono fijo, y sus ajustes (cuota 2, legajos, mora, recálculo, otros).
