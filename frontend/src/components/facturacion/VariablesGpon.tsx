@@ -7,6 +7,43 @@ import { Campo } from "./Campo";
 /** Variables del negocio GPON (fibra + TV): activaciones y objetivo, planes y mezcla, cuota 2 y
  *  legajos, bono fijo y recálculo, mora, costos. Misma función que VariablesNegocio para pospago. */
 
+/** Cómo se arma el escenario GPON, en cinco pasos y con los números calibrados (liquidaciones GPON ene–jun 2026). */
+export function ExplicacionGpon({ convergente = false, abierto = false }: { convergente?: boolean; abierto?: boolean }) {
+  const [open, setOpen] = useState(abierto);
+  const pasos: Array<[string, string]> = [
+    ["Cuántas", convergente
+      ? "Activaciones GPON del mes = vendedores × GPON por asesor (ideal 3). Son solo líneas de fibra (IF60 / IF30). IPTV no cuenta como GPON y no se simula: en las liquidaciones hay ~14 IPTV por cada 100 GPON, casi todas en la misma cuenta que una fibra, sin bono, y dejan ~3,6% del neto GPON."
+      : "Activaciones GPON del mes: solo líneas de fibra (IF60 / IF30). IPTV no cuenta como GPON y no se simula (~14 por cada 100 GPON, ~3,6% del neto)."],
+    ["Mes de la venta", "Claro paga la cuota 1 por plan: 400.000 (Fibra 60) o 325.000 (Fibra 30/40), mezcla real 74 / 26 → 380.000 por línea. Si el mes llega al objetivo de líneas IF, paga además el bono fijo por línea (escala vigente: 120.000 al 100%, 40.000 entre 95 y 100%, 0 por debajo). En 2026 liquidó con la escala anterior: 100.000, 50.000 y 0."],
+    ["Mes 2", "Cuota 2: 280.000 (Fibra 60) o 200.000 (Fibra 30/40), a los 62–86 días. La cobran el 96% de las líneas con legajo presentado; de esas, el 92% completa y el resto a la mitad por legajo incompleto. Si la línea está inactiva al día 60, 0."],
+    ["Lo que Claro descuenta", "Legajos (día 30–55): si el legajo NO se presenta, Claro descuenta el 100% de la cuota 1, la línea no cobra cuota 2 y no genera mora (real 2,8% de las líneas); si está incompleto u observado, descuenta el 50% y la cuota 2 se cobra a la mitad (real 7,7%). Mora: Claro penaliza cuando suspende por deuda (630.000 Fibra 60, 475.000 Fibra 30) y lo revierte si el cliente paga; lo que pesa es la neta: el 28% de las líneas queda con deuda a los 6 meses, unos 500.000 por línea, repartidos entre el mes 2 y el 6 (curva 3 · 22 · 52 · 78 · 95 · 100%). Recálculo: al mes 6, el 25% de las líneas devuelve el 100% del bono. Otros reversos (mala venta): 0,5%."],
+    ["Costos por venta GPON", convergente
+      ? "Comisión y plus del asesor, recupero de documentación 55.000 y operativos. Sin estructura propia: la dotación es la de pospago, por eso el resultado GPON es incremental."
+      : "Comisión y plus del asesor, recupero de documentación 55.000 y operativos, más la estructura propia que se dimensiona con las activaciones del mes 1."],
+  ];
+  return (
+    <div className="rounded-md border border-brand-cyan/60 bg-brand-cyan/5">
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-2.5 text-left">
+        <span className="text-[11px] uppercase tracking-wider2 font-bold text-brand-cyan">Cómo se arma el escenario GPON<span className="ml-2 normal-case tracking-normal font-normal text-brand-slate">· 5 pasos, con los números reales</span></span>
+        <span className="text-brand-slate text-xs">{open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <ol className="px-4 pb-4 space-y-2">
+          {pasos.map(([t, d], i) => (
+            <li key={t} className="flex gap-2 text-[11px] text-brand-graphite">
+              <span className="shrink-0 w-5 h-5 rounded-full bg-brand-cyan text-white text-[10px] font-bold flex items-center justify-center">{i + 1}</span>
+              <span><b className="text-brand-ink">{t}.</b> {d}</span>
+            </li>
+          ))}
+          <li className="text-[11px] text-brand-graphite pl-7">
+            <b className="text-brand-ink">Resultado por línea:</b> ~535.000 netos a 12 meses con la escala vigente (1,4 × cuota 1). Real enero 2026 a 5 meses: 517.000 por línea (con bono 100.000 y sin el recálculo todavía).
+          </li>
+        </ol>
+      )}
+    </div>
+  );
+}
+
 function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hint?: string; abierto?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(abierto);
   return (
@@ -40,6 +77,7 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
         <h2 className="font-display text-xl text-brand-ink uppercase">{titulo}</h2>
         {defaults && <button onClick={() => setP(defaults)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar valores reales</button>}
       </div>
+      <ExplicacionGpon convergente={convergente} abierto={convergente} />
       <Grupo titulo="Activaciones y objetivo" abierto>
         {convergente ? (
           <>
@@ -62,11 +100,11 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
           </>
         ) : (
           <>
-            <Campo label="Activaciones del mes 1" hint="real ene–may 2026: 188 a 239" value={p.ventas} onChange={(v) => set("ventas", v)} step={5} />
-            <Campo label="Objetivo de líneas (bono fijo)" hint="% cumplimiento = activaciones ÷ objetivo" value={p.objetivo} onChange={(v) => set("objetivo", v)} step={5} />
+            <Campo label="Activaciones GPON del mes 1" hint="solo fibra; real ene–jun 2026: 166 a 218 (IPTV no cuenta)" value={p.ventas} onChange={(v) => set("ventas", v)} step={5} />
+            <Campo label="Objetivo de líneas IF (bono fijo)" hint="% cumplimiento = activaciones ÷ objetivo · Claro usa 200" value={p.objetivo} onChange={(v) => set("objetivo", v)} step={5} />
           </>
         )}
-        <Campo label="Activaciones que cobran el bono" hint="real 91% (218 de 239)" value={p.pct_bono_cobrado} onChange={(v) => set("pct_bono_cobrado", v)} suffix="%" />
+        <Campo label="Activaciones que cobran el bono" hint="real 100%: todas las líneas IF en estado A cuando se llega al objetivo" value={p.pct_bono_cobrado} onChange={(v) => set("pct_bono_cobrado", v)} suffix="%" />
         <Campo destacado="orange" label="Bono adicional (a mano)" hint="Gs del mes 1; no se devuelve" value={p.bono_adicional} onChange={(v) => set("bono_adicional", v)} step={1000000} min={0} />
       </Grupo>
       <Grupo titulo="Planes, cuotas y mezcla" hint={`mix ${Math.round(mixTotal)}%`}>
@@ -81,14 +119,15 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
             </div>
           </div>
         ))}
-        <p className="text-[10px] text-brand-slate">Real: Fibra 60 70% · Fibra 30 18% · TV 12%. Penalidad de mora por plan: lo que Claro descuenta y no revierte (Fibra 60: 630.000 / 350.000 / 315.000; Fibra 30: 475.000; TV: 190.000), ponderado.</p>
+        <p className="text-[10px] text-brand-slate">Solo fibra: IPTV no cuenta como GPON. Mezcla real ene–jun 2026: Fibra 60 (IF60 / BAF7) 74% · Fibra 30/40 (IF30 / IF40 / BAF3) 26%. Penalidad de mora: lo que Claro descuenta y no revierte por línea en mora (Fibra 60: 630.000 completa, promedio con pagos parciales ~520.000; Fibra 30: 475.000, promedio ~430.000).</p>
       </Grupo>
       <Grupo titulo="Cuota 2 y legajos">
         <Campo label="Mes de la cuota 2" hint="día 59–91, mediana 73 → liquidación del mes 2" value={p.cuota2_mes} onChange={(v) => set("cuota2_mes", v)} />
-        <Campo label="Líneas que cobran cuota 2" hint="real 86–97% por cohorte" value={p.cuota2_pct_lineas} onChange={(v) => set("cuota2_pct_lineas", v)} suffix="%" />
-        <Campo label="De esas, con importe completo" hint="el resto cobra la mitad (legajo incompleto)" value={p.cuota2_pct_completa} onChange={(v) => set("cuota2_pct_completa", v)} suffix="%" />
-        <Campo label="Líneas con documentación faltante" hint="mes 1 · real 11%" value={p.legajo_pct} onChange={(v) => set("legajo_pct", v)} suffix="%" />
-        <Campo label="Descuento por legajo (% de la cuota 1)" hint="real 200.000 sobre 400.000" value={p.legajo_pct_cuota1} onChange={(v) => set("legajo_pct_cuota1", v)} suffix="%" />
+        <Campo label="Líneas que cobran cuota 2" hint="de las que presentaron legajo · real 96% (0 = línea inactiva al día 60)" value={p.cuota2_pct_lineas} onChange={(v) => set("cuota2_pct_lineas", v)} suffix="%" />
+        <Campo label="De esas, con importe completo" hint="el resto cobra la mitad (legajo incompleto) · real 92%" value={p.cuota2_pct_completa} onChange={(v) => set("cuota2_pct_completa", v)} suffix="%" />
+        <Campo label="Legajos NO presentados" hint="Claro descuenta el 100% de la cuota 1, la línea no cobra cuota 2 y no genera mora · real 2,8% (feb 6,6%)" value={Number(p.legajo_no_presentado_pct ?? 3)} onChange={(v) => set("legajo_no_presentado_pct", v)} step={0.5} suffix="%" />
+        <Campo label="Legajos incompletos u observados" hint="descuenta el 50% de la cuota 1 y la cuota 2 se cobra a la mitad · real 7,7% (enero 21%)" value={p.legajo_pct} onChange={(v) => set("legajo_pct", v)} step={0.5} suffix="%" />
+        <Campo label="Descuento del legajo incompleto (% de la cuota 1)" hint="real 200.000 sobre 400.000" value={p.legajo_pct_cuota1} onChange={(v) => set("legajo_pct_cuota1", v)} suffix="%" />
       </Grupo>
       <Grupo titulo="Bono fijo y recálculo" hint="escala vigente">
         {p.escala_bono.map((e: any, i: number) => (
@@ -104,7 +143,7 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
         <Campo label="Líneas castigadas en el recálculo" hint="devuelven el 100% del bono · real 23–26%" value={p.pct_recalculo} onChange={(v) => set("pct_recalculo", v)} suffix="%" />
       </Grupo>
       <Grupo titulo="Mora (penalización por deuda neta)" hint="el riesgo principal de GPON">
-        <Campo label="Líneas que quedan en mora" hint="deuda no revertida a los 6 meses · real 26% de la cohorte" value={p.mora_pct_lineas} onChange={(v) => set("mora_pct_lineas", v)} suffix="%" />
+        <Campo label="Líneas que quedan en mora" hint="deuda no revertida a los 6 meses · real: 27% de enero a 5 meses, 24% febrero, 18% marzo a 3 meses" value={p.mora_pct_lineas} onChange={(v) => set("mora_pct_lineas", v)} suffix="%" />
         <Campo label="% de la penalidad que se pierde" hint="100 = tabla completa por plan" value={p.mora_penalidad_pct} onChange={(v) => set("mora_penalidad_pct", v)} suffix="%" />
         <div className="text-[10px] text-brand-slate">Curva acumulada de la mora por mes (% del total final). Real: primera penalización p25 día 65, mediana 93, p75 132, máximo 180.</div>
         <div className="grid grid-cols-7 gap-1">
@@ -120,6 +159,7 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
           <p className="text-[10px] text-brand-slate">GPON no agrega vendedores, supervisores ni backoffice: lo vende la misma dotación. Solo paga estos costos por venta GPON; IPS y aguinaldo son los de pospago.</p>
           <Campo label="Comisión por venta GPON" hint="Gs por activación · paga IPS y aguinaldo" value={p.costos.comision_por_venta} onChange={(v) => setC("comision_por_venta", v)} step={1000} />
           <Campo label="Plus por venta GPON" hint="Gs por activación · sin cargas" value={p.costos.plus_por_venta} onChange={(v) => setC("plus_por_venta", v)} step={1000} />
+          <Campo label="Recupero de documentación por venta GPON" hint="55.000 por cada venta · sin cargas" value={Number(p.costos.documentacion_por_venta ?? 0)} onChange={(v) => setC("documentacion_por_venta", v)} step={5000} />
           <Campo label="Operativos por venta GPON" value={p.costos.operativo_por_venta} onChange={(v) => setC("operativo_por_venta", v)} step={500} />
           <Campo label="Logística por venta (Central)" hint="GPON: la instalación la hace Claro · 0 por defecto" value={p.costos.logistica_central} onChange={(v) => setC("logistica_central", v)} step={5000} />
           <Campo label="Logística por venta (Interior)" value={p.costos.logistica_interior} onChange={(v) => setC("logistica_interior", v)} step={5000} />
@@ -144,6 +184,7 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
         <Campo label="Controller salario" value={p.costos.controller_salario} onChange={(v) => setC("controller_salario", v)} step={100000} />
         <Campo label="Controller premio" value={p.costos.controller_premio} onChange={(v) => setC("controller_premio", v)} step={100000} />
         <Campo label="SubGerencia Comercial (salario)" hint="0 = no incorporada · paga IPS y aguinaldo" value={p.costos.subgerencia_salario} onChange={(v) => setC("subgerencia_salario", v)} step={500000} />
+        <Campo label="Recupero de documentación por venta" hint="55.000 por cada venta GPON · sin cargas" value={Number(p.costos.documentacion_por_venta ?? 0)} onChange={(v) => setC("documentacion_por_venta", v)} step={5000} />
         <Campo label="Operativos por venta" value={p.costos.operativo_por_venta} onChange={(v) => setC("operativo_por_venta", v)} step={500} />
         <Campo label="Logística por venta (Central)" hint="GPON: la instalación la hace Claro · 0 por defecto" value={p.costos.logistica_central} onChange={(v) => setC("logistica_central", v)} step={5000} />
         <Campo label="Logística por venta (Interior)" value={p.costos.logistica_interior} onChange={(v) => setC("logistica_interior", v)} step={5000} />

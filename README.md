@@ -530,36 +530,44 @@ POR DEUDA + REVERSO ACTIVACION + CANCELACIONES + PENALIZACIÓN POR MIGRACIÓN DE
 Devolución bono efectividad ← DESCUENTO INCENTIVOS POR PENALIDAD · Recálculo ← RECALCULO INCENTIVO PRODUCTIVIDAD.
 No modelados: CAMBIO DE PLAN, CONCEPTO INICIO DE PRESUSPENSION POR DEUDA y la devolución de documentación al día 365.
 
-### 4b. Negocio GPON (fibra + TV) — modelo propio
+### 4b. Negocio GPON (fibra) — modelo propio
 
 Página **Televentas Claro → GPON** (`/televentas-claro/gpon`): es el MISMO simulador anual de pospago (setear mes 1, ventas por mes, nombres de meses, meses afectados, bono a mano, registro de simulaciones con marcas, post-its y notas, historia animada, cierre, EERR, bonos mes a mes) con el motor y las variables GPON; las simulaciones guardadas quedan separadas por negocio. Motor `facturacion_gpon.py`, endpoints
 `GET /facturacion/gpon/parametros`, `POST /facturacion/gpon/simulador` (una cohorte) y
-`POST /facturacion/gpon/anual` (12 / 18 / 24 meses). Calibrado fila por fila con las liquidaciones GPON
-385–389 (entidad 300383, ene–may 2026: 1.100 activaciones, 7.927 filas).
+`POST /facturacion/gpon/anual` (12 / 18 / 24 meses). Calibrado fila por fila con las seis liquidaciones GPON
+385–390 (entidad 300383, ene–jun 2026: 9.455 filas, 1.361 activaciones de las que **1.193 son fibra (IF) y 168 IPTV**).
 
-| Liq. | Mes | Activaciones | Créditos | Débitos | Neto | Neto por activación |
-|---|---|---|---|---|---|---|
-| 385 | ene-26 | 239 | 256,3 M | −128,7 M | 127,6 M | 534.000 |
-| 386 | feb-26 | 204 | 229,8 M | −159,0 M | 70,7 M | 347.000 |
-| 387 | mar-26 | 238 | 272,3 M | −145,1 M | 127,2 M | 534.000 |
-| 388 | abr-26 | 231 | 253,5 M | −152,5 M | 101,0 M | 437.000 |
-| 389 | may-26 | 188 | 243,0 M | −155,8 M | 87,2 M | 464.000 |
+**GPON = fibra. IPTV no cuenta como GPON** y no se simula: son ~14 líneas por cada 100 GPON (124 de 168 en la misma
+cuenta que una fibra), cuota 1 de 120.000 (TVP) o 25.000 (TVA), sin bono, y dejan ~3,6 % del neto GPON (23 M de 634 M
+en el semestre).
 
-| Concepto | Regla calibrada |
+| Liq. | Mes | Activ. IF | IPTV | Bono IF por línea | Cumplimiento (Obj IF 200) |
+|---|---|---|---|---|---|
+| 385 | ene-26 | 218 | 21 | 100.000 | 109 % |
+| 386 | feb-26 | 181 | 23 | 0 | 82 % (obj. 220) |
+| 387 | mar-26 | 215 | 23 | 100.000 | 107,5 % |
+| 388 | abr-26 | 195 | 36 | 50.000 | 97,5 % |
+| 389 | may-26 | 166 | 22 | 0 | 83 % |
+| 390 | jun-26 | 218 | 43 | 100.000 | 109 % |
+
+| Concepto | Regla calibrada (solo fibra) |
 |---|---|
-| Cuota 1 | Al activar, por plan: Fibra 60 (IF60/BAF7) 400.000 · Fibra 30 (IF30/BAF3) 325.000 · TV 120.000. Mezcla real 70 / 18 / 12 %. |
-| Cuota 2 | Día 59–91 (mediana 73 → liquidación del mes 2): 280.000 / 200.000 / 120.000. La mitad con legajo incompleto. Cobra el 86–97 % de las líneas (90 %, 82 % completa). |
-| Bono fijo (1771) | Escala vigente ≥110 % 130.000 · ≥105 % 125.000 · ≥100 % 120.000 · ≥95 % 40.000. Historial ene–may: 100.000 (ene, mar), 50.000 (abr), 0 (feb, may). Se paga en el 91 % de las activaciones. |
-| Recálculo (1871) | Día 150–180: 100 % del bono de las líneas caídas, 23–26 % de la cohorte. |
-| Legajos | Documentación faltante en el mes 1: 50 % de la cuota 1 en el 11 % de las líneas. |
-| Mora | PENALIZACION POR DEUDA / REVERSO: penalidad tabulada por plan (Fibra 60: 630.000 / 350.000 / 315.000; Fibra 30: 475.000; TV: 190.000), revertida si el cliente paga (75 % en la misma liquidación). Neto: 26 % de las líneas de la cohorte quedan con deuda a los 6 meses, 15,6 % de lo cobrado. Primera penalización: p25 día 65, mediana 93, p75 132, máximo 180 → curva acumulada 0 / 3 / 22 / 52 / 78 / 95 / 100 %. |
-| Chargeback | 180 días exactos; después del mes 6 no hay débitos. **Sin residual, sin portabilidad, sin bono efectividad.** |
-| Costos | Misma estructura que pospago (vendedores por ratio, supervisor cada 12, backoffice cada 120, 1 controller); sin logística de entregas (la instalación la hace Claro). |
+| Cuota 1 | Al activar, por plan: Fibra 60 (IF60 / BAF7 / BAFE7) 400.000 · Fibra 30/40 (IF30 / IF40 / BAF3) 325.000. Mezcla real 74 / 26 % → 380.000 por línea. |
+| Cuota 2 | Día 62–86 (mediana 73 → liquidación del mes 2): 280.000 / 200.000. La cobra el 96 % de las líneas con legajo presentado (0 = "línea inactiva al día 60"), el 92 % completa y el resto a la mitad por legajo incompleto. |
+| Bono fijo (1771) | Solo líneas IF en estado A, en el **100 %** de ellas cuando el mes llega al objetivo de líneas IF (Claro usa 200). Escala vigente ≥110 % 130.000 · ≥105 % 125.000 · ≥100 % 120.000 · ≥95 % 40.000; en 2026 liquidó con la anterior: 100.000 (≥100 %), 50.000 (95–100 %), 0 (82–83 %). |
+| Recálculo (1871) | Día 155–179: el 100 % del bono de las líneas caídas, 23–26 % de las cohortes que cobraron bono. |
+| Legajos | Día 30–55 desde la venta, dos casos: **LEGAJO NO PRESENTADO** descuenta el **100 % de la cuota 1**, la línea no cobra cuota 2 (0) y no genera mora, sin devolución posterior (real ene–abr 2,8 % de las líneas IF; feb 6,6 %); **LEGAJO INCOMPLETO U OBSERVADO** descuenta el 50 % y la cuota 2 se cobra a la mitad (real 7,7 %; enero 21 %). Parámetros `legajo_no_presentado_pct` (3 %) y `legajo_pct` (8 %). |
+| Mora | PENALIZACION POR DEUDA (P7, al suspender por deuda; tabla: Fibra 60 630.000, Fibra 30 475.000, con cuotas parciales) y REVERSO PENALIZACION (R7, cuando el cliente paga). Solo pesa la **neta**: el 55–60 % de las líneas se penaliza alguna vez y el 28 % queda con deuda a los 6 meses (enero 27 % a 5 meses, febrero 24 %, marzo 18 % a 3 meses), ~520.000 / 430.000 por línea en mora. Primera penalización p10 día 55, p25 68, mediana 101, p75 143, p90 161 → curva acumulada 0 / 3 / 22 / 52 / 78 / 95 / 100 %. |
+| Chargeback | 180 días; después del mes 6 no hay débitos. **Sin residual, sin portabilidad, sin bono efectividad.** Otros reversos (MALAVF mala venta) 0,5 %. |
+| Costos | Comisión y plus del asesor, **recupero de documentación 55.000 por venta GPON** (sin cargas), operativos. Página GPON sola: estructura propia dimensionada con las activaciones; convergente: sin estructura (la de pospago). |
 
-Unidad económica real (cohorte ene-26 a 5 meses): 515.000 por línea = 1,46 × cuota 1; el modelo da 511.000.
-Con la escala vigente, ~496.000 por línea de por vida. La anualidad es idéntica en lógica a pospago: cada mes es
-una cohorte, el mes N suma su facturación más los ajustes de todas las anteriores, la estructura se fija en el
-mes 1, y al cierre queda la cola (cuota 2 por cobrar, mora y recálculo por devolver).
+Unidad económica real por línea IF (cohorte ene-26 a 5 meses, sin el recálculo todavía): cuota 1 393.000 + cuota 2
+221.000 + bono 100.000 − legajos 52.000 − mora neta 140.000 − otros 5.000 = **517.000 (1,31 × cuota 1)**; marzo a 3
+meses 642.000. El modelo con el bono de 100.000 da 553.000 a 5 meses (enero tuvo el doble de legajos que el promedio)
+y, con la escala vigente, 536.000 de por vida (1,41 × cuota 1): cuota 1 380.500 + cuota 2 231.400 + bono 120.000 −
+legajos 24.700 − mora 139.000 − recálculo 30.000. La anualidad es idéntica en lógica a pospago: cada mes es una
+cohorte, el mes N suma su facturación más los ajustes de todas las anteriores, la estructura se fija en el mes 1, y al
+cierre queda la cola (cuota 2 por cobrar, mora y recálculo por devolver).
 
 ### 4c. Simulador convergente (pospago + GPON por la misma estructura)
 
@@ -569,7 +577,8 @@ staff es convergente, cada asesor vende pospago y GPON. Motor en `facturacion_co
 
 - **Una sola estructura.** La dotación se dimensiona con las ventas de pospago del mes 1 (ventas por vendedor,
   supervisores, backoffice, coordinación, controllers) y queda fija, igual que antes. GPON **no agrega personas**: sus
-  costos son solo comisión y plus por venta GPON (con el IPS y aguinaldo de pospago), operativos y logística GPON
+  costos son solo comisión y plus por venta GPON (con el IPS y aguinaldo de pospago), recupero de documentación
+  (55.000 por venta), operativos y logística GPON
   (`costos_gpon_compartidos`, headcount GPON = 0 en `_costos_y_margen`).
 - **Ventas GPON = vendedores × GPON por asesor**, editable por mes (ideal 3). El objetivo del bono fijo GPON se setea
   solo en vendedores × 3 (desmarcable en pantalla; en el motor, si `gpon.parametros.objetivo` no viene, se usa ese
@@ -589,6 +598,11 @@ staff es convergente, cada asesor vende pospago y GPON. Motor en `facturacion_co
   bloque "GPON por asesor" por mes en el paso 2, KPIs GPON, EERR con secciones POSPAGO / GPON / COSTOS GPON, tabla
   "Bono fijo GPON mes a mes" y línea de activaciones GPON en el gráfico de ventas. Gross, zafra, bono único, descuentos
   y ajuste de comisiones siguen siendo de pospago (GPON tiene su propio ajuste en sus variables).
+- **Meses afectados GPON**: el ✎ de un mes (en la grilla de ventas o en el bloque "GPON por asesor") abre el mismo
+  editor con los grupos de pospago y los grupos **GPON ·** (`CAMPOS_AFECTABLES_CONVERGENTE`): legajos no presentados
+  (100 % de la cuota 1, sin cuota 2 ni mora), legajos incompletos, objetivo, mora, recálculo, costos variables GPON.
+  Las variaciones GPON se guardan en `meses_afectados[mes].gpon` y `separarAfectados` las reparte entre los dos
+  motores. `legajo_no_presentado_pct` arranca en 0 % y se carga por mes.
 - **Registro**: la configuración GPON viaja en `parametros.convergente` (el motor de pospago la ignora) y se guarda con
   la simulación; las simulaciones anteriores se abren como pospago puro.
 - Tests: `backend/tests/test_facturacion_convergente.py` (misma dotación, costos GPON solo variables, suma exacta de los

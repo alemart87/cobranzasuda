@@ -487,10 +487,13 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
     logistica_entregas = act * (interior * float(c["logistica_interior"]) + (1 - interior) * float(c["logistica_central"]))
     logistica_premios = float(c["logistica_premios"])
     operativos = act * float(c["operativo_por_venta"])
+    # Recupero de documentación por venta (GPON: 55.000 por activación; pospago: 0). Sin cargas sociales.
+    documentacion = act * float(c.get("documentacion_por_venta") or 0)
     # Total sobre componentes redondeados: la tabla de costos debe ser aditiva al guaraní.
     rrhh_base, ips, aguinaldo, plus_vendedores = round(rrhh_base), round(ips), round(aguinaldo), round(plus_vendedores)
     logistica_entregas, logistica_premios, operativos = round(logistica_entregas), round(logistica_premios), round(operativos)
-    total = rrhh_base + ips + aguinaldo + plus_vendedores + logistica_entregas + logistica_premios + operativos
+    documentacion = round(documentacion)
+    total = rrhh_base + ips + aguinaldo + plus_vendedores + logistica_entregas + logistica_premios + operativos + documentacion
     carga = 1 + float(c["ips_pct"]) / 100.0 + (1 / 12 if c.get("aguinaldo", True) else 0)
     variable_vendedores = rrhh["operadores_comisiones"] + plus_vendedores          # comisión + plus (sin cargas)
 
@@ -505,6 +508,7 @@ def _costos_y_margen(c: dict, act: float, mes0: dict, bruto_mes0: float,
         "plus_vendedores": plus_vendedores,
         "logistica_entregas": round(logistica_entregas), "logistica_premios": round(logistica_premios),
         "operativos": round(operativos),
+        "documentacion": documentacion,
         "total": round(total),
         "costo_por_venta": round(total / act) if act else 0,
         "facturacion_por_venta": round(bruto_mes0 / act) if act else 0,

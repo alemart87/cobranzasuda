@@ -25,7 +25,8 @@ def test_gpon_no_duplica_estructura():
         assert g["headcount"]["vendedores"] == 0 and g["rrhh"]["operadores_salario"] == 0 and g["rrhh"]["supervisores"] == 0
         assert g["logistica_premios"] == 0 and g["rrhh"]["subgerencia"] == 0
         assert f["costo_total"] == fm["costo_total"] + g["total"]
-        assert g["total"] == g["rrhh_total"] + g["plus_vendedores"] + g["logistica_entregas"] + g["operativos"]
+        assert g["total"] == g["rrhh_total"] + g["plus_vendedores"] + g["logistica_entregas"] + g["operativos"] + g["documentacion"]
+        assert g["documentacion"] == f["ventas_gpon"] * 55000      # recupero de documentación por venta GPON
 
 
 def test_convergente_suma_los_dos_negocios_con_gpon_completo():
