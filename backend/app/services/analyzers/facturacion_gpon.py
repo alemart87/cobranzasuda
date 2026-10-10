@@ -34,10 +34,12 @@ from typing import Any
 
 from .facturacion_simulador import _costos_y_margen, _escala
 
+# GPON = FIBRA (Negocio IF). IPTV no cuenta como GPON y no se simula: en las liquidaciones son ~14 líneas por
+# cada 100 GPON (124 de 168 en la misma cuenta que una fibra), sin bono, y dejan ~3,6 % del neto GPON.
+# Mezcla real ene–jun 2026 (1.193 activaciones IF): 400.000 (IF60 / BAF7 / BAFE7) 74 % · 325.000 (IF30 / IF40 / BAF3) 26 %.
 PLANES_GPON_DEFAULT = [
-    {"nombre": "Fibra 60 (IF60 / BAF7)", "cuota1": 400000, "cuota2": 280000, "penalidad_mora": 520000, "mix_pct": 70.0},
-    {"nombre": "Fibra 30 (IF30 / BAF3)", "cuota1": 325000, "cuota2": 200000, "penalidad_mora": 430000, "mix_pct": 18.0},
-    {"nombre": "TV (TVP / TVA)", "cuota1": 120000, "cuota2": 120000, "penalidad_mora": 160000, "mix_pct": 12.0},
+    {"nombre": "Fibra 60 (IF60 / BAF7)", "cuota1": 400000, "cuota2": 280000, "penalidad_mora": 520000, "mix_pct": 74.0},
+    {"nombre": "Fibra 30/40 (IF30 / IF40 / BAF3)", "cuota1": 325000, "cuota2": 200000, "penalidad_mora": 430000, "mix_pct": 26.0},
 ]
 
 # Curva acumulada de la mora NETA (líneas que quedan penalizadas sin reverso) por mes de
@@ -47,28 +49,34 @@ MORA_CURVA_DEFAULT = [0.0, 3.0, 22.0, 52.0, 78.0, 95.0, 100.0]
 
 PARAMETROS_GPON_DEFAULT: dict[str, Any] = {
     "negocio": "GPON",
-    "ventas": 230,                       # activaciones del mes (real ene–may: 188–239)
-    "objetivo": 230,                     # objetivo mensual de líneas para el bono fijo
+    "ventas": 200,                       # activaciones GPON (fibra) del mes (real ene–jun 2026: 166–218)
+    "objetivo": 200,                     # objetivo mensual de líneas IF para el bono fijo ("Obj IF: 200" en las liquidaciones)
     "pct_estado_a": 100.0,               # activaciones que cuentan para el objetivo
     "planes": copy.deepcopy(PLANES_GPON_DEFAULT),
     # ---- cuota 2 y legajos ----
-    "cuota2_mes": 2,                     # liquidación del mes 2 (día 59–91, mediana 73)
-    "cuota2_pct_lineas": 90.0,           # líneas que cobran cuota 2 (real 86–97%)
-    "cuota2_pct_completa": 82.0,         # de las que cobran, % con importe completo; el resto cobra la mitad
-    "legajo_pct": 11.0,                  # líneas con documentación faltante (mes 1)
-    "legajo_pct_cuota1": 50.0,           # descuento = % de la cuota 1
+    "cuota2_mes": 2,                     # liquidación del mes 2 (día 62–86, mediana 73)
+    "cuota2_pct_lineas": 93.0,           # líneas que cobran cuota 2 (real por cohorte 88–98 %; 0 = "línea inactiva al día 60")
+    "cuota2_pct_completa": 92.0,         # de las que cobran, % con importe completo; el resto cobra la mitad (legajo incompleto)
+    "legajo_pct": 13.0,                  # líneas con documentación faltante en el mes 1 (real por cohorte 2–26 %, promedio 13 %)
+    "legajo_pct_cuota1": 50.0,           # descuento = % de la cuota 1 (200.000 sobre 400.000)
     # ---- bono fijo (escala vigente comunicada por Claro) ----
     "escala_bono": [
         {"desde_pct": 110, "monto": 130000}, {"desde_pct": 105, "monto": 125000},
         {"desde_pct": 100, "monto": 120000}, {"desde_pct": 95, "monto": 40000},
     ],
-    "pct_bono_cobrado": 91.0,            # activaciones que cobran el bono (real 218/239, 215/238)
+    # El bono se liquida en TODAS las líneas IF en estado A cuando se llega al objetivo (218 de 218, 215 de 215);
+    # el 91 % anterior salía de contar IPTV en la base. Las liquidaciones ene–jun 2026 pagaron con la escala
+    # anterior: 100.000 (≥100 %), 50.000 (95–100 %), 0 (82–83 %).
+    "pct_bono_cobrado": 100.0,
     "recalculo_mes": 6,
-    "pct_recalculo": 25.0,               # líneas caídas al día 180 que devuelven el 100% del bono (real 23–26%)
+    "pct_recalculo": 25.0,               # líneas caídas al día 155–179 que devuelven el 100% del bono (cohortes con bono: 23–26 %)
     "bonos_activos": True,
     "bono_adicional": 0,
     # ---- mora (penalización por deuda neta de reversos) ----
-    "mora_pct_lineas": 26.0,             # líneas de la cohorte que quedan con deuda neta a los 6 meses
+    # Claro penaliza al suspender por deuda (P7, tabla por plan: 630.000 / 475.000) y REVIERTE si el cliente paga
+    # (R7). Solo pesa la neta: 27 % de la cohorte de enero sigue con deuda a los 5 meses (24 % feb, 18 % mar a 3 meses),
+    # ~520.000 por línea en mora (mediana 630.000, con pagos parciales).
+    "mora_pct_lineas": 28.0,             # líneas de la cohorte que quedan con deuda neta a los 6 meses
     "mora_curva_pct": list(MORA_CURVA_DEFAULT),
     "mora_penalidad_pct": 100.0,         # % de la penalidad tabulada que se pierde (100 = tabla completa)
     "chargeback_meses": 6,
@@ -86,6 +94,7 @@ PARAMETROS_GPON_DEFAULT: dict[str, Any] = {
         "subgerencia_salario": 0, "ips_pct": 16.5, "aguinaldo": True,
         "logistica_central": 0, "logistica_interior": 0, "logistica_interior_pct": 0.0, "logistica_premios": 0,
         "operativo_por_venta": 12500,
+        "documentacion_por_venta": 55000,   # recupero de documentación: 55.000 por cada venta GPON (sin cargas)
     },
 }
 
@@ -336,7 +345,8 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
     resultado = tot("resultado")
     ingreso_neto = tot("ingreso_neto")
     chb, rec_mes, c2_mes = int(base["chargeback_meses"]), int(base["recalculo_mes"]), int(base["cuota2_mes"])
-    fijo = filas[0]["costo_total"] - filas[0]["costos"]["rrhh"]["operadores_comisiones"] - filas[0]["costos"]["plus_vendedores"] - filas[0]["costos"]["operativos"] - filas[0]["costos"]["logistica_entregas"]
+    fijo = (filas[0]["costo_total"] - filas[0]["costos"]["rrhh"]["operadores_comisiones"] - filas[0]["costos"]["plus_vendedores"]
+            - filas[0]["costos"]["operativos"] - filas[0]["costos"]["logistica_entregas"] - filas[0]["costos"].get("documentacion", 0))
     final = resultado + cola_cobros + cola_dev
     anual = {
         "ventas": round(sum(ventas)), "facturacion_bruta": tot("facturacion_bruta"), "ajustes": tot("ajustes"),

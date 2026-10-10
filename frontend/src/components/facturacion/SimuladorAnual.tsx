@@ -88,6 +88,7 @@ const NEGOCIOS: Record<Negocio, Cfg> = {
       ["Estructura fija (salarios, cargas, premios logística)", "_fijo", "gs", "row"], ["Comisiones pospago (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
       ["Plus pospago (sin cargas)", "_plus", "gs", "row"], ["Logística de entregas pospago", "_logistica", "gs", "row"], ["Operativos pospago", "_operativos", "gs", "row"],
       ["Comisiones GPON (con IPS y aguinaldo)", "_gpon_comisiones", "gs", "row"], ["Plus GPON (sin cargas)", "_gpon_plus", "gs", "row"],
+      ["Recupero de documentación GPON (55.000 por venta)", "_gpon_documentacion", "gs", "row"],
       ["Logística GPON", "_gpon_logistica", "gs", "row"], ["Operativos GPON", "_gpon_operativos", "gs", "row"],
       ["TOTAL COSTOS", "costo_total", "gs", "sub"], ["RESULTADO CONVERGENTE", "resultado", "gs", "total"],
       ["Resultado pospago", "resultado_movil", "gs", "pct"], ["Resultado GPON", "resultado_gpon", "gs", "pct"],
@@ -530,7 +531,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-cyan">Convergente · GPON por la misma estructura</div>
-                    <div className="text-[11px] text-brand-graphite">Los <b>{formatInt(vendedoresMes1)}</b> vendedores del pospago venden además GPON. Activaciones GPON = vendedores × GPON por asesor. Ideal: 3 por asesor.</div>
+                    <div className="text-[11px] text-brand-graphite">Los <b>{formatInt(vendedoresMes1)}</b> vendedores del pospago venden además GPON (solo fibra: IPTV no cuenta). Activaciones GPON = vendedores × GPON por asesor. Ideal: 3 por asesor.</div>
                   </div>
                   <label className="flex items-center gap-2 text-sm font-semibold text-brand-ink">
                     <input type="checkbox" checked={gponActivo} onChange={(e) => setGponActivo(e.target.checked)} className="accent-brand-cyan w-4 h-4" />
@@ -975,7 +976,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                       ["kpi:gpon_ventas", "Activaciones GPON", <KpiCard key="g1" label={`Activaciones GPON en ${horizonte} meses`} value={formatInt(a.ventas_gpon)} hint={`${a.gpon_por_asesor} por asesor · ${formatInt(hc?.vendedores ?? 0)} vendedores`} accent="neutral" />],
                       ["kpi:gpon_bruta", "Facturación bruta GPON", <KpiCard key="g2" label="Facturación bruta GPON" value={formatGs(a.facturacion_bruta_gpon ?? 0)} hint="cuota 1 y bono fijo" accent="primary" />],
                       ["kpi:gpon_neto", "Ingreso neto GPON", <KpiCard key="g3" label="Ingreso neto GPON" value={formatGs(a.ingreso_neto_gpon ?? 0)} hint={`${a.aporte_gpon_ingreso_pct ?? 0}% del convergente · mora ${formatGs(Math.abs(a.gpon_mora ?? 0))}`} accent="cyan" />],
-                      ["kpi:gpon_costos", "Costos variables GPON", <KpiCard key="g4" label="Costos variables GPON" value={formatGs(a.costos_gpon ?? 0)} hint="comisión, plus y operativos · sin estructura" accent="orange" />],
+                      ["kpi:gpon_costos", "Costos variables GPON", <KpiCard key="g4" label="Costos variables GPON" value={formatGs(a.costos_gpon ?? 0)} hint="comisión, plus, documentación 55.000 y operativos · sin estructura" accent="orange" />],
                       ["kpi:gpon_resultado", "Resultado GPON", <KpiCard key="g5" label="Resultado GPON" value={formatGs(a.resultado_gpon ?? 0)} hint={`${a.margen_pct_gpon ?? 0}% · incremental`} accent={(a.resultado_gpon ?? 0) >= 0 ? "cyan" : "primary"} />],
                       ["kpi:movil_resultado", "Resultado pospago", <KpiCard key="g6" label="Resultado pospago" value={formatGs(a.resultado_movil ?? 0)} hint={`${a.margen_pct_movil ?? 0}% · con toda la estructura`} accent={(a.resultado_movil ?? 0) >= 0 ? "cyan" : "primary"} />],
                     ] as Array<[string, string, React.ReactNode]>).map(([key, label, card]) => (
@@ -1117,7 +1118,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                       const val = (m: any): number => {
                         if (!key) return 0;
                         const ctMovil = m.costo_total_movil ?? m.costo_total;   // convergente: la estructura va entera al pospago
-                        if (key === "_fijo") return ctMovil - m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0)) - (m.costos.plus_vendedores ?? 0) - m.costos.logistica_entregas - m.costos.operativos;
+                        if (key === "_fijo") return ctMovil - m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0)) - (m.costos.plus_vendedores ?? 0) - m.costos.logistica_entregas - m.costos.operativos - (m.costos.documentacion ?? 0);
                         if (key === "_comisiones") return m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0));
                         if (key === "_plus") return m.costos.plus_vendedores ?? 0;
                         if (key === "_logistica") return m.costos.logistica_entregas;
@@ -1125,6 +1126,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                         if (key === "_gpon_comisiones") return m.gpon_costos?.rrhh_total ?? 0;      // comisión GPON con IPS y aguinaldo (sin estructura)
                         if (key === "_gpon_plus") return m.gpon_costos?.plus_vendedores ?? 0;
                         if (key === "_gpon_logistica") return m.gpon_costos?.logistica_entregas ?? 0;
+                        if (key === "_gpon_documentacion") return m.gpon_costos?.documentacion ?? 0;
                         if (key === "_gpon_operativos") return m.gpon_costos?.operativos ?? 0;
                         return Number(m[key] ?? 0);
                       };

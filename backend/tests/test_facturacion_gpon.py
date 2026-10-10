@@ -3,13 +3,23 @@ from app.services.analyzers.facturacion_gpon import PARAMETROS_GPON_DEFAULT, sim
 
 
 def test_gpon_cohorte_reproduce_enero_2026():
-    """Cohorte real de enero (239 líneas, bono de la escala anterior 100.000): a 5 meses dejó
-    123,1 M (515.000 por línea). El modelo debe quedar dentro del 3%."""
-    r = simular_gpon({"ventas": 239, "objetivo": 230, "escala_bono": [{"desde_pct": 100, "monto": 100000}]})
-    assert r["derivados"]["monto_bono"] == 100000 and r["derivados"]["cumplimiento_pct"] == 103.91
+    """Cohorte real de enero 2026, SOLO fibra (218 líneas IF; IPTV no cuenta), bono de la escala anterior
+    100.000: a 5 meses Claro liquidó 517.000 por línea (cuota 1 393.000 + cuota 2 221.000 + bono 100.000
+    − legajos 52.000 − mora neta 140.000 − otros 5.000), todavía sin el recálculo del mes 6. El modelo a
+    5 meses debe quedar dentro del 7% (enero tuvo el doble de legajos que el promedio)."""
+    r = simular_gpon({"ventas": 218, "objetivo": 200, "escala_bono": [{"desde_pct": 100, "monto": 100000}]})
+    assert r["derivados"]["monto_bono"] == 100000 and r["derivados"]["cumplimiento_pct"] == 109.0
+    assert abs(r["derivados"]["cuota1_ponderada"] - 380_500) / 380_500 < 0.01     # mezcla 74 / 26 sin IPTV
     acum5 = r["meses"][5]["acumulado"]
-    assert abs(acum5 - 123_100_000) / 123_100_000 < 0.03
-    assert abs(acum5 / 239 - 515_000) / 515_000 < 0.03
+    assert abs(acum5 / 218 - 517_000) / 517_000 < 0.07
+    assert abs(r["por_linea"]["mora"] - (-140_000)) / 140_000 < 0.10            # 28 % de líneas × ~500.000
+    assert abs(r["por_linea"]["cuota2_esperada"] - 238_000) / 238_000 < 0.05     # 93 % cobra, 92 % completa
+    # el bono se paga en TODAS las líneas IF en estado A
+    assert r["mes0"]["bono_fijo"] == 218 * 100000
+    # recupero de documentación: 55.000 por venta GPON, dentro de los costos
+    assert r["costos"]["documentacion"] == 218 * 55000
+    assert r["costos"]["total"] == (r["costos"]["rrhh_total"] + r["costos"]["plus_vendedores"] + r["costos"]["logistica_entregas"]
+                                    + r["costos"]["logistica_premios"] + r["costos"]["operativos"] + r["costos"]["documentacion"])
     # aditividad: bruto = suma de componentes; acumulado = bruto + flujos
     assert r["bruto_mes0"] == sum(r["mes0"].values())
     assert r["meses"][12]["acumulado"] == r["bruto_mes0"] + sum(m["neto_mes"] for m in r["meses"][1:])
