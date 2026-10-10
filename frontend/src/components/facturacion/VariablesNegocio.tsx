@@ -224,12 +224,16 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
                 const f1 = (v: number) => v.toFixed(1).replace(".", ",");
                 return (
                   <>
-                    <p className="text-[10px] text-brand-graphite">
-                      <b className="text-brand-ink">El residual de un mes lo genera la factura del mes anterior.</b> Lo cobran las líneas que estaban activas al cierre del mes anterior
-                      (la zafra) y pagaron esa factura (la cobrabilidad). Por eso no coincide con la zafra del mismo mes: en el mes 1 cobran {f1(curva[0])}% (las {f1(zPrev(0))}% activas al inicio, de las que paga el {f1(cob[0] ?? 100)}%);
-                      en el mes 2 solo {f1(curva[1])}% (de las {f1(zPrev(1))}% activas al mes 1, las que caen por PFI no pagaron su primera factura);
-                      en el mes 3, {f1(curva[2])}% ({f1(zPrev(2))}% activas al mes 2 × {f1(cob[2] ?? 100)}%). Si mejorás la zafra, esta curva sube sola.
-                    </p>
+                    <div className="rounded-md border border-brand-border bg-brand-bg-soft px-3 py-2 text-[11px] text-brand-graphite space-y-1">
+                      <div className="font-bold text-brand-ink">Por qué no coincide con la zafra: el residual de un mes lo genera la factura del mes anterior.</div>
+                      <div>Lo cobran las líneas que estaban <b>activas al cierre del mes anterior</b> (la zafra) <b>y pagaron esa factura</b> (la cobrabilidad).</div>
+                      <ul className="list-disc pl-4 space-y-0.5">
+                        <li><b>Mes 1:</b> cobran {f1(curva[0])}%. Son las {f1(zPrev(0))}% activas al inicio, de las que paga el {f1(cob[0] ?? 100)}%.</li>
+                        <li><b>Mes 2:</b> cobran {f1(curva[1])}%, menos que el {f1(zPrev(1))}% activo al cierre del mes 1, porque las líneas que caen por PFI no pagaron su primera factura (cobrabilidad {f1(cob[1] ?? 100)}%).</li>
+                        <li><b>Mes 3 en adelante:</b> cobran el {f1(cob[2] ?? 100)} a 100% de las activas al cierre del mes anterior (mes 3: {f1(zPrev(2))}% × {f1(cob[2] ?? 100)}% = {f1(curva[2])}%). En los meses 11 y 12 baja a {f1(cob[10] ?? 100)} y {f1(cob[11] ?? 100)}% porque parte de las activas ya no tiene abono acreditado.</li>
+                      </ul>
+                      <div>Con la zafra real esta cuenta reproduce la curva medida en las liquidaciones. <b>Si mejorás la zafra, el residual sube solo</b> desde el mes 3, porque la zafra Ideal arranca igual que la real en el mes 1.</div>
+                    </div>
                     <div className="overflow-x-auto">
                       <table className="text-[10px] w-full">
                         <thead><tr className="text-brand-slate"><th className="text-left font-normal pr-2">Mes del residual</th>{curva.map((_, i) => <th key={i} className="font-semibold text-brand-ink px-1 text-right">M{i + 1}</th>)}</tr></thead>
