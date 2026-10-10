@@ -388,7 +388,7 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               <Campo label="Entrega en Central" hint="Gs por venta" value={p.costos.logistica_central} onChange={(v) => setC("logistica_central", v)} step={1000} />
               <Campo label="Entrega en Interior" hint="Gs por venta" value={p.costos.logistica_interior} onChange={(v) => setC("logistica_interior", v)} step={1000} />
               <Campo label="Entregas en Interior" hint="el resto es Central" value={p.costos.logistica_interior_pct} onChange={(v) => setC("logistica_interior_pct", v)} step={5} suffix="%" />
-              <Campo label="Premios a logística" hint="fijo mensual" value={p.costos.logistica_premios} onChange={(v) => setC("logistica_premios", v)} step={1000000} />
+              <Campo label="Cobertura adicional interior" hint="fijo mensual · logística de cobertura del interior" value={p.costos.logistica_premios} onChange={(v) => setC("logistica_premios", v)} step={1000000} />
               <Campo label="Costo operativo por venta" value={p.costos.operativo_por_venta} onChange={(v) => setC("operativo_por_venta", v)} step={500} />
             </Grupo>
                 {extra}

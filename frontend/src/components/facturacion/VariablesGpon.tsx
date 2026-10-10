@@ -233,7 +233,7 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
         <Campo label="Logística por venta (Central)" hint="GPON: la instalación la hace Claro · 0 por defecto" value={p.costos.logistica_central} onChange={(v) => setC("logistica_central", v)} step={5000} />
         <Campo label="Logística por venta (Interior)" value={p.costos.logistica_interior} onChange={(v) => setC("logistica_interior", v)} step={5000} />
         <Campo label="Entregas en Interior" value={p.costos.logistica_interior_pct} onChange={(v) => setC("logistica_interior_pct", v)} suffix="%" />
-        <Campo label="Premios logística (fijo mensual)" value={p.costos.logistica_premios} onChange={(v) => setC("logistica_premios", v)} step={1000000} />
+        <Campo label="Cobertura adicional interior (fijo mensual)" value={p.costos.logistica_premios} onChange={(v) => setC("logistica_premios", v)} step={1000000} />
         <Campo label="IPS" hint="sobre todo el RRHH · aguinaldo = RRHH ÷ 12" value={p.costos.ips_pct} onChange={(v) => setC("ips_pct", v)} step={0.5} suffix="%" />
       </Grupo>
       )}
