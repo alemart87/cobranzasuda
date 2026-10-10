@@ -959,7 +959,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
           {res && a && (
             <>
               <Bloque titulo="Estructura operativa necesaria" hint={hc ? `${hc.vendedores} vendedores · ${hc.supervisores} supervisores · ${hc.backoffice} backoffice · ${hc.total} personas · fija los ${horizonte} meses` : "estructura fija del mes 1"}>
-                <EstructuraOperativa costos={meses[0]?.costos} p={p} ventas={ventas[0] ?? 0} sinCard
+                <EstructuraOperativa costos={meses[0]?.costos} p={p} ventas={ventas[0] ?? 0} ventasGpon={gponOn ? Number(hc?.ventas_gpon_mes1 ?? 0) : 0} sinCard
                   intro={`Estructura del mes 1, fija para los ${horizonte} meses. Dimensionada para ${formatInt(ventas[0] ?? 0)} ventas efectivas de pospago${gponOn ? `; la misma dotación vende además ${asesorMes1} GPON por asesor (${formatInt(hc?.ventas_gpon_mes1 ?? 0)} activaciones GPON en el mes 1) sin personas adicionales` : ""}`} />
               </Bloque>
 
