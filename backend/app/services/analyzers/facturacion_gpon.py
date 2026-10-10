@@ -55,10 +55,16 @@ PARAMETROS_GPON_DEFAULT: dict[str, Any] = {
     "planes": copy.deepcopy(PLANES_GPON_DEFAULT),
     # ---- cuota 2 y legajos ----
     "cuota2_mes": 2,                     # liquidación del mes 2 (día 62–86, mediana 73)
-    "cuota2_pct_lineas": 93.0,           # líneas que cobran cuota 2 (real por cohorte 88–98 %; 0 = "línea inactiva al día 60")
+    "cuota2_pct_lineas": 96.0,           # de las líneas CON legajo presentado, % que cobra cuota 2 (0 = "línea inactiva al día 60")
     "cuota2_pct_completa": 92.0,         # de las que cobran, % con importe completo; el resto cobra la mitad (legajo incompleto)
-    "legajo_pct": 13.0,                  # líneas con documentación faltante en el mes 1 (real por cohorte 2–26 %, promedio 13 %)
-    "legajo_pct_cuota1": 50.0,           # descuento = % de la cuota 1 (200.000 sobre 400.000)
+    # Legajos (día 30–55 desde la venta), dos casos distintos en la liquidación:
+    #  - LEGAJO NO PRESENTADO: Claro descuenta el 100 % de la cuota 1, la línea no cobra cuota 2 (0) y no genera mora
+    #    (real ene–abr 2026: 2,8 % de las líneas IF; no hay devolución posterior en 6 meses).
+    #  - LEGAJO INCOMPLETO U OBSERVADO: descuenta el 50 % de la cuota 1 y la cuota 2 se cobra a la mitad
+    #    (real ene–abr: 7,7 %; enero 21 %).
+    "legajo_no_presentado_pct": 3.0,
+    "legajo_pct": 8.0,                   # líneas con legajo incompleto u observado (mes 1)
+    "legajo_pct_cuota1": 50.0,           # descuento del incompleto = % de la cuota 1 (200.000 sobre 400.000)
     # ---- bono fijo (escala vigente comunicada por Claro) ----
     "escala_bono": [
         {"desde_pct": 110, "monto": 130000}, {"desde_pct": 105, "monto": 125000},
@@ -146,10 +152,14 @@ def simular_gpon(params: dict | None = None) -> dict[str, Any]:
     while len(curva) < 13:
         curva.append(curva[-1] if curva else 1.0)
     chb = int(p["chargeback_meses"])
-    mora_lineas = act * _pct(p["mora_pct_lineas"], 26)
+    # Legajo no presentado: pierde el 100 % de la cuota 1, no cobra cuota 2 y no genera mora (sin servicio).
+    leg_np = _pct(p.get("legajo_no_presentado_pct"), 3)
+    leg_inc = _pct(p["legajo_pct"], 8)
+    con_legajo = act * (1 - leg_np)
+    mora_lineas = con_legajo * _pct(p["mora_pct_lineas"], 28)
     mora_por_linea = pen_w * _pct(p["mora_penalidad_pct"], 100)
-    c2_lineas = _pct(p["cuota2_pct_lineas"], 90)
-    c2_completa = _pct(p["cuota2_pct_completa"], 82)
+    c2_lineas = _pct(p["cuota2_pct_lineas"], 96)
+    c2_completa = _pct(p["cuota2_pct_completa"], 92)
     cuota2_factor = c2_lineas * (c2_completa + (1 - c2_completa) * 0.5)
 
     meses = [{"mes": 0, "cuota2": 0.0, "legajos": 0.0, "mora": 0.0, "recalculo": 0.0, "otros": 0.0,
@@ -158,10 +168,10 @@ def simular_gpon(params: dict | None = None) -> dict[str, Any]:
     for k in range(1, 13):
         row = {"mes": k, "cuota2": 0.0, "legajos": 0.0, "mora": 0.0, "recalculo": 0.0, "otros": 0.0}
         if k == 1:
-            row["legajos"] = -act * _pct(p["legajo_pct"], 11) * cuota1_w * _pct(p["legajo_pct_cuota1"], 50)
+            row["legajos"] = -act * (leg_np * cuota1_w + leg_inc * cuota1_w * _pct(p["legajo_pct_cuota1"], 50))
             row["otros"] = -act * _pct(p["otros_pct"], 0.5) * cuota1_w
         if k == int(p["cuota2_mes"]):
-            row["cuota2"] = act * cuota2_factor * cuota2_w
+            row["cuota2"] = con_legajo * cuota2_factor * cuota2_w
         if k <= chb:
             nuevas = mora_lineas * max(0.0, curva[k] - curva[k - 1])
             row["mora"] = -nuevas * mora_por_linea
@@ -181,7 +191,7 @@ def simular_gpon(params: dict | None = None) -> dict[str, Any]:
     dev_12 = sum(m["legajos"] + m["mora"] + m["recalculo"] + m["otros"] for m in meses[1:])
     cob_12 = sum(m["cuota2"] for m in meses[1:])
     por_linea = {
-        "cuota1": round(cuota1_w), "cuota2_esperada": round(cuota2_factor * cuota2_w), "bono": round(pct_bono * monto_bono),
+        "cuota1": round(cuota1_w), "cuota2_esperada": round((1 - leg_np) * cuota2_factor * cuota2_w), "bono": round(pct_bono * monto_bono),
         "legajos": round(meses[1]["legajos"] / act) if act else 0, "mora": round(sum(m["mora"] for m in meses) / act) if act else 0,
         "recalculo": round(sum(m["recalculo"] for m in meses) / act) if act else 0,
         "neto_12": round(neto_12 / act) if act else 0, "costo": costos["costo_por_venta"],

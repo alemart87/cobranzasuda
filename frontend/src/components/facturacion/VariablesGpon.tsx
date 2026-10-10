@@ -15,8 +15,8 @@ export function ExplicacionGpon({ convergente = false, abierto = false }: { conv
       ? "Activaciones GPON del mes = vendedores × GPON por asesor (ideal 3). Son solo líneas de fibra (IF60 / IF30). IPTV no cuenta como GPON y no se simula: en las liquidaciones hay ~14 IPTV por cada 100 GPON, casi todas en la misma cuenta que una fibra, sin bono, y dejan ~3,6% del neto GPON."
       : "Activaciones GPON del mes: solo líneas de fibra (IF60 / IF30). IPTV no cuenta como GPON y no se simula (~14 por cada 100 GPON, ~3,6% del neto)."],
     ["Mes de la venta", "Claro paga la cuota 1 por plan: 400.000 (Fibra 60) o 325.000 (Fibra 30/40), mezcla real 74 / 26 → 380.000 por línea. Si el mes llega al objetivo de líneas IF, paga además el bono fijo por línea (escala vigente: 120.000 al 100%, 40.000 entre 95 y 100%, 0 por debajo). En 2026 liquidó con la escala anterior: 100.000, 50.000 y 0."],
-    ["Mes 2", "Cuota 2: 280.000 (Fibra 60) o 200.000 (Fibra 30/40), a los 62–86 días. La cobran el 93% de las líneas; de esas, el 92% completa y el resto a la mitad por legajo incompleto. Si la línea está inactiva al día 60, 0."],
-    ["Lo que Claro descuenta", "Legajos: el 13% de las líneas devuelve la mitad de la cuota 1 en el mes 1. Mora: Claro penaliza cuando suspende por deuda (630.000 Fibra 60, 475.000 Fibra 30) y lo revierte si el cliente paga; lo que pesa es la neta: el 28% de las líneas queda con deuda a los 6 meses, unos 500.000 por línea, repartidos entre el mes 2 y el 6 (curva 3 · 22 · 52 · 78 · 95 · 100%). Recálculo: al mes 6, el 25% de las líneas devuelve el 100% del bono. Otros reversos (mala venta): 0,5%."],
+    ["Mes 2", "Cuota 2: 280.000 (Fibra 60) o 200.000 (Fibra 30/40), a los 62–86 días. La cobran el 96% de las líneas con legajo presentado; de esas, el 92% completa y el resto a la mitad por legajo incompleto. Si la línea está inactiva al día 60, 0."],
+    ["Lo que Claro descuenta", "Legajos (día 30–55): si el legajo NO se presenta, Claro descuenta el 100% de la cuota 1, la línea no cobra cuota 2 y no genera mora (real 2,8% de las líneas); si está incompleto u observado, descuenta el 50% y la cuota 2 se cobra a la mitad (real 7,7%). Mora: Claro penaliza cuando suspende por deuda (630.000 Fibra 60, 475.000 Fibra 30) y lo revierte si el cliente paga; lo que pesa es la neta: el 28% de las líneas queda con deuda a los 6 meses, unos 500.000 por línea, repartidos entre el mes 2 y el 6 (curva 3 · 22 · 52 · 78 · 95 · 100%). Recálculo: al mes 6, el 25% de las líneas devuelve el 100% del bono. Otros reversos (mala venta): 0,5%."],
     ["Costos por venta GPON", convergente
       ? "Comisión y plus del asesor, recupero de documentación 55.000 y operativos. Sin estructura propia: la dotación es la de pospago, por eso el resultado GPON es incremental."
       : "Comisión y plus del asesor, recupero de documentación 55.000 y operativos, más la estructura propia que se dimensiona con las activaciones del mes 1."],
@@ -123,10 +123,11 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
       </Grupo>
       <Grupo titulo="Cuota 2 y legajos">
         <Campo label="Mes de la cuota 2" hint="día 59–91, mediana 73 → liquidación del mes 2" value={p.cuota2_mes} onChange={(v) => set("cuota2_mes", v)} />
-        <Campo label="Líneas que cobran cuota 2" hint="real 88–98% por cohorte (0 = línea inactiva al día 60)" value={p.cuota2_pct_lineas} onChange={(v) => set("cuota2_pct_lineas", v)} suffix="%" />
+        <Campo label="Líneas que cobran cuota 2" hint="de las que presentaron legajo · real 96% (0 = línea inactiva al día 60)" value={p.cuota2_pct_lineas} onChange={(v) => set("cuota2_pct_lineas", v)} suffix="%" />
         <Campo label="De esas, con importe completo" hint="el resto cobra la mitad (legajo incompleto) · real 92%" value={p.cuota2_pct_completa} onChange={(v) => set("cuota2_pct_completa", v)} suffix="%" />
-        <Campo label="Líneas con documentación faltante" hint="mes 1 · real por cohorte 2–26%, promedio 13%" value={p.legajo_pct} onChange={(v) => set("legajo_pct", v)} suffix="%" />
-        <Campo label="Descuento por legajo (% de la cuota 1)" hint="real 200.000 sobre 400.000" value={p.legajo_pct_cuota1} onChange={(v) => set("legajo_pct_cuota1", v)} suffix="%" />
+        <Campo label="Legajos NO presentados" hint="Claro descuenta el 100% de la cuota 1, la línea no cobra cuota 2 y no genera mora · real 2,8% (feb 6,6%)" value={Number(p.legajo_no_presentado_pct ?? 3)} onChange={(v) => set("legajo_no_presentado_pct", v)} step={0.5} suffix="%" />
+        <Campo label="Legajos incompletos u observados" hint="descuenta el 50% de la cuota 1 y la cuota 2 se cobra a la mitad · real 7,7% (enero 21%)" value={p.legajo_pct} onChange={(v) => set("legajo_pct", v)} step={0.5} suffix="%" />
+        <Campo label="Descuento del legajo incompleto (% de la cuota 1)" hint="real 200.000 sobre 400.000" value={p.legajo_pct_cuota1} onChange={(v) => set("legajo_pct_cuota1", v)} suffix="%" />
       </Grupo>
       <Grupo titulo="Bono fijo y recálculo" hint="escala vigente">
         {p.escala_bono.map((e: any, i: number) => (

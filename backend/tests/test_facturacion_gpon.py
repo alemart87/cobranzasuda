@@ -11,9 +11,22 @@ def test_gpon_cohorte_reproduce_enero_2026():
     assert r["derivados"]["monto_bono"] == 100000 and r["derivados"]["cumplimiento_pct"] == 109.0
     assert abs(r["derivados"]["cuota1_ponderada"] - 380_500) / 380_500 < 0.01     # mezcla 74 / 26 sin IPTV
     acum5 = r["meses"][5]["acumulado"]
-    assert abs(acum5 / 218 - 517_000) / 517_000 < 0.07
+    assert abs(acum5 / 218 - 517_000) / 517_000 < 0.08                            # con legajos promedio (3 % + 8 %)
+    # Con los legajos que tuvo enero (2,8 % no presentados, 21,1 % incompletos) el modelo reproduce la cohorte al 4 %.
+    r_ene = simular_gpon({"ventas": 218, "objetivo": 200, "escala_bono": [{"desde_pct": 100, "monto": 100000}],
+                          "legajo_no_presentado_pct": 2.8, "legajo_pct": 21.1})
+    assert abs(r_ene["meses"][5]["acumulado"] / 218 - 517_000) / 517_000 < 0.04
+    assert abs(r_ene["por_linea"]["legajos"] - (-52_000)) / 52_000 < 0.05
     assert abs(r["por_linea"]["mora"] - (-140_000)) / 140_000 < 0.10            # 28 % de líneas × ~500.000
-    assert abs(r["por_linea"]["cuota2_esperada"] - 238_000) / 238_000 < 0.05     # 93 % cobra, 92 % completa
+    assert abs(r["por_linea"]["cuota2_esperada"] - 238_000) / 238_000 < 0.05     # 96 % cobra (con legajo), 92 % completa
+    # Legajo NO PRESENTADO: 100 % de la cuota 1, sin cuota 2 y sin mora. Legajo incompleto: 50 % y cuota 2 a la mitad.
+    np_ = simular_gpon({"ventas": 100, "objetivo": 100, "bonos_activos": False, "legajo_no_presentado_pct": 50, "legajo_pct": 0, "mora_pct_lineas": 0, "otros_pct": 0})
+    assert np_["meses"][1]["legajos"] == -round(50 * np_["derivados"]["cuota1_ponderada"])
+    ok = simular_gpon({"ventas": 100, "objetivo": 100, "bonos_activos": False, "legajo_no_presentado_pct": 0, "legajo_pct": 0, "mora_pct_lineas": 0, "otros_pct": 0})
+    assert abs(np_["meses"][2]["cuota2"] - ok["meses"][2]["cuota2"] / 2) <= 1
+    mora_np = simular_gpon({"ventas": 100, "objetivo": 100, "legajo_no_presentado_pct": 50})
+    mora_ok = simular_gpon({"ventas": 100, "objetivo": 100, "legajo_no_presentado_pct": 0})
+    assert abs(sum(m["mora"] for m in mora_np["meses"]) - sum(m["mora"] for m in mora_ok["meses"]) / 2) <= 2
     # el bono se paga en TODAS las líneas IF en estado A
     assert r["mes0"]["bono_fijo"] == 218 * 100000
     # recupero de documentación: 55.000 por venta GPON, dentro de los costos
