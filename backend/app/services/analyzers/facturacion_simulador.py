@@ -618,8 +618,13 @@ def _aplicar_afectado(base: dict, ov: dict | None) -> dict:
 
 def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
                   meses_afectados: dict | None = None, bonos_adicionales_por_mes: list[float] | None = None,
-                  nombres_meses: list[str] | None = None) -> dict[str, Any]:
+                  nombres_meses: list[str] | None = None, aporte_externo_por_mes: list[float] | None = None) -> dict[str, Any]:
     """Balance de 12 o 18 meses con estructura FIJA seteada en el mes 1.
+
+    `aporte_externo_por_mes` (simulador CONVERGENTE): resultado que otro negocio vendido por la
+    MISMA estructura (GPON) deja cada mes. No entra en los flujos de pospago; solo se suma al
+    calcular las ventas mínimas del mes (ventas_equilibrio) y los meses en riesgo, porque la
+    estructura fija se cubre con los dos negocios juntos.
 
     - El mes 1 define objetivo CO, tarifas, zafra, escalas y la estructura
       (vendedores, supervisores, backoffice, coordinación, controllers).
@@ -732,11 +737,15 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         # estructura fija (bisección sobre v; los bonos hacen escalones, se busca el primer v que cierra).
         pm_t = _aplicar_afectado(base, afectados.get(t))
 
+        aportes = list(aporte_externo_por_mes or [])
+        aporte_t = float(aportes[t] or 0.0) if t < len(aportes) else 0.0
+        fila["aporte_externo"] = round(aporte_t)
+
         def _resultado_con(v: float) -> float:
             c2 = simular_facturacion({**pm_t, "ventas": v, "bono_adicional": bonos_ad[t], "_sin_breakeven": True})
             cst, _ = _costos_y_margen(c2["parametros"]["costos"], v, c2["mes0"], c2["bruto_mes0"],
                                       c2["neto_6"], c2["neto_12"], headcount=headcount)
-            return c2["bruto_mes0"] + fila["ajustes"] - cst["total"]
+            return c2["bruto_mes0"] + fila["ajustes"] + aporte_t - cst["total"]
         hi = max(ventas[t] * 3, 500.0)
         if _resultado_con(0.0) >= 0:
             fila["ventas_equilibrio"] = 0

@@ -233,14 +233,20 @@ def _aplicar_afectado(base: dict, ov: dict | None) -> dict:
 
 def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
                        bonos_adicionales_por_mes: list[float] | None = None, nombres_meses: list[str] | None = None,
-                       meses_afectados: dict | None = None) -> dict[str, Any]:
+                       meses_afectados: dict | None = None, headcount_costos: dict | None = None,
+                       vendedores_compartidos: int | None = None) -> dict[str, Any]:
     """Proyección ANUAL GPON, igual que pospago: el mes 1 fija la estructura (headcount) y cada
     mes se superponen los flujos de todas las cohortes anteriores (cuota 2, legajos, mora,
     recálculo). Aditiva al guaraní. Después del horizonte queda la cola (cuota 2 por cobrar,
     mora y recálculo por devolver). La salida usa las MISMAS claves que el anual de pospago
     (clawbacks = mora + otros reversos, recalculo_productividad = recálculo del bono fijo,
     bono_productividad = bono fijo, residual / portabilidad / bono_efectividad = 0) para que
-    el simulador anual, la historia y el cierre sean los mismos."""
+    el simulador anual, la historia y el cierre sean los mismos.
+
+    `headcount_costos`: estructura con la que se calculan los costos (simulador CONVERGENTE: la
+    dotación es la de pospago, así que GPON corre con headcount 0 y solo paga comisión, plus,
+    operativos y logística por venta). `vendedores_compartidos`: vendedores reales de esa
+    estructura, para informar activaciones GPON por asesor."""
     base = parametros_gpon(params)
     h = int(horizonte) if int(horizonte) in (12, 18, 24) else 12
     ventas = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:h]
@@ -259,7 +265,8 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
     for t in range(h):
         pm = _aplicar_afectado(base, afectados.get(t))
         cohortes.append(simular_gpon({**pm, "ventas": ventas[t], "bono_adicional": bonos_ad[t]}))
-    headcount = cohortes[0]["costos"]["headcount"]
+    headcount = headcount_costos or cohortes[0]["costos"]["headcount"]
+    vendedores_info = vendedores_compartidos if vendedores_compartidos is not None else headcount["vendedores"]
     filas: list[dict] = []
     acum = 0
     for t in range(h):
@@ -273,7 +280,7 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
                 "activaciones_cuota1": c["mes0"]["activaciones_cuota1"], "portabilidad": 0,
                 "bono_productividad": c["mes0"]["bono_fijo"], "bono_fijo": c["mes0"]["bono_fijo"], "bono_efectividad": 0,
                 "bono_adicional": c["mes0"]["bono_adicional"], "facturacion_bruta": c["bruto_mes0"],
-                "ventas_por_vendedor": round(ventas[t] / headcount["vendedores"], 1) if headcount["vendedores"] else 0}
+                "ventas_por_vendedor": round(ventas[t] / vendedores_info, 2) if vendedores_info else 0}
         for f in _FLUJOS:
             fila[f] = sum(cohortes[s]["meses"][t - s][f] for s in range(t) if t - s < len(cohortes[s]["meses"]))
         fila["residual"] = 0
@@ -360,8 +367,11 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
     gs = lambda v: "Gs " + f"{round(v):,}".replace(",", ".")  # noqa: E731
     n = lambda v: f"{round(v):,}".replace(",", ".")  # noqa: E731
     partes = [
-        f"{h} meses GPON con estructura fija del mes 1 ({headcount['vendedores']} vendedores, {headcount['supervisores']} supervisores, "
-        f"{headcount['backoffice']} backoffice; costo fijo {gs(fijo)}/mes) y objetivo de {n(float(base['objetivo']))} líneas.",
+        (f"{h} meses GPON vendidos por la estructura de pospago ({n(vendedores_info)} vendedores, sin dotación propia: solo comisión, "
+         f"plus, operativos y logística por venta GPON) y objetivo de {n(float(base['objetivo']))} líneas."
+         if headcount_costos is not None else
+         f"{h} meses GPON con estructura fija del mes 1 ({headcount['vendedores']} vendedores, {headcount['supervisores']} supervisores, "
+         f"{headcount['backoffice']} backoffice; costo fijo {gs(fijo)}/mes) y objetivo de {n(float(base['objetivo']))} líneas."),
         f"Activaciones del período: {n(anual['ventas'])}. Facturación bruta {gs(anual['facturacion_bruta'])}; con cuota 2, legajos, mora y recálculo "
         f"el ingreso neto liquidado es {gs(ingreso_neto)}. Costos {gs(anual['costos'])}. Resultado del período {gs(resultado)} ({anual['margen_pct']}%).",
     ]

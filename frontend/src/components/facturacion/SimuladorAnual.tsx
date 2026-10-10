@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { AppShell } from "@/components/AppShell";
 import { KpiCard } from "@/components/KpiCard";
@@ -37,15 +37,20 @@ type Cfg = {
   textoSinBonos: string; textoConBonos: string; ajusteTxt: string; ajusteHint: string; ajustesTxt: string; cobrosTxt: string; devTxt: string; olaTxt: string;
   eerrRows: EerrRow[]; bonosCols: Array<[string, string]>; verificado: boolean; observacion: boolean;
   pHist: (p: any) => any;
+  /** Convergente (móvil + GPON por la misma estructura): EERR con las dos secciones y los costos variables GPON. */
+  eerrRowsConvergente?: EerrRow[];
 };
+
+/** Ideal convergente: 3 GPON por asesor y mes, además del pospago. */
+const GPON_POR_ASESOR_IDEAL = 3;
 
 /** Configuración por negocio: móvil (pospago) y GPON usan el MISMO simulador anual con sus
  *  propias variables, motor y etiquetas. */
 const NEGOCIOS: Record<Negocio, Cfg> = {
   movil: {
-    nombre: "Televentas Claro", titulo: "Simulador Anual",
-    intro: "Balance a 12 o 18 meses. Seteás el mes 1 (objetivo, tarifas, zafra y estructura); los meses siguientes solo cambian las ventas. La estructura fija del mes 1 se mantiene todo el año: lo que varía con las ventas son los bonos, las comisiones y la logística. Cada mes liquida su facturación más los ajustes (chargeback, cuota 2, residual) de los meses anteriores.",
-    paramsPath: "/api/v1/facturacion/simulador/parametros", anualPath: "/api/v1/facturacion/simulador/anual",
+    nombre: "Televentas Claro · pospago + GPON", titulo: "Simulador Convergente",
+    intro: "Balance a 12 o 18 meses del negocio convergente: la misma estructura vende pospago y GPON. Seteás el mes 1 (objetivo, tarifas, zafra y estructura, dimensionada con el pospago); los meses siguientes cambian las ventas de pospago y los GPON por asesor (ideal 3). GPON entra con su modelo de facturación completo (cuota 1, bono fijo, cuota 2, legajos, mora, recálculo) sin agregar dotación: solo comisión, plus y operativos por venta GPON. Cada mes liquida la facturación de los dos negocios más los ajustes de los meses anteriores.",
+    paramsPath: "/api/v1/facturacion/convergente/parametros", anualPath: "/api/v1/facturacion/convergente/anual",
     Variables: VariablesNegocio, campos: CAMPOS_AFECTABLES, objetivoKey: "objetivo_co", objetivoLabel: "objetivo CO", unidad: "ventas",
     textoSinBonos: "sin bono productividad ni bono efectividad", textoConBonos: "cada mes liquida según las escalas de Claro",
     ajusteTxt: "cuota 1, cuota 2 y plus de portabilidad", ajusteHint: "Simula una renegociación con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados. La comisión y el plus de los vendedores son montos fijos por venta y no cambian con el ajuste: la mejora es íntegramente margen de Voicenter.",
@@ -64,6 +69,30 @@ const NEGOCIOS: Record<Negocio, Cfg> = {
     ],
     bonosCols: [["Bono productividad", "bono_productividad"], ["Bono efectividad", "bono_efectividad"]], verificado: true, observacion: true,
     pHist: (p) => p,
+    eerrRowsConvergente: [
+      ["Ventas pospago", "ventas", "int", "head"], ["Activaciones GPON", "ventas_gpon", "int", "head"],
+      ["POSPAGO · INGRESOS DEL MES", null, null, "sep"],
+      ["Activaciones (cuota 1)", "activaciones_cuota1", "gs", "row"], ["Plus portabilidad", "portabilidad", "gs", "row"],
+      ["Bono productividad", "bono_productividad", "gs", "row"], ["Bono efectividad", "bono_efectividad", "gs", "row"], ["Bono adicional (a mano)", "bono_adicional", "gs", "row"],
+      ["POSPAGO · AJUSTES DE COHORTES ANTERIORES", null, null, "sep"],
+      ["+ Residual", "residual", "gs", "row"], ["+ Cuota 2", "cuota2", "gs", "row"], ["− Legajos", "legajos", "gs", "row"],
+      ["− Devoluciones por caídas", "clawbacks", "gs", "row"], ["− Devolución bono efectividad", "clawback_bonos", "gs", "row"], ["− Recálculo bono productividad", "recalculo_productividad", "gs", "row"],
+      ["Ingreso neto pospago", "ingreso_neto_movil", "gs", "sub"],
+      ["GPON · INGRESOS DEL MES", null, null, "sep"],
+      ["Cuota 1 GPON", "gpon_activaciones_cuota1", "gs", "row"], ["Bono fijo GPON", "gpon_bono_fijo", "gs", "row"], ["Bono adicional GPON", "gpon_bono_adicional", "gs", "row"],
+      ["GPON · AJUSTES DE COHORTES ANTERIORES", null, null, "sep"],
+      ["+ Cuota 2 GPON", "gpon_cuota2", "gs", "row"], ["− Legajos GPON", "gpon_legajos", "gs", "row"], ["− Mora neta GPON (penalizaciones − reversos)", "gpon_mora", "gs", "row"],
+      ["− Recálculo bono fijo GPON", "gpon_recalculo", "gs", "row"], ["− Otros reversos GPON", "gpon_otros", "gs", "row"],
+      ["Ingreso neto GPON", "ingreso_neto_gpon", "gs", "sub"],
+      ["INGRESO NETO CONVERGENTE", "ingreso_neto", "gs", "total"], ["COSTOS", null, null, "sep"],
+      ["Estructura fija (salarios, cargas, premios logística)", "_fijo", "gs", "row"], ["Comisiones pospago (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
+      ["Plus pospago (sin cargas)", "_plus", "gs", "row"], ["Logística de entregas pospago", "_logistica", "gs", "row"], ["Operativos pospago", "_operativos", "gs", "row"],
+      ["Comisiones GPON (con IPS y aguinaldo)", "_gpon_comisiones", "gs", "row"], ["Plus GPON (sin cargas)", "_gpon_plus", "gs", "row"],
+      ["Logística GPON", "_gpon_logistica", "gs", "row"], ["Operativos GPON", "_gpon_operativos", "gs", "row"],
+      ["TOTAL COSTOS", "costo_total", "gs", "sub"], ["RESULTADO CONVERGENTE", "resultado", "gs", "total"],
+      ["Resultado pospago", "resultado_movil", "gs", "pct"], ["Resultado GPON", "resultado_gpon", "gs", "pct"],
+      ["Margen %", "margen_pct", "pct", "pct"], ["Acumulado", "acumulado", "gs", "pct"],
+    ],
   },
   gpon: {
     nombre: "Negocio GPON · fibra y TV", titulo: "Simulador Anual GPON",
@@ -273,6 +302,13 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const cfg = NEGOCIOS[negocio];
   const [p, setP] = useState<any>(null);
   const [defaults, setDefaults] = useState<any>(null);
+  // ---- Convergente (solo móvil): GPON vendido por la MISMA estructura de pospago ----
+  const esConvergente = negocio === "movil";
+  const [pg, setPg] = useState<any>(null);                       // variables GPON (planes, cuota 2, mora, bono fijo, costos variables)
+  const [pgDefaults, setPgDefaults] = useState<any>(null);
+  const [gponActivo, setGponActivo] = useState(true);             // incluir GPON en el balance
+  const [gponAsesor, setGponAsesor] = useState<number[]>([]);     // GPON por asesor, por mes (ideal 3)
+  const [gponObjetivoAuto, setGponObjetivoAuto] = useState(true); // objetivo del bono fijo = vendedores × 3
   const [seteado, setSeteado] = useState(false);
   const [horizonte, setHorizonte] = useState<12 | 18>(12);
   const [ventas, setVentas] = useState<number[]>([]);
@@ -308,6 +344,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
       // escenario IDEAL); "Restaurar valores reales" vuelve a los calibrados del backend.
       setP(negocio === "movil" ? aplicarPreset(d.parametros, PRESET_INICIAL_MOVIL) : d.parametros);
       setDefaults(d.parametros);
+      if (d.parametros_gpon) { setPg(d.parametros_gpon); setPgDefaults(d.parametros_gpon); }
     }).catch((e) => setError(e.message));
   }, [cfg.paramsPath, negocio]);
 
@@ -317,8 +354,29 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const sinDescEfec = negocio === "movil" && p?.devolver_bono_efectividad === false;
   const [resConDesc, setResConDesc] = useState<any>(null);   // misma simulación CON los descuentos, para comparar
 
-  const simular = useCallback((params: any, vpm: number[], h: number, af: Afectados, bad: number[], nm: string[]) => {
-    const body = (pp: any) => JSON.stringify({ parametros: pp, ventas_por_mes: vpm, horizonte: h, meses_afectados: af, bonos_adicionales_por_mes: bad, nombres_meses: nm });
+  // ---- Convergente: derivados ----
+  const gponOn = esConvergente && gponActivo && !!pg;
+  const vendedoresMes1 = p && Number(p.costos?.ventas_por_vendedor) > 0 ? Math.ceil((Number(p.ventas) || 0) / Number(p.costos.ventas_por_vendedor)) : 0;
+  const vendedoresRef = res?.headcount?.vendedores ?? vendedoresMes1;
+  const asesorMes1 = gponAsesor[0] ?? GPON_POR_ASESOR_IDEAL;
+  const setAsesorMes1 = (v: number) => setGponAsesor((prev) => (prev.length ? prev.map((x, i) => (i === 0 ? Math.max(v, 0) : x)) : [Math.max(v, 0)]));
+  const setGponAsesorMes = (i: number, v: number) => setGponAsesor((prev) => prev.map((x, j) => (j === i ? Math.max(v, 0) : x)));
+  const gponReq = useMemo(() => (esConvergente && pg ? {
+    activo: gponActivo,
+    parametros: { ...pg, objetivo: gponObjetivoAuto ? Math.max(Math.round(vendedoresMes1 * GPON_POR_ASESOR_IDEAL), 1) : pg.objetivo },
+    por_asesor_por_mes: gponAsesor.length ? gponAsesor : [GPON_POR_ASESOR_IDEAL],
+  } : null), [esConvergente, pg, gponActivo, gponObjetivoAuto, vendedoresMes1, gponAsesor]);
+  // Textos de cobros / devoluciones según haya GPON en el balance.
+  const txt = gponOn ? {
+    ajustesTxt: "residual, cuota 2 y caídas de pospago; cuota 2, mora y recálculo GPON",
+    cobrosTxt: "cuota 2 y residual de pospago, cuota 2 GPON",
+    devTxt: "chargebacks, legajos y devolución de bonos de pospago; mora, legajos y recálculo GPON",
+    olaTxt: "caídas del chargeback, recálculo del bono y legajos de pospago; mora y recálculo GPON",
+  } : { ajustesTxt: cfg.ajustesTxt, cobrosTxt: cfg.cobrosTxt, devTxt: cfg.devTxt, olaTxt: cfg.olaTxt };
+  const eerrRows = gponOn && cfg.eerrRowsConvergente ? cfg.eerrRowsConvergente : cfg.eerrRows;
+
+  const simular = useCallback((params: any, vpm: number[], h: number, af: Afectados, bad: number[], nm: string[], gq: any) => {
+    const body = (pp: any) => JSON.stringify({ parametros: pp, ventas_por_mes: vpm, horizonte: h, meses_afectados: af, bonos_adicionales_por_mes: bad, nombres_meses: nm, ...(gq ? { gpon: gq } : {}) });
     apiFetch<any>(cfg.anualPath, { method: "POST", body: body(params) })
       .then((d) => { setRes(d); setError(null); }).catch((e) => setError(e.message));
     if (params?.devolver_bono_productividad === false || params?.devolver_bono_efectividad === false) {
@@ -332,15 +390,16 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   useEffect(() => {
     if (!seteado || !p || ventas.length !== horizonte) return;
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => simular(p, ventas, horizonte, afectados, bonosAd, nombres), 250);
+    timer.current = setTimeout(() => simular(p, ventas, horizonte, afectados, bonosAd, nombres, gponReq), 250);
     return () => clearTimeout(timer.current);
-  }, [seteado, p, ventas, horizonte, afectados, bonosAd, nombres, simular]);
+  }, [seteado, p, ventas, horizonte, afectados, bonosAd, nombres, simular, gponReq]);
 
   const setear = () => {
     const v1 = Number(p.ventas) || 0;
     setVentas([v1, ...Array(horizonte - 1).fill(v1)]);
     setBonosAd((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? 0));
     setNombres((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? ""));
+    setGponAsesor((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? prev[0] ?? GPON_POR_ASESOR_IDEAL));
     setSeteado(true);
   };
   const cambiarHorizonte = (h: 12 | 18) => {
@@ -352,6 +411,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
     });
     setBonosAd((prev) => Array.from({ length: h }, (_, i) => prev[i] ?? 0));
     setNombres((prev) => Array.from({ length: h }, (_, i) => prev[i] ?? ""));
+    setGponAsesor((prev) => Array.from({ length: h }, (_, i) => prev[i] ?? prev[prev.length - 1] ?? GPON_POR_ASESOR_IDEAL));
   };
   const setNombre = (i: number, v: string) => setNombres((prev) => prev.map((x, j) => (j === i ? v.slice(0, 40) : x)));
   const setBonoAd = (i: number, v: number) => setBonosAd((prev) => prev.map((x, j) => (j === i ? Math.max(v, 0) : x)));
@@ -377,18 +437,30 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const a = res?.anual;
   const hc = res?.headcount;
 
+
   const getSnapshot = (): Snapshot => ({
-    parametros: p, ventas_por_mes: ventas, horizonte, meses_afectados: afectados, bonos_adicionales_por_mes: bonosAd, nombres_meses: nombres,
+    // Convergente: la configuración GPON viaja dentro de parámetros (el motor de pospago la ignora) y se guarda con la simulación.
+    parametros: esConvergente ? { ...p, convergente: { activo: gponActivo, por_asesor_por_mes: gponAsesor, parametros_gpon: pg, objetivo_auto: gponObjetivoAuto } } : p,
+    ventas_por_mes: ventas, horizonte, meses_afectados: afectados, bonos_adicionales_por_mes: bonosAd, nombres_meses: nombres,
     resumen: a ? {
       ventas: a.ventas, facturacion_bruta: a.facturacion_bruta, ingreso_neto: a.ingreso_neto, costos: a.costos,
       resultado: a.resultado, margen_pct: a.margen_pct, resultado_con_cola: a.resultado_con_cola,
       bonos_activos: p?.bonos_activos !== false, ajuste_comisiones_pct: Number(p?.ajuste_comisiones_pct || 0),
       sin_descuento_bono_productividad: sinDescProd, sin_descuento_bono_efectividad: sinDescEfec, bono_unico: bonoUnico,
+      convergente: gponOn, ventas_gpon: a.ventas_gpon ?? 0, resultado_gpon: a.resultado_gpon ?? 0, gpon_por_asesor: a.gpon_por_asesor ?? 0,
     } : {},
   });
   const abrirSimulacion = (s: any) => {
     const h = (s.horizonte === 18 ? 18 : 12) as 12 | 18;
-    setP(s.parametros);
+    const { convergente: cv, ...paramsBase } = (s.parametros || {}) as any;
+    setP(paramsBase);
+    if (esConvergente) {
+      // Simulaciones anteriores al convergente no tienen GPON: se abren como pospago puro para reproducir lo guardado.
+      setGponActivo(!!cv && cv.activo !== false);
+      setGponAsesor(Array.from({ length: h }, (_, i) => Number(cv?.por_asesor_por_mes?.[i] ?? cv?.por_asesor_por_mes?.[0] ?? GPON_POR_ASESOR_IDEAL)));
+      if (cv?.parametros_gpon) setPg(cv.parametros_gpon);
+      setGponObjetivoAuto(cv ? cv.objetivo_auto !== false : true);
+    }
     setHorizonte(h);
     const v = (s.ventas_por_mes || []).map(Number);
     while (v.length < h) v.push(v[v.length - 1] ?? Number(s.parametros?.ventas) ?? 0);
@@ -406,7 +478,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   return (
     <AppShell>
       <PrintCover titulo={`${cfg.titulo} · ${horizonte} meses`}
-        periodo={a ? `${formatInt(a.ventas)} ${cfg.unidad} en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%)${p?.bonos_activos === false ? " · SIN BONOS" : ""}${bonoUnico ? " · BONO ÚNICO PROPUESTO" : sinDescProd || sinDescEfec ? ` · SIN DESCUENTO SOBRE BONO ${[sinDescProd && "PRODUCTIVIDAD", sinDescEfec && "LOGÍSTICA"].filter(Boolean).join(" Y ")}` : ""}${Number(p?.ajuste_comisiones_pct || 0) ? ` · COMISIONES ${Number(p.ajuste_comisiones_pct) > 0 ? "+" : ""}${Number(p.ajuste_comisiones_pct)}%` : ""} · ${cfg.nombre}` : undefined} />
+        periodo={a ? `${formatInt(a.ventas)} ${cfg.unidad}${gponOn ? ` + ${formatInt(a.ventas_gpon ?? 0)} GPON (${a.gpon_por_asesor ?? 0} por asesor)` : ""} en ${horizonte} meses · ingreso neto ${formatGs(a.ingreso_neto)} · resultado ${formatGs(a.resultado)} (${a.margen_pct}%)${p?.bonos_activos === false ? " · SIN BONOS" : ""}${bonoUnico ? " · BONO ÚNICO PROPUESTO" : sinDescProd || sinDescEfec ? ` · SIN DESCUENTO SOBRE BONO ${[sinDescProd && "PRODUCTIVIDAD", sinDescEfec && "LOGÍSTICA"].filter(Boolean).join(" Y ")}` : ""}${Number(p?.ajuste_comisiones_pct || 0) ? ` · COMISIONES ${Number(p.ajuste_comisiones_pct) > 0 ? "+" : ""}${Number(p.ajuste_comisiones_pct)}%` : ""} · ${cfg.nombre}` : undefined} />
 
       <div className="mb-2 text-xs text-brand-slate no-print">
         <Link href="/televentas-claro" className="hover:text-brand-primary">Televentas Claro</Link>
@@ -451,8 +523,40 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
       {/* ===== Paso 1: setear el mes 1 ===== */}
       {p && !seteado && (
         <div className="grid lg:grid-cols-5 gap-6">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-4">
             <cfg.Variables p={p} setP={setP} defaults={defaults} titulo="Mes 1 — variables y estructura" />
+            {esConvergente && (
+              <section className={`rounded-md border-2 p-3 space-y-3 ${gponActivo ? "border-brand-cyan bg-brand-cyan/5" : "border-brand-border bg-white"}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-cyan">Convergente · GPON por la misma estructura</div>
+                    <div className="text-[11px] text-brand-graphite">Los <b>{formatInt(vendedoresMes1)}</b> vendedores del pospago venden además GPON. Activaciones GPON = vendedores × GPON por asesor. Ideal: 3 por asesor.</div>
+                  </div>
+                  <label className="flex items-center gap-2 text-sm font-semibold text-brand-ink">
+                    <input type="checkbox" checked={gponActivo} onChange={(e) => setGponActivo(e.target.checked)} className="accent-brand-cyan w-4 h-4" />
+                    Incluir GPON
+                  </label>
+                </div>
+                {gponActivo && (
+                  <>
+                    <div className="flex items-center gap-3 rounded-md border border-brand-cyan/50 bg-white px-2 py-1.5">
+                      <span className="flex-1 min-w-0">
+                        <span className="block text-sm font-bold text-brand-cyan">GPON por asesor (mes 1)</span>
+                        <span className="block text-[10px] text-brand-slate">{formatInt(vendedoresMes1)} vendedores × {asesorMes1} = <b>{formatInt(Math.round(vendedoresMes1 * asesorMes1))}</b> activaciones GPON en el mes 1 · los meses siguientes se cargan en el paso 2</span>
+                      </span>
+                      <span className="flex items-center gap-1 shrink-0">
+                        <NumeroInput step={0.5} min={0} value={asesorMes1} onChange={setAsesorMes1} className="input w-[120px] !py-1 text-sm text-right font-bold text-brand-cyan border-brand-cyan" />
+                        <button onClick={() => setAsesorMes1(GPON_POR_ASESOR_IDEAL)} className="text-[10px] font-bold text-brand-cyan hover:underline w-5" title="Ideal: 3 por asesor">3</button>
+                      </span>
+                    </div>
+                    {pg && (
+                      <VariablesGpon p={pg} setP={setPg} defaults={pgDefaults} titulo="Variables GPON" convergente
+                        vendedores={vendedoresMes1} porAsesor={asesorMes1} objetivoAuto={gponObjetivoAuto} setObjetivoAuto={setGponObjetivoAuto} />
+                    )}
+                  </>
+                )}
+              </section>
+            )}
           </div>
           <div className="lg:col-span-3">
             <section className="card p-6 border-2 border-brand-primary">
@@ -464,6 +568,8 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                 {" "}{Math.ceil(Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.ventas_por_vendedor) || 1, 1)) / Math.max(Number(p.costos.supervisor_cada_vendedores) || 1, 1))} supervisores,
                 {" "}{Math.ceil((Number(p.ventas) || 0) / Math.max(Number(p.costos.backoffice_cada_ventas) || 1, 1))} backoffice, {p.costos.coordinadores} coordinador y {p.costos.controllers} controllers{Number(p.costos.subgerencia_salario) > 0 ? <> y <b className="text-brand-primary">1 SubGerencia Comercial</b> ({formatGs(Number(p.costos.subgerencia_salario))}/mes, en análisis)</> : null}.
                 Esa estructura y el {cfg.objetivoLabel} de <b>{formatInt(Number(p[cfg.objetivoKey]) || 0)}</b> quedan fijos para los {horizonte} meses.
+                {esConvergente && gponActivo && <> Con GPON incluido, esos mismos vendedores venden <b>{asesorMes1} GPON por asesor</b>: <b>{formatInt(Math.round(vendedoresMes1 * asesorMes1))} activaciones GPON</b> por mes con la misma dotación, con su propia facturación, cuota 2, mora y recálculo.</>}
+                {esConvergente && !gponActivo && <> GPON está excluido: el balance es solo pospago.</>}
               </p>
               <button onClick={setear} disabled={!(Number(p.ventas) > 0)} className="btn-primary !px-6 !py-3 text-base shadow-lg disabled:opacity-50">
                 Setear mes 1 y fijar la estructura →
@@ -485,6 +591,8 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   {hc ? <><b>{hc.vendedores}</b> vendedores · <b>{hc.supervisores}</b> supervisores · <b>{hc.backoffice}</b> backoffice · {hc.coordinadores} coordinador · {hc.controllers} controllers{hc.subgerencia ? <> · <b className="text-brand-primary">1 SubGerencia Comercial</b></> : null}</> : "calculando…"}
                   {" "}· {cfg.objetivoLabel} <b>{formatInt(Number(p[cfg.objetivoKey]))}</b> · {p.costos.ventas_por_vendedor} ventas/vendedor
                   {a ? <> · costo fijo <b>{formatGs(a.costos_fijos_mes)}</b>/mes</> : null}
+                  {gponOn && hc ? <> · <span className="text-brand-cyan">GPON <b>{asesorMes1}</b> por asesor = <b>{formatInt(hc.ventas_gpon_mes1?? Math.round(vendedoresRef * asesorMes1))}</b> activaciones/mes</span></> : null}
+                  {esConvergente && !gponActivo ? <span className="ml-2 px-1.5 py-0.5 rounded bg-brand-border text-brand-graphite text-[10px] font-bold">SIN GPON</span> : null}
                   {p.bonos_activos === false ? <span className="ml-2 px-1.5 py-0.5 rounded bg-brand-ink text-white text-[10px] font-bold">SIN BONOS</span> : null}
                 </div>
               </div>
@@ -521,6 +629,46 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(0.98, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Caer 2% mensual</button>
               <span className="text-[11px] text-brand-slate ml-auto">✎ sobre un mes = variaciones propias de ese mes (menos porta, otra efectividad, otro mix…)</span>
             </div>
+
+            {/* ===== Convergente: GPON por asesor, por mes ===== */}
+            {esConvergente && (
+              <div className={`mt-4 rounded-md border-2 p-3 ${gponOn ? "border-brand-cyan bg-brand-cyan/5" : "border-brand-border bg-white"}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-cyan">GPON por asesor · convergente</div>
+                    <div className="text-[11px] text-brand-graphite">
+                      Los mismos <b>{formatInt(vendedoresRef)}</b> vendedores venden GPON: activaciones GPON del mes = vendedores × GPON por asesor. Ideal <b>3</b> por asesor.
+                      {gponOn && a ? <> En esta simulación: <b className="text-brand-cyan">{formatInt(a.ventas_gpon ?? 0)}</b> activaciones GPON en {horizonte} meses, ingreso neto GPON <b>{formatGs(a.ingreso_neto_gpon ?? 0)}</b>.</> : null}
+                      {!gponActivo ? " GPON excluido: el balance es solo pospago." : null}
+                    </div>
+                  </div>
+                  <div className="no-print flex flex-wrap items-center gap-3">
+                    {gponOn && (
+                      <>
+                        <button onClick={() => setGponAsesor((prev) => prev.map(() => GPON_POR_ASESOR_IDEAL))} className="text-[11px] text-brand-cyan font-semibold hover:underline">Ideal: 3 por asesor</button>
+                        <button onClick={() => setGponAsesor((prev) => prev.map((x, i) => (i === 0 ? x : prev[0])))} className="text-[11px] text-brand-cyan font-semibold hover:underline">Igualar todos al mes 1</button>
+                      </>
+                    )}
+                    <label className="flex items-center gap-2 text-xs font-semibold text-brand-ink">
+                      <input type="checkbox" checked={gponActivo} onChange={(e) => setGponActivo(e.target.checked)} className="accent-brand-cyan w-4 h-4" />
+                      Incluir GPON
+                    </label>
+                  </div>
+                </div>
+                {gponOn && (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-12 gap-2 mt-3">
+                    {gponAsesor.map((k, i) => (
+                      <label key={i} className={`text-[10px] ${k >= GPON_POR_ASESOR_IDEAL ? "text-brand-cyan font-bold" : "text-brand-slate"}`}>
+                        <span className="block truncate" title={nombreMes(i)}>{nombreCorto(i)}</span>
+                        <NumeroInput step={0.5} min={0} value={k} onChange={(n) => setGponAsesorMes(i, n)}
+                          className={`input !py-1 !px-1.5 text-sm text-right w-full ${k >= GPON_POR_ASESOR_IDEAL ? "border-brand-cyan" : ""}`} />
+                        <span className="block text-right text-[10px] text-brand-graphite font-mono">{formatInt(Math.round(vendedoresRef * k))} GPON</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ===== Bono adicional a mano, por mes ===== */}
             <div className="mt-4 rounded-md border-2 border-brand-orange bg-brand-orange/5 p-3">
@@ -798,10 +946,10 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
             <>
               <Bloque titulo="Estructura operativa necesaria" hint={hc ? `${hc.vendedores} vendedores · ${hc.supervisores} supervisores · ${hc.backoffice} backoffice · ${hc.total} personas · fija los ${horizonte} meses` : "estructura fija del mes 1"}>
                 <EstructuraOperativa costos={meses[0]?.costos} p={p} ventas={ventas[0] ?? 0} sinCard
-                  intro={`Estructura del mes 1, fija para los ${horizonte} meses. Dimensionada para ${formatInt(ventas[0] ?? 0)} ventas efectivas`} />
+                  intro={`Estructura del mes 1, fija para los ${horizonte} meses. Dimensionada para ${formatInt(ventas[0] ?? 0)} ventas efectivas de pospago${gponOn ? `; la misma dotación vende además ${asesorMes1} GPON por asesor (${formatInt(hc?.ventas_gpon_mes1 ?? 0)} activaciones GPON en el mes 1) sin personas adicionales` : ""}`} />
               </Bloque>
 
-              <Bloque titulo="Datos generales operativos y financieros" hint={`${horizonte} meses · ${formatInt(a.ventas)} ventas`}>
+              <Bloque titulo="Datos generales operativos y financieros" hint={`${horizonte} meses · ${formatInt(a.ventas)} ventas${gponOn ? ` + ${formatInt(a.ventas_gpon ?? 0)} GPON` : ""}`}>
               <div className="rounded-md border-l-4 border-brand-ink bg-brand-bg-soft px-4 py-3 mb-4">
                 <h3 className="text-[11px] uppercase tracking-wider2 text-brand-slate font-bold mb-1">Conclusión del período ({horizonte} meses)</h3>
                 <p className="text-[15px] text-brand-ink leading-relaxed font-medium">{res.conclusion}</p>
@@ -819,6 +967,24 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   <Marcable key={key} marcado={esMarcado(key)} onToggle={() => toggleMarca(key, label)}>{card}</Marcable>
                 ))}
               </div>
+              {gponOn && a.ventas_gpon != null && (
+                <>
+                  <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-cyan mt-4 mb-2">Convergente · pospago y GPON por la misma estructura</div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+                    {([
+                      ["kpi:gpon_ventas", "Activaciones GPON", <KpiCard key="g1" label={`Activaciones GPON en ${horizonte} meses`} value={formatInt(a.ventas_gpon)} hint={`${a.gpon_por_asesor} por asesor · ${formatInt(hc?.vendedores ?? 0)} vendedores`} accent="neutral" />],
+                      ["kpi:gpon_bruta", "Facturación bruta GPON", <KpiCard key="g2" label="Facturación bruta GPON" value={formatGs(a.facturacion_bruta_gpon ?? 0)} hint="cuota 1 y bono fijo" accent="primary" />],
+                      ["kpi:gpon_neto", "Ingreso neto GPON", <KpiCard key="g3" label="Ingreso neto GPON" value={formatGs(a.ingreso_neto_gpon ?? 0)} hint={`${a.aporte_gpon_ingreso_pct ?? 0}% del convergente · mora ${formatGs(Math.abs(a.gpon_mora ?? 0))}`} accent="cyan" />],
+                      ["kpi:gpon_costos", "Costos variables GPON", <KpiCard key="g4" label="Costos variables GPON" value={formatGs(a.costos_gpon ?? 0)} hint="comisión, plus y operativos · sin estructura" accent="orange" />],
+                      ["kpi:gpon_resultado", "Resultado GPON", <KpiCard key="g5" label="Resultado GPON" value={formatGs(a.resultado_gpon ?? 0)} hint={`${a.margen_pct_gpon ?? 0}% · incremental`} accent={(a.resultado_gpon ?? 0) >= 0 ? "cyan" : "primary"} />],
+                      ["kpi:movil_resultado", "Resultado pospago", <KpiCard key="g6" label="Resultado pospago" value={formatGs(a.resultado_movil ?? 0)} hint={`${a.margen_pct_movil ?? 0}% · con toda la estructura`} accent={(a.resultado_movil ?? 0) >= 0 ? "cyan" : "primary"} />],
+                    ] as Array<[string, string, React.ReactNode]>).map(([key, label, card]) => (
+                      <Marcable key={key} marcado={esMarcado(key)} onToggle={() => toggleMarca(key, label)}>{card}</Marcable>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-brand-slate mt-2">La estructura fija se carga entera al pospago; GPON solo paga comisión, plus y operativos por venta. Por eso su resultado es incremental: lo que agrega vender GPON con la misma gente.</p>
+                </>
+              )}
               </Bloque>
 
               <Bloque titulo="Historia del negocio · línea de tiempo animada" abierto accent="primary" hint="dale play: el gráfico se construye mes a mes con sus hitos y alertas">
@@ -833,7 +999,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   ? `Sí. Los ${horizonte} meses facturan ${formatGs(a.facturacion_bruta)}; con las devoluciones y cobros que llegan dentro del período quedan ${formatGs(a.ingreso_neto)} liquidados contra ${formatGs(a.costos)} de costos. Sumando lo que las cohortes todavía tienen pendiente después del mes ${horizonte}, el negocio cierra ganando ${formatGs(v.resultado_final)} (${v.pct_sobre_ingreso}% del ingreso).`
                   : `No. Los ${horizonte} meses facturan ${formatGs(a.facturacion_bruta)}; con las devoluciones y cobros que llegan dentro del período quedan ${formatGs(a.ingreso_neto)} liquidados contra ${formatGs(a.costos)} de costos. Sumando lo que las cohortes todavía tienen pendiente después del mes ${horizonte}, el negocio cierra perdiendo ${formatGs(Math.abs(v.resultado_final))} (${v.pct_sobre_ingreso}% del ingreso).`;
                 const notas = [
-                  `Sin la cola, el período ${v.periodo_gana ? "gana" : "pierde"} ${formatGs(Math.abs(a.resultado))}. La cola ${cola.total >= 0 ? "suma" : "resta"} ${formatGs(Math.abs(cola.total))}: ${formatGs(cola.cobros)} por cobrar (${cfg.cobrosTxt}, hasta el mes ${cola.ultimo_mes_residual}) contra ${formatGs(Math.abs(cola.devoluciones))} por devolver (${cfg.devTxt} hasta el mes ${cola.ultimo_mes_caidas}).`,
+                  `Sin la cola, el período ${v.periodo_gana ? "gana" : "pierde"} ${formatGs(Math.abs(a.resultado))}. La cola ${cola.total >= 0 ? "suma" : "resta"} ${formatGs(Math.abs(cola.total))}: ${formatGs(cola.cobros)} por cobrar (${txt.cobrosTxt}, hasta el mes ${cola.ultimo_mes_residual}) contra ${formatGs(Math.abs(cola.devoluciones))} por devolver (${txt.devTxt} hasta el mes ${cola.ultimo_mes_caidas}).`,
                   v.la_cola_lo_da_vuelta
                     ? (gana ? "La cola da vuelta el resultado: el período cerraba en pérdida y lo pendiente por cobrar lo lleva a ganancia. Depende de que las líneas sigan activas según la zafra."
                             : "La cola da vuelta el resultado: el período cerraba en ganancia pero las devoluciones pendientes de las últimas cohortes la consumen.")
@@ -848,7 +1014,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                       items={[
                         { label: `Ventas en ${horizonte} meses`, valor: formatInt(a.ventas), accent: "neutral",
                           queEs: `La suma de las ventas cargadas mes a mes (${formatInt(Math.round(a.ventas / horizonte))} por mes en promedio).`,
-                          comoLeerlo: `Cada mes es una cohorte: factura en su mes y después ajusta durante los meses siguientes (${cfg.ajustesTxt}).` },
+                          comoLeerlo: `Cada mes es una cohorte: factura en su mes y después ajusta durante los meses siguientes (${txt.ajustesTxt}).` },
                         { label: "Facturación bruta", valor: formatGs(a.facturacion_bruta), accent: "primary",
                           queEs: "Lo que cada mes factura en el momento de la venta: cuota 1, plus de portabilidad y bonos, sumado en el período.",
                           comoLeerlo: "No es ingreso: una parte se devuelve cuando las líneas caen. Es el punto de partida del puente de la derecha." },
@@ -876,13 +1042,13 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                       respuesta={respuesta}
                       pasos={[
                         { label: "Facturación bruta", valor: a.facturacion_bruta, tipo: "base", nota: `${horizonte} meses de ventas` },
-                        { label: "Devoluciones dentro del período", valor: a.devoluciones_periodo, tipo: "menos", nota: `${cfg.devTxt} de las cohortes ya liquidadas` },
-                        { label: "Cobros dentro del período", valor: a.cobros_periodo, tipo: "mas", nota: `${cfg.cobrosTxt} de las cohortes anteriores` },
+                        { label: "Devoluciones dentro del período", valor: a.devoluciones_periodo, tipo: "menos", nota: `${txt.devTxt} de las cohortes ya liquidadas` },
+                        { label: "Cobros dentro del período", valor: a.cobros_periodo, tipo: "mas", nota: `${txt.cobrosTxt} de las cohortes anteriores` },
                         { label: "Ingreso neto liquidado", valor: a.ingreso_neto, tipo: "sub" },
                         { label: "Costos del período", valor: a.costos, tipo: "menos", nota: `fijos ${formatGs(a.costos_fijos_mes)}/mes + variables` },
                         { label: `Resultado a ${horizonte} meses`, valor: a.resultado, tipo: "sub" },
                         { label: `Devoluciones pendientes después del mes ${horizonte}`, valor: cola.devoluciones, tipo: "menos", nota: `caídas de las últimas cohortes, hasta el mes ${cola.ultimo_mes_caidas}` },
-                        { label: `Cobros pendientes después del mes ${horizonte}`, valor: cola.cobros, tipo: "mas", nota: `${cfg.cobrosTxt}, hasta el mes ${cola.ultimo_mes_residual}` },
+                        { label: `Cobros pendientes después del mes ${horizonte}`, valor: cola.cobros, tipo: "mas", nota: `${txt.cobrosTxt}, hasta el mes ${cola.ultimo_mes_residual}` },
                         { label: "Resultado final con todas las caídas", valor: v.resultado_final, tipo: "final", nota: `${v.pct_sobre_ingreso}% del ingreso total` },
                       ]}
                       notas={notas}
@@ -899,7 +1065,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                       <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-primary">Riesgo potencial por bajar productividad · la ola de la zafra</div>
                       <div className="font-display text-2xl text-brand-ink uppercase mt-0.5">{a.meses_en_riesgo.length} de {horizonte} meses no cubren la ola heredada</div>
                       <p className="text-[13px] text-brand-graphite leading-relaxed mt-2">
-                        Cada mes de ventas deja comprometidas devoluciones para los meses siguientes ({cfg.olaTxt}).
+                        Cada mes de ventas deja comprometidas devoluciones para los meses siguientes ({txt.olaTxt}).
                         Con ventas estables esa ola crece hasta estabilizarse alrededor del mes {a.ola_maxima_mes} ({formatGs(Math.abs(a.ola_maxima))} por mes). Si después las ventas bajan,
                         la ola sigue pegando sobre una facturación menor y el mes pierde, aunque la estructura no cambie. El área roja de los gráficos muestra esa ola y las ventas mínimas que exige.
                       </p>
@@ -947,14 +1113,19 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {cfg.eerrRows.map(([label, key, fmt, tipo]) => {
+                    {eerrRows.map(([label, key, fmt, tipo]) => {
                       const val = (m: any): number => {
                         if (!key) return 0;
-                        if (key === "_fijo") return m.costo_total - m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0)) - (m.costos.plus_vendedores ?? 0) - m.costos.logistica_entregas - m.costos.operativos;
+                        const ctMovil = m.costo_total_movil ?? m.costo_total;   // convergente: la estructura va entera al pospago
+                        if (key === "_fijo") return ctMovil - m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0)) - (m.costos.plus_vendedores ?? 0) - m.costos.logistica_entregas - m.costos.operativos;
                         if (key === "_comisiones") return m.costos.rrhh.operadores_comisiones * (1 + Number(p.costos.ips_pct) / 100 + (p.costos.aguinaldo ? 1 / 12 : 0));
                         if (key === "_plus") return m.costos.plus_vendedores ?? 0;
                         if (key === "_logistica") return m.costos.logistica_entregas;
                         if (key === "_operativos") return m.costos.operativos;
+                        if (key === "_gpon_comisiones") return m.gpon_costos?.rrhh_total ?? 0;      // comisión GPON con IPS y aguinaldo (sin estructura)
+                        if (key === "_gpon_plus") return m.gpon_costos?.plus_vendedores ?? 0;
+                        if (key === "_gpon_logistica") return m.gpon_costos?.logistica_entregas ?? 0;
+                        if (key === "_gpon_operativos") return m.gpon_costos?.operativos ?? 0;
                         return Number(m[key] ?? 0);
                       };
                       const anualVal = key === "margen_pct" ? a.margen_pct : key === "acumulado" ? a.resultado : meses.reduce((s: number, m: any) => s + val(m), 0);
@@ -1031,6 +1202,37 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   </tbody>
                 </table>
               </section>
+              {gponOn && (
+                <section className="card overflow-x-auto mt-4">
+                  <div className="px-4 pt-4">
+                    <h2 className="font-display text-lg text-brand-ink uppercase">Bono fijo GPON mes a mes</h2>
+                    <p className="text-xs text-brand-slate mb-2">Cumplimiento del objetivo GPON ({formatInt(Number(gponReq?.parametros?.objetivo ?? 0))} líneas{gponObjetivoAuto ? " = vendedores × 3" : ""}) y escalón del bono fijo. Bono GPON del período: {formatGs(a.bonos_gpon ?? 0)} · recálculo al mes 6 {formatGs(Math.abs(a.gpon_recalculo ?? 0))} · líneas en mora al cierre {formatInt(a.gpon_lineas_en_mora_final ?? 0)}.</p>
+                  </div>
+                  <table className="w-full text-xs min-w-[720px]">
+                    <thead className="bg-brand-bg text-[10px] uppercase tracking-wider2 text-brand-slate">
+                      <tr><th className="px-3 py-1.5 text-left">Mes</th><th className="px-3 py-1.5 text-right">Por asesor</th><th className="px-3 py-1.5 text-right">Activaciones GPON</th><th className="px-3 py-1.5 text-right">Cumplimiento</th><th className="px-3 py-1.5 text-center">Escalón</th><th className="px-3 py-1.5 text-right">Bono/línea</th><th className="px-3 py-1.5 text-right">Bono fijo</th><th className="px-3 py-1.5 text-right">Mora neta</th><th className="px-3 py-1.5 text-right">Recálculo</th><th className="px-3 py-1.5 text-right">Líneas en mora</th></tr>
+                    </thead>
+                    <tbody>
+                      {meses.map((m: any) => (
+                        <tr key={m.mes} className={`border-t border-brand-border ${esMarcado(`mes:${m.mes}`) ? "bg-amber-50" : ""}`}>
+                          <td className="px-3 py-1 font-medium">{nombreMes(m.mes - 1)}</td>
+                          <td className="px-3 py-1 text-right font-mono">{m.gpon_por_asesor}</td>
+                          <td className="px-3 py-1 text-right">{formatInt(m.ventas_gpon)}</td>
+                          <td className="px-3 py-1 text-right font-mono">{m.gpon_cumplimiento_pct}%</td>
+                          <td className="px-3 py-1 text-center">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${m.gpon_escalon ? "bg-emerald-100 text-emerald-700" : "bg-brand-primary/10 text-brand-primary"}`}>{m.gpon_escalon ? `≥ ${m.gpon_escalon}%` : "sin bono"}</span>
+                          </td>
+                          <td className="px-3 py-1 text-right font-mono">{formatGs(m.gpon_monto_bono)}</td>
+                          <td className="px-3 py-1 text-right font-mono">{formatGs(m.gpon_bono_fijo)}</td>
+                          <td className="px-3 py-1 text-right font-mono text-brand-primary">{formatGs(m.gpon_mora)}</td>
+                          <td className="px-3 py-1 text-right font-mono text-brand-primary">{formatGs(m.gpon_recalculo)}</td>
+                          <td className="px-3 py-1 text-right">{formatInt(m.gpon_lineas_en_mora)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </section>
+              )}
               </Bloque>
             </>
           )}

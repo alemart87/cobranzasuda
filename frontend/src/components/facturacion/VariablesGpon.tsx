@@ -20,8 +20,14 @@ function Grupo({ titulo, hint, abierto = false, children }: { titulo: string; hi
   );
 }
 
-export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON" }: { p: any; setP: (fn: any) => void; defaults: any; titulo?: string }) {
+export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", convergente = false, vendedores = 0, porAsesor = 0, objetivoAuto = false, setObjetivoAuto }: {
+  p: any; setP: (fn: any) => void; defaults: any; titulo?: string;
+  /** Simulador convergente: GPON lo vende la estructura de pospago (sin dotación propia). */
+  convergente?: boolean; vendedores?: number; porAsesor?: number; objetivoAuto?: boolean; setObjetivoAuto?: (v: boolean) => void;
+}) {
   const set = (k: string, v: any) => setP((prev: any) => ({ ...prev, [k]: v }));
+  const activacionesMes1 = Math.round(vendedores * porAsesor);
+  const objetivoIdeal = Math.max(Math.round(vendedores * 3), 1);
   const setC = (k: string, v: any) => setP((prev: any) => ({ ...prev, costos: { ...prev.costos, [k]: v } }));
   const setPlan = (i: number, k: string, v: any) => setP((prev: any) => ({ ...prev, planes: prev.planes.map((pl: any, j: number) => (j === i ? { ...pl, [k]: v } : pl)) }));
   const setEscala = (i: number, k: string, v: number) => setP((prev: any) => ({ ...prev, escala_bono: prev.escala_bono.map((e: any, j: number) => (j === i ? { ...e, [k]: v } : e)) }));
@@ -35,8 +41,31 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON" }: 
         {defaults && <button onClick={() => setP(defaults)} className="text-[11px] text-brand-primary font-semibold hover:underline">Restaurar valores reales</button>}
       </div>
       <Grupo titulo="Activaciones y objetivo" abierto>
-        <Campo label="Activaciones del mes 1" hint="real ene–may 2026: 188 a 239" value={p.ventas} onChange={(v) => set("ventas", v)} step={5} />
-        <Campo label="Objetivo de líneas (bono fijo)" hint="% cumplimiento = activaciones ÷ objetivo" value={p.objetivo} onChange={(v) => set("objetivo", v)} step={5} />
+        {convergente ? (
+          <>
+            <div className="flex items-center gap-3 rounded-md border border-brand-cyan/50 bg-brand-cyan/5 px-2 py-1.5">
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-semibold text-brand-ink">Activaciones GPON del mes 1</span>
+                <span className="block text-[10px] text-brand-slate">se calculan desde pospago: {vendedores} vendedores × {porAsesor} GPON por asesor</span>
+              </span>
+              <span className="font-display text-xl text-brand-cyan w-[120px] text-right">{activacionesMes1.toLocaleString("es-PY")}</span>
+              <span className="w-5" />
+            </div>
+            <Campo label="Objetivo de líneas (bono fijo)" hint={objetivoAuto ? `automático: vendedores × 3 = ${objetivoIdeal} (el ideal rinde 100%)` : "% cumplimiento = activaciones ÷ objetivo"}
+              value={objetivoAuto ? objetivoIdeal : p.objetivo} onChange={(v) => { setObjetivoAuto?.(false); set("objetivo", v); }} step={5} />
+            {setObjetivoAuto && (
+              <label className="flex items-center gap-2 text-[11px] text-brand-graphite">
+                <input type="checkbox" checked={objetivoAuto} onChange={(e) => { setObjetivoAuto(e.target.checked); if (e.target.checked) set("objetivo", objetivoIdeal); }} className="accent-brand-cyan" />
+                Objetivo automático = vendedores × 3 (ideal por asesor)
+              </label>
+            )}
+          </>
+        ) : (
+          <>
+            <Campo label="Activaciones del mes 1" hint="real ene–may 2026: 188 a 239" value={p.ventas} onChange={(v) => set("ventas", v)} step={5} />
+            <Campo label="Objetivo de líneas (bono fijo)" hint="% cumplimiento = activaciones ÷ objetivo" value={p.objetivo} onChange={(v) => set("objetivo", v)} step={5} />
+          </>
+        )}
         <Campo label="Activaciones que cobran el bono" hint="real 91% (218 de 239)" value={p.pct_bono_cobrado} onChange={(v) => set("pct_bono_cobrado", v)} suffix="%" />
         <Campo destacado="orange" label="Bono adicional (a mano)" hint="Gs del mes 1; no se devuelve" value={p.bono_adicional} onChange={(v) => set("bono_adicional", v)} step={1000000} min={0} />
       </Grupo>
@@ -86,6 +115,17 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON" }: 
         <Campo label="Chargeback (meses)" hint="180 días exactos" value={p.chargeback_meses} onChange={(v) => set("chargeback_meses", v)} />
         <Campo label="Otros reversos" hint="reversos de activación y cancelaciones · % de la cuota 1" value={p.otros_pct} onChange={(v) => set("otros_pct", v)} step={0.1} suffix="%" />
       </Grupo>
+      {convergente ? (
+        <Grupo titulo="Costos variables GPON" hint="la estructura es la de pospago">
+          <p className="text-[10px] text-brand-slate">GPON no agrega vendedores, supervisores ni backoffice: lo vende la misma dotación. Solo paga estos costos por venta GPON; IPS y aguinaldo son los de pospago.</p>
+          <Campo label="Comisión por venta GPON" hint="Gs por activación · paga IPS y aguinaldo" value={p.costos.comision_por_venta} onChange={(v) => setC("comision_por_venta", v)} step={1000} />
+          <Campo label="Plus por venta GPON" hint="Gs por activación · sin cargas" value={p.costos.plus_por_venta} onChange={(v) => setC("plus_por_venta", v)} step={1000} />
+          <Campo label="Operativos por venta GPON" value={p.costos.operativo_por_venta} onChange={(v) => setC("operativo_por_venta", v)} step={500} />
+          <Campo label="Logística por venta (Central)" hint="GPON: la instalación la hace Claro · 0 por defecto" value={p.costos.logistica_central} onChange={(v) => setC("logistica_central", v)} step={5000} />
+          <Campo label="Logística por venta (Interior)" value={p.costos.logistica_interior} onChange={(v) => setC("logistica_interior", v)} step={5000} />
+          <Campo label="Entregas en Interior" value={p.costos.logistica_interior_pct} onChange={(v) => setC("logistica_interior_pct", v)} suffix="%" />
+        </Grupo>
+      ) : (
       <Grupo titulo="Costos de estructura" hint="mismas reglas que pospago">
         <Campo label="Ventas por vendedor" value={p.costos.ventas_por_vendedor} onChange={(v) => setC("ventas_por_vendedor", v)} />
         <Campo label="Supervisor cada N vendedores" value={p.costos.supervisor_cada_vendedores} onChange={(v) => setC("supervisor_cada_vendedores", v)} />
@@ -111,6 +151,7 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON" }: 
         <Campo label="Premios logística (fijo mensual)" value={p.costos.logistica_premios} onChange={(v) => setC("logistica_premios", v)} step={1000000} />
         <Campo label="IPS" hint="sobre todo el RRHH · aguinaldo = RRHH ÷ 12" value={p.costos.ips_pct} onChange={(v) => setC("ips_pct", v)} step={0.5} suffix="%" />
       </Grupo>
+      )}
     </section>
   );
 }

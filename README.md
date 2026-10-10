@@ -561,11 +561,44 @@ Con la escala vigente, ~496.000 por línea de por vida. La anualidad es idéntic
 una cohorte, el mes N suma su facturación más los ajustes de todas las anteriores, la estructura se fija en el
 mes 1, y al cierre queda la cola (cuota 2 por cobrar, mora y recálculo por devolver).
 
+### 4c. Simulador convergente (pospago + GPON por la misma estructura)
+
+El simulador anual de pospago (`/televentas-claro/simulador-anual`) es ahora el **Simulador Convergente**: el 100% del
+staff es convergente, cada asesor vende pospago y GPON. Motor en `facturacion_convergente.py`, endpoint
+`POST /api/v1/facturacion/convergente/anual` (`GET …/convergente/parametros` devuelve las variables de los dos negocios).
+
+- **Una sola estructura.** La dotación se dimensiona con las ventas de pospago del mes 1 (ventas por vendedor,
+  supervisores, backoffice, coordinación, controllers) y queda fija, igual que antes. GPON **no agrega personas**: sus
+  costos son solo comisión y plus por venta GPON (con el IPS y aguinaldo de pospago), operativos y logística GPON
+  (`costos_gpon_compartidos`, headcount GPON = 0 en `_costos_y_margen`).
+- **Ventas GPON = vendedores × GPON por asesor**, editable por mes (ideal 3). El objetivo del bono fijo GPON se setea
+  solo en vendedores × 3 (desmarcable en pantalla; en el motor, si `gpon.parametros.objetivo` no viene, se usa ese
+  ideal). GPON se puede excluir del balance con "Incluir GPON".
+- **GPON entra con su modelo de facturación completo** (`simular_gpon_anual`): cuota 1 y bono fijo en el mes de la
+  venta; cuota 2 al mes 2, legajos, mora neta con su curva (26% de líneas a 6 meses: 0 · 3 · 22 · 52 · 78 · 95 · 100%),
+  recálculo del bono al mes 6 y otros reversos de las cohortes anteriores; cola posterior y líneas en mora.
+- **Pospago corre igual que antes**; el resultado mensual de GPON (ingreso neto − costos variables) se le pasa como
+  `aporte_externo_por_mes` a `simular_anual`, que lo usa solo para las ventas mínimas del mes y los meses en riesgo:
+  la estructura fija se cubre con los dos negocios juntos.
+- **El balance es la suma**: por mes `facturacion_bruta`, `ajustes`, `ingreso_neto`, `costo_total`, `resultado`,
+  `acumulado`, ola de devoluciones y cobros; cada fila conserva el desglose (`ingreso_neto_movil/gpon`,
+  `resultado_movil/gpon`, `gpon_cuota2`, `gpon_mora`, `gpon_recalculo`, `gpon_costos`…). `anual` suma los dos
+  negocios (cola, veredicto, régimen, mejor/peor mes) y expone `ventas_gpon`, `aporte_gpon_ingreso_pct` y los totales
+  de cada negocio; `movil` y `gpon` traen sus `anual` y conclusiones propias.
+- **Pantalla**: panel "Convergente · GPON" en el mes 1 (GPON por asesor, variables GPON con costos variables únicamente),
+  bloque "GPON por asesor" por mes en el paso 2, KPIs GPON, EERR con secciones POSPAGO / GPON / COSTOS GPON, tabla
+  "Bono fijo GPON mes a mes" y línea de activaciones GPON en el gráfico de ventas. Gross, zafra, bono único, descuentos
+  y ajuste de comisiones siguen siendo de pospago (GPON tiene su propio ajuste en sus variables).
+- **Registro**: la configuración GPON viaja en `parametros.convergente` (el motor de pospago la ignora) y se guarda con
+  la simulación; las simulaciones anteriores se abren como pospago puro.
+- Tests: `backend/tests/test_facturacion_convergente.py` (misma dotación, costos GPON solo variables, suma exacta de los
+  dos negocios con mora/cuota 2/recálculo, GPON apagado = pospago, equilibrio con aporte GPON, por asesor variable).
+
 ### 5. Herramientas del módulo
 
 - **Simulador mensual** (`/televentas-claro/simulador`): una cohorte; EERR a mes 0 / 6 / 12 meses, estructura
   necesaria, remuneración del vendedor, peso de los bonos, cierre con veredicto, explicación de cada cuadro.
-- **Simulador anual** (`/televentas-claro/simulador-anual`): 12 o 18 meses con cohortes superpuestas, EERR mes a mes,
+- **Simulador convergente** (`/televentas-claro/simulador-anual`, antes "simulador anual"): pospago + GPON por la misma estructura (ver 4c); 12 o 18 meses con cohortes superpuestas, EERR mes a mes,
   meses afectados, bono adicional por mes, gráficos, historia animada del negocio con hitos y alertas, y **registro
   del trabajo** (simulaciones guardadas con nombre y comentario, notas tipificadas, ítems marcados y post-its
   arrastrables), en una barra lateral ocultable. Todo se imprime como informe.
