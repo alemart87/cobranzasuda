@@ -44,7 +44,7 @@ RESIDUAL_CURVA_DEFAULT = [91.3, 63.7, 53.8, 51.7, 50.9, 49.5, 46.6, 43.7, 42.4, 
 # (curva real ÷ zafra real). Así el residual SIGUE a la zafra: si la zafra mejora, el residual sube. Los meses
 # 1 y 2 superan el 100 % porque el primer abono se acredita aunque la línea caiga dentro del mes; los meses 11
 # y 12 bajan porque parte de las activas ya no tiene abono acreditado.
-RESIDUAL_COBRABILIDAD_DEFAULT = [round(rc / z * 100, 1) for rc, z in zip(RESIDUAL_CURVA_DEFAULT, ZAFRA_DEFAULT[1:13])]
+RESIDUAL_COBRABILIDAD_DEFAULT = [round(rc / z * 100, 2) for rc, z in zip(RESIDUAL_CURVA_DEFAULT, ZAFRA_DEFAULT[1:13])]
 
 PARAMETROS_DEFAULT: dict[str, Any] = {
     # ---- entrada principal ----
