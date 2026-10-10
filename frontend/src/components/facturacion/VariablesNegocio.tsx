@@ -219,20 +219,29 @@ export function VariablesNegocio({ p, setP, defaults, titulo = "Variables de neg
               {p.residual_segun_zafra !== false ? (() => {
                 const z: number[] = (p.zafra_pct ?? []).map(Number);
                 const cob: number[] = (p.residual_cobrabilidad_pct ?? defaults?.residual_cobrabilidad_pct ?? []).map(Number);
-                const curva = Array.from({ length: 12 }, (_, i) => Math.min(100, (z[i + 1] ?? z[z.length - 1] ?? 0) * (cob[i] ?? cob[cob.length - 1] ?? 100) / 100));
+                const zPrev = (i: number) => z[i] ?? z[z.length - 1] ?? 0;                     // activas al cierre del mes anterior (mes i) para el residual del mes i+1
+                const curva = Array.from({ length: 12 }, (_, i) => Math.min(100, zPrev(i) * (cob[i] ?? cob[cob.length - 1] ?? 100) / 100));
+                const f1 = (v: number) => v.toFixed(1).replace(".", ",");
                 return (
                   <>
-                    <p className="text-[10px] text-brand-slate">Líneas que pagan residual = líneas activas de la zafra × cobrabilidad del mes (las activas con abono acreditado). Con la zafra real reproduce la curva medida en 7 liquidaciones.</p>
-                    <div className="grid grid-cols-6 gap-1">
-                      {curva.map((v, i) => (
-                        <div key={i} className="rounded border border-brand-border bg-brand-bg-soft px-1 py-0.5 text-center">
-                          <div className="text-[9px] text-brand-slate">M{i + 1}</div>
-                          <div className="text-[11px] font-mono font-semibold text-brand-ink">{v.toFixed(1).replace(".", ",")}%</div>
-                        </div>
-                      ))}
+                    <p className="text-[10px] text-brand-graphite">
+                      <b className="text-brand-ink">El residual de un mes lo genera la factura del mes anterior.</b> Lo cobran las líneas que estaban activas al cierre del mes anterior
+                      (la zafra) y pagaron esa factura (la cobrabilidad). Por eso no coincide con la zafra del mismo mes: en el mes 1 cobran {f1(curva[0])}% (las {f1(zPrev(0))}% activas al inicio, de las que paga el {f1(cob[0] ?? 100)}%);
+                      en el mes 2 solo {f1(curva[1])}% (de las {f1(zPrev(1))}% activas al mes 1, las que caen por PFI no pagaron su primera factura);
+                      en el mes 3, {f1(curva[2])}% ({f1(zPrev(2))}% activas al mes 2 × {f1(cob[2] ?? 100)}%). Si mejorás la zafra, esta curva sube sola.
+                    </p>
+                    <div className="overflow-x-auto">
+                      <table className="text-[10px] w-full">
+                        <thead><tr className="text-brand-slate"><th className="text-left font-normal pr-2">Mes del residual</th>{curva.map((_, i) => <th key={i} className="font-semibold text-brand-ink px-1 text-right">M{i + 1}</th>)}</tr></thead>
+                        <tbody>
+                          <tr className="text-brand-slate"><td className="pr-2 whitespace-nowrap">Activas al cierre del mes anterior (zafra)</td>{curva.map((_, i) => <td key={i} className="px-1 text-right font-mono">{f1(zPrev(i))}%</td>)}</tr>
+                          <tr className="text-brand-slate"><td className="pr-2 whitespace-nowrap">× pagan su factura (cobrabilidad)</td>{curva.map((_, i) => <td key={i} className="px-1 text-right font-mono">{f1(cob[i] ?? 100)}%</td>)}</tr>
+                          <tr className="text-brand-ink font-semibold border-t border-brand-border"><td className="pr-2 whitespace-nowrap">= Cobran residual</td>{curva.map((v, i) => <td key={i} className="px-1 text-right font-mono">{f1(v)}%</td>)}</tr>
+                        </tbody>
+                      </table>
                     </div>
                     <details className="text-[10px] text-brand-slate">
-                      <summary className="cursor-pointer select-none">Cobrabilidad por mes (% de las activas que pagan) · editable</summary>
+                      <summary className="cursor-pointer select-none">Cobrabilidad por mes (% de las activas al cierre del mes anterior que pagan) · editable · real: 91 · 77 · 92 · 96 · 96 · 100 · 91 · 95 · 100 · 97 · 89 · 80</summary>
                       <div className="grid grid-cols-6 gap-1 mt-1">
                         {Array.from({ length: 12 }, (_, i) => (
                           <label key={i} className="text-[10px] text-brand-slate">M{i + 1}

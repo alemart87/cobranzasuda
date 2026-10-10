@@ -40,11 +40,12 @@ ZAFRA_DEFAULT = [99.9, 82.6, 58.5, 53.8, 53.1, 49.2, 51.1, 46.2, 41.9, 40.7, 40.
 # no lo cobra toda línea activa sino la que tiene monto acreditado; medido sobre 7 liquidaciones
 # reales (383-389, nov-2025 a may-2026, 146.000 filas de RESIDUAL).
 RESIDUAL_CURVA_DEFAULT = [91.3, 63.7, 53.8, 51.7, 50.9, 49.5, 46.6, 43.7, 42.4, 39.6, 35.7, 32.4]
-# Cobrabilidad del residual: líneas que cobran residual ÷ líneas activas de la zafra, por mes de antigüedad
-# (curva real ÷ zafra real). Así el residual SIGUE a la zafra: si la zafra mejora, el residual sube. Los meses
-# 1 y 2 superan el 100 % porque el primer abono se acredita aunque la línea caiga dentro del mes; los meses 11
-# y 12 bajan porque parte de las activas ya no tiene abono acreditado.
-RESIDUAL_COBRABILIDAD_DEFAULT = [round(rc / z * 100, 2) for rc, z in zip(RESIDUAL_CURVA_DEFAULT, ZAFRA_DEFAULT[1:13])]
+# Cobrabilidad del residual: el residual del mes k lo generan las líneas ACTIVAS AL CIERRE DEL MES ANTERIOR
+# (zafra[k−1]) que pagaron su factura. Cobrabilidad[k] = curva real de líneas que cobran residual ÷ zafra real del
+# mes anterior, con tope 100 %. Así el residual SIGUE a la zafra: si la zafra mejora, el residual sube. El mes 2 es
+# bajo (77 %) porque las líneas que caen por PFI no pagaron la primera factura; del mes 3 al 10 pagan 91–100 %; al
+# final (meses 11 y 12) baja a 89 y 80 % porque parte de las activas ya no tiene abono acreditado.
+RESIDUAL_COBRABILIDAD_DEFAULT = [min(round(rc / z * 100, 2), 100.0) for rc, z in zip(RESIDUAL_CURVA_DEFAULT, ZAFRA_DEFAULT[0:12])]
 
 PARAMETROS_DEFAULT: dict[str, Any] = {
     # ---- entrada principal ----
@@ -79,7 +80,7 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
     "pct_abono_acreditado": 48.0,   # acreditado promedio de las líneas que pagan ÷ abono del plan (real: ~89.000 / 184.000)
     "residual_meses": 12,
     "residual_curva_pct": list(RESIDUAL_CURVA_DEFAULT),   # % de líneas que pagan residual por mes de antigüedad (curva FIJA, solo si residual_segun_zafra = False)
-    "residual_segun_zafra": True,                          # True: líneas que pagan residual = zafra[k] × cobrabilidad[k] (el residual sigue a la zafra)
+    "residual_segun_zafra": True,                          # True: líneas que pagan residual en el mes k = zafra[k−1] × cobrabilidad[k] (el residual sigue a la zafra)
     "residual_cobrabilidad_pct": list(RESIDUAL_COBRABILIDAD_DEFAULT),
     # ---- bonos (escalas editables) ----
     # Escala VIGENTE comunicada por Claro (tabla ">= / Cuota"): ≥110% 120.000 · ≥105% 115.000 ·
@@ -229,11 +230,11 @@ def simular_facturacion(params: dict | None = None) -> dict[str, Any]:
         z.append(z[-1] if z else 0.0)
     # Curva de líneas que pagan residual (mes 1..12); si no viene, cae en la zafra.
     if p.get("residual_segun_zafra", True):
-        # El residual sigue a la zafra: líneas que pagan = líneas activas × cobrabilidad del mes.
+        # El residual sigue a la zafra: líneas que pagan en el mes k = activas al cierre del mes k−1 × cobrabilidad[k].
         cob = [max(float(v), 0) / 100.0 for v in (p.get("residual_cobrabilidad_pct") or RESIDUAL_COBRABILIDAD_DEFAULT)]
         while len(cob) < 12:
             cob.append(cob[-1] if cob else 1.0)
-        rc = [min(z[k] * cob[k - 1], 1.0) for k in range(1, 13)]
+        rc = [min(z[k - 1] * cob[k - 1], 1.0) for k in range(1, 13)]
     else:
         rc = [min(max(float(v), 0), 100) / 100.0 for v in (p.get("residual_curva_pct") or [])]
         if not rc:

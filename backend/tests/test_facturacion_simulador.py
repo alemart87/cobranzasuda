@@ -421,14 +421,14 @@ def test_residual_sigue_a_la_zafra():
     from app.services.analyzers.facturacion_simulador import RESIDUAL_COBRABILIDAD_DEFAULT, RESIDUAL_CURVA_DEFAULT
     assert PARAMETROS_DEFAULT["residual_segun_zafra"] is True and len(RESIDUAL_COBRABILIDAD_DEFAULT) == 12
     real = simular_facturacion({"ventas": 1000, "objetivo_co": 900})
-    assert real["derivados"]["residual_curva_efectiva"] == RESIDUAL_CURVA_DEFAULT       # zafra real × cobrabilidad = curva real
+    assert all(abs(a - b) <= 0.6 for a, b in zip(real["derivados"]["residual_curva_efectiva"], RESIDUAL_CURVA_DEFAULT))   # zafra real × cobrabilidad ≈ curva real (tope 100 %)
     fija = simular_facturacion({"ventas": 1000, "objetivo_co": 900, "residual_segun_zafra": False})
     res_real, res_fija = sum(m["residual"] for m in real["meses"]), sum(m["residual"] for m in fija["meses"])
-    assert abs(res_real - res_fija) / res_fija < 0.001                                 # misma curva, salvo redondeo
+    assert abs(res_real - res_fija) / res_fija < 0.005                                 # misma curva, salvo redondeo y el tope del 100 %
     ideal = [99.9, 82.6, 75, 70, 67, 63, 60, 58, 56, 54, 53, 51, 49]
     r_ideal = simular_facturacion({"ventas": 1000, "objetivo_co": 900, "zafra_pct": ideal})
     assert sum(m["residual"] for m in r_ideal["meses"]) > sum(m["residual"] for m in real["meses"]) * 1.15
-    assert r_ideal["derivados"]["residual_curva_efectiva"][11] > 32.4                  # mes 12: 49 % × 77,5 % ≈ 38 %
+    assert r_ideal["derivados"]["residual_curva_efectiva"][11] > 32.4                  # mes 12: 51 % (activas al cierre del mes 11) × 80 % ≈ 41 %
     f_ideal = simular_facturacion({"ventas": 1000, "objetivo_co": 900, "zafra_pct": ideal, "residual_segun_zafra": False})
     assert sum(m["residual"] for m in f_ideal["meses"]) == res_fija                    # curva fija: no cambia con la zafra
     # en el anual también: el Ideal mejora el residual del período
