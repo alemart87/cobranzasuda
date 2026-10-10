@@ -378,7 +378,9 @@ bono_adicional = monto cargado a mano (no se devuelve ni se recalcula)
 **Meses 1 a 12 de cada cohorte** (`z[k]` = zafra a la edad k, `rc[k]` = curva de líneas que pagan residual)
 
 ```
-residual_k     = ventas × rc[k] × 14,5% × abono_acreditado × abono_ponderado        (k = 1..12)
+residual_k     = ventas × z[k] × cobrabilidad[k] × 14,5% × abono_acreditado × abono_ponderado   (k = 1..12)
+                 cobrabilidad[k] = curva real de líneas que cobran residual ÷ zafra real (el residual SIGUE a la zafra;
+                 con residual_segun_zafra = False se usa la curva fija residual_curva_pct)
 legajos_1      = − ventas × (no_presentado × cuota1 + incompleto × cuota1 ÷ 2)         (k = 1)
 caidas_k       = ventas × (z[k−1] − z[k])                                             (k ≤ chargeback)
 devolucion_k   = − caidas_k × [ pen × (cuota1 + residual_por_linea) + porta_pct × porta_plus ] × (1 − recupero)
@@ -505,7 +507,7 @@ facturación (mes 0, 6 y 12 meses) − costo de la estructura; punto de equilibr
 | Escala del bono productividad | ≥110% 120.000 · ≥105% 115.000 · ≥100% 105.000 · ≥95% 40.000 · <95% 0 | Escala vigente comunicada por Claro (ene–may 2026 liquidó 110.000 / 50.000) |
 | Legajo incompleto / no presentado | 5% (50%) / 3% (100%) | 11.500 Gs por activación sin el pico de mayo |
 | Cuota 2 | mes 3, zafra al día 90 | 53% cobra, 27.491 Gs por activación (modelo 26.400) |
-| Residual | 14,5% × 48% del abono, 12 meses, curva real | 78.400 Gs por activación en 12 meses |
+| Residual | 14,5% × 48% del abono, 12 meses; líneas que pagan = zafra × cobrabilidad (real ÷ zafra real: 110 · 109 · 100 · 97 · 104 · 97 · 101 · 104 · 104 · 99 · 88 · 78 %) | 78.400 Gs por activación en 12 meses con la zafra real; sube si la zafra mejora |
 | Zafra | 99,9 · 82,6 · 58,5 · 53,8 · 53,1 · 49,2 · 51,1 · 46,2 · 41,9 · 40,7 · 40,1 · 40,4 · 41,8 | Cohortes jul-25 a ene-26 informadas por Claro |
 | Chargeback | 6 meses | Manual (180 días); descuento de porta 100% dentro de la ventana |
 | Caídas que devuelven la cuota 1 | 85% de las caídas | 46% de las activaciones (susp. 29,7 + deuda 8,8 + reverso 4,8 + migración 3,2) contra 51% de caídas de la zafra; el resto de las caídas devuelve solo porta y bono |
