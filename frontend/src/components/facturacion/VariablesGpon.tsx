@@ -169,20 +169,29 @@ export function VariablesGpon({ p, setP, defaults, titulo = "Variables GPON", co
                 <b className="text-brand-ink">Con {act.toLocaleString("es-PY")} activaciones:</b> {Math.round(lineasMora)} líneas sin pagar × {Math.round(porLinea).toLocaleString("es-PY")} = <b className="text-brand-primary">{gs(total)}</b> por cohorte
                 {" "}→ <b>{act ? Math.round(total / act).toLocaleString("es-PY") : 0}</b> por línea vendida ({cuota1W ? Math.round(100 * (act ? total / act : 0) / cuota1W) : 0}% de la cuota 1).
               </div>
-              <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold border-t border-brand-border pt-2">Cuándo aparece el descuento · acumulado por mes de antigüedad</div>
-              <p className="text-[10px] text-brand-slate">Claro penaliza al suspender, entre el día 55 y el 160 de la venta. A los 3 meses ya cayó la mitad; a los 6, todo. Editá el acumulado si cambia el ritmo.</p>
+              <div className="text-[10px] uppercase tracking-wider2 text-brand-slate font-bold border-t border-brand-border pt-2">Cuándo aparece el descuento · % del total de mora ya descontado, por mes de antigüedad</div>
+              <p className="text-[11px] text-brand-graphite">
+                <b className="text-brand-ink">No es una zafra.</b> El total de mora de la cohorte son las <b>{Math.round(lineasMora)} líneas sin pagar (el {Number(p.mora_pct_lineas || 0)}%)</b>.
+                La curva dice qué parte de esas {Math.round(lineasMora)} ya fue penalizada a cada mes: <b>100% en M6 = las {Math.round(lineasMora)} líneas, el {Number(p.mora_pct_lineas || 0)}% de las ventas</b>, y después no se descuenta nada más.
+                Claro penaliza al suspender, entre el día 55 y el 160 de la venta: a los 3 meses ya cayó la mitad. Editá el acumulado si cambia el ritmo.
+              </p>
               <div className="grid grid-cols-7 gap-1">
                 {curva.map((x: number, i: number) => {
                   const prev = i > 0 ? curva[i - 1] : 0;
                   const delMes = total * Math.max(0, x - prev) / 100;
+                  const acumLineas = lineasMora * x / 100;
+                  const acumPct = Number(p.mora_pct_lineas || 0) * x / 100;
                   return (
                     <label key={i} className="text-[10px] text-brand-slate">M{i}
                       <NumeroInput step={1} value={x} onChange={(n) => setCurva(i, n)} className="input !py-0.5 !px-1 text-[11px] text-right w-full" />
-                      <span className={`block text-right font-mono text-[10px] ${delMes > 0 ? "text-brand-primary" : "text-brand-slate"}`}>{i === 0 ? "—" : `−${gs(delMes)}`}</span>
+                      <span className="block text-right text-[9px] text-brand-graphite leading-tight mt-0.5">{Math.round(acumLineas)} sin pagar</span>
+                      <span className="block text-right text-[9px] text-brand-slate leading-tight">{acumPct.toFixed(1).replace(".", ",")}% de las ventas</span>
+                      <span className={`block text-right font-mono text-[10px] leading-tight ${delMes > 0 ? "text-brand-primary" : "text-brand-slate"}`}>{i === 0 ? "—" : `−${gs(delMes)}`}</span>
                     </label>
                   );
                 })}
               </div>
+              <p className="text-[10px] text-brand-slate">Lectura por columna: acumulado de la curva · líneas de la cohorte que ya quedaron sin pagar · ese acumulado como % de las ventas (llega al {Number(p.mora_pct_lineas || 0)}%) · descuento de ese mes. Las que siguen pagando son el resto: al M6, el {(100 - Number(p.mora_pct_lineas || 0)).toFixed(0)}% de las líneas con legajo.</p>
             </>
           );
         })()}
