@@ -38,7 +38,7 @@ _SUMA_ANUAL = ("facturacion_bruta", "ajustes", "ingreso_neto", "costos", "result
 
 def costos_gpon_compartidos(costos_gpon: dict, costos_movil: dict) -> dict:
     """Costos GPON cuando la estructura es la de pospago: se conservan comisión, plus, operativos y
-    logística por venta GPON; IPS y aguinaldo son los de pospago; sin premios fijos ni subgerencia."""
+    logística por venta GPON; IPS y aguinaldo son los de pospago; sin cobertura adicional interior ni subgerencia."""
     c = dict(costos_gpon)
     c["ips_pct"] = costos_movil.get("ips_pct", c.get("ips_pct", 16.5))
     c["aguinaldo"] = costos_movil.get("aguinaldo", True)

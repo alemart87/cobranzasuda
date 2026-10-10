@@ -138,7 +138,7 @@ PARAMETROS_DEFAULT: dict[str, Any] = {
         "ips_pct": 16.5,                    # sobre todos los costos de RRHH
         "aguinaldo": True,                  # previsión mensual: RRHH ÷ 12 (sin IPS)
         "logistica_central": 55000, "logistica_interior": 80000, "logistica_interior_pct": 60.0,
-        "logistica_premios": 20000000,      # premios a logística (fijo mensual)
+        "logistica_premios": 20000000,      # cobertura adicional interior (fijo mensual)
         "operativo_por_venta": 12500,       # costos operativos adicionales por venta
     },
 }

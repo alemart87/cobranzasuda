@@ -489,7 +489,7 @@ comisión vendedor = ventas × 102.000 Gs   → dentro del RRHH: paga IPS y agui
 plus vendedor     = ventas × 32.000 Gs    → fuera del RRHH: sin IPS ni aguinaldo
 IPS        = 16,5% × todo el RRHH (salarios, comisiones, supervisores, coordinación, backoffice, controllers, subgerencia)
 aguinaldo  = RRHH ÷ 12 por mes (sin IPS)
-logística  = ventas × (60% × 80.000 Interior + 40% × 55.000 Central) + 20.000.000 de premios fijos
+logística  = ventas × (60% × 80.000 Interior + 40% × 55.000 Central) + 20.000.000 de cobertura adicional interior (fijo mensual)
 operativos = ventas × 12.500
 ```
 
