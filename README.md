@@ -418,7 +418,9 @@ la cifra que decide); "queda a 12 meses" (residual completo); peso de los bonos 
 **Simulación anual (12, 18 o 24 meses; los meses nuevos se agregan al final copiando el último)**: el mes 1 fija la estructura y el objetivo; cada mes es una cohorte. El mes
 calendario *t* liquida su propio mes 0 más los flujos de todas las cohortes anteriores en la edad que les toca.
 Nombres de mes editables, bono adicional por mes, y **meses afectados** (un mes puede tener porta, efectividad,
-objetivo, mix, ajuste, bonos, legajos, caídas, recupero o costos variables propios). Al cierre queda la **cola**:
+objetivo, mix, ajuste, bonos, legajos, caídas, recupero, costos variables o **su propia zafra**: con ella se calculan
+las caídas, el residual, el recálculo y el Gross de esa cohorte; el editor trae el botón "Ideal", copiar la base y
+±3 puntos, para ver el impacto de una mejora o desmejora de calidad de un solo mes). Al cierre queda la **cola**:
 lo que las últimas cohortes todavía tienen por cobrar (residual, cuota 2) y por devolver (caídas). Todo redondea
 por flujo y deriva lo demás de los redondeados, así cada puente cierra exacto: bruta + ajustes = neto;
 neto − costos = resultado; acumulado anterior + resultado = acumulado; resultado + cola = resultado final.

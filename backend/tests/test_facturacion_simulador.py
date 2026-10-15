@@ -455,3 +455,27 @@ def test_horizonte_24_meses():
     assert simular_anual({}, [1900] * 30, 30)["anual"]["horizonte"] == 12
     c = simular_convergente({"objetivo_co": 1750}, [1900] * 24, 24, gpon={"activo": True, "por_asesor_por_mes": [3]})
     assert len(c["meses"]) == 24 and c["anual"]["horizonte"] == 24 and all(f["ventas_gpon"] > 0 for f in c["meses"])
+
+
+def test_zafra_propia_por_mes():
+    """Un mes puede tener su propia zafra (por ejemplo la Ideal): con ella se calculan las caídas, el residual,
+    el recálculo y el Gross de ESA cohorte; los demás meses siguen la base."""
+    ideal = [99.9, 82.6, 75, 70, 67, 63, 60, 58, 56, 54, 53, 51, 49]
+    base = simular_anual({"objetivo_co": 1750}, [1900] * 12)
+    con = simular_anual({"objetivo_co": 1750}, [1900] * 12, meses_afectados={"5": {"zafra_pct": ideal}})
+    assert con["meses"][4]["afectado"] and con["meses"][4]["variaciones"]["zafra_pct"] == ideal
+    # meses 1 a 4: idénticos (la cohorte 5 todavía no existe); mes 5: misma facturación bruta
+    assert [f["resultado"] for f in con["meses"][:4]] == [f["resultado"] for f in base["meses"][:4]]
+    assert con["meses"][4]["facturacion_bruta"] == base["meses"][4]["facturacion_bruta"]
+    # la zafra Ideal arranca igual que la real (M1 82,6 %): la mejora empieza en M2 → cohorte 5 a 2 meses = mes 7
+    assert con["meses"][6]["clawbacks"] > base["meses"][6]["clawbacks"]            # caídas M1→M2: 7,6 pts en vez de 24,1
+    assert con["meses"][7]["residual"] > base["meses"][7]["residual"]              # residual del mes 8 = activas al M2 × cobrabilidad
+    assert con["anual"]["resultado"] > base["anual"]["resultado"]
+    # recálculo del bono de esa cohorte al mes 6 (calendario 11): 100 − 60 = 40 % en vez de 48,9 %
+    assert con["meses"][10]["recalculo_productividad"] > base["meses"][10]["recalculo_productividad"]
+    # Gross: las bajas de la cohorte 5 (caídas M1→M2, un mes después) pegan menos en el mes 8
+    assert con["meses"][7]["bajas_gross"] < base["meses"][7]["bajas_gross"]
+    # una zafra peor empeora
+    peor = [min(v, 45) if i >= 2 else v for i, v in enumerate(ideal)]
+    mal = simular_anual({"objetivo_co": 1750}, [1900] * 12, meses_afectados={"5": {"zafra_pct": peor}})
+    assert mal["anual"]["resultado"] < base["anual"]["resultado"]

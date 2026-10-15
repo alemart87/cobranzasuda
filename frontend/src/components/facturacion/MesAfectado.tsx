@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import { formatInt } from "@/lib/format";
 import { NumeroInput } from "./NumeroInput";
 import { recalcSegunZafra } from "./VariablesNegocio";
+import { ZAFRA_IDEAL } from "./presets";
+
+const esZafraIdeal = (z: any) => Array.isArray(z) && JSON.stringify(z.map(Number)) === JSON.stringify(ZAFRA_IDEAL);
 
 /** Meses afectados del Simulador Anual: un mes puede comportarse distinto (menos porta,
  *  otra efectividad, otro mix, otro ajuste de comisiones, costos variables). Las
@@ -96,6 +99,14 @@ export function describirVariaciones(ov: Variaciones, base: any, campos: CampoDe
     const mix = ov.planes.filter((p: any) => p.mix_pct != null).map((p: any) => `${nombrePlan(p)} ${p.mix_pct}%`).join(" / ");
     if (mix) out.push(`Mix de planes → ${mix}`);
   }
+  if (Array.isArray(ov.zafra_pct) && ov.zafra_pct.length) {
+    const z = ov.zafra_pct.map(Number);
+    const zb: number[] = (base?.zafra_pct ?? []).map(Number);
+    const pt = (arr: number[], i: number) => (arr[i] != null ? `${Number(arr[i]).toLocaleString("es-PY", { maximumFractionDigits: 1 })}%` : "—");
+    out.push(esZafraIdeal(z)
+      ? `Zafra de la cohorte → Ideal (M2 ${pt(z, 2)} · M6 ${pt(z, 6)} · M12 ${pt(z, 12)}; base M2 ${pt(zb, 2)} · M6 ${pt(zb, 6)} · M12 ${pt(zb, 12)})`
+      : `Zafra propia de la cohorte: M2 ${pt(zb, 2)} → ${pt(z, 2)} · M6 ${pt(zb, 6)} → ${pt(z, 6)} · M12 ${pt(zb, 12)} → ${pt(z, 12)}`);
+  }
   return out;
 }
 
@@ -115,11 +126,19 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
   const [mixOn, setMixOn] = useState(false);
   const [mix, setMix] = useState<Record<string, number>>({});
   const [otros, setOtros] = useState<number[]>([]);
+  // Zafra propia de la cohorte de este mes (solo pospago: la base trae zafra_pct).
+  const tieneZafra = Array.isArray(base?.zafra_pct) && base.zafra_pct.length > 0;
+  const [zafraOn, setZafraOn] = useState(false);
+  const [zafra, setZafra] = useState<number[]>([]);
 
   useEffect(() => {
     const init = JSON.parse(JSON.stringify(actual ?? {}));
     const planes = Array.isArray(init.planes) ? init.planes : null;
     delete init.planes;
+    const zafraInit = Array.isArray(init.zafra_pct) ? init.zafra_pct.map(Number) : null;
+    delete init.zafra_pct;
+    setZafraOn(!!zafraInit);
+    setZafra(zafraInit ?? (base?.zafra_pct ?? []).map(Number));
     setOv(init);
     setMixOn(!!planes);
     const m: Record<string, number> = {};
@@ -145,9 +164,13 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
   const armar = (): Variaciones => {
     const out: Variaciones = { ...ov };
     if (mixOn) out.planes = Object.entries(mix).map(([plan, mix_pct]) => ({ plan, mix_pct: Number(mix_pct) }));
+    if (zafraOn && tieneZafra) out.zafra_pct = zafra.map((v) => Math.min(Math.max(Number(v) || 0, 0), 100));
     return out;
   };
-  const cantidad = contar(ov) + contar(ov.gpon) + (mixOn ? 1 : 0);
+  const cantidad = contar(ov) + contar(ov.gpon) + (mixOn ? 1 : 0) + (zafraOn && tieneZafra ? 1 : 0);
+  const zafraBase: number[] = (base?.zafra_pct ?? []).map(Number);
+  const caidasM2 = (z: number[]) => (z.length > 2 ? 100 - Number(z[2]) : 0);
+  const f1 = (v: number) => Number(v).toLocaleString("es-PY", { maximumFractionDigits: 1 });
   const grupos = Array.from(new Set(campos.map((c) => c.grupo)));
 
   return (
@@ -213,6 +236,37 @@ export function MesAfectadoEditor({ mes, nombre, nombres, horizonte, base, venta
               ))}
             </div>
           </div>
+
+          {tieneZafra && (
+            <div className="md:col-span-2">
+              <label className="flex items-center gap-2 text-[10px] uppercase tracking-wider2 font-bold text-brand-slate border-b border-brand-border pb-1 mb-2">
+                <input type="checkbox" checked={zafraOn} onChange={(e) => setZafraOn(e.target.checked)} className="accent-brand-purple" />
+                Zafra propia de las ventas de este mes
+                <span className="normal-case tracking-normal font-normal">· líneas activas por mes de antigüedad: con ella se calculan sus caídas, su residual, su recálculo y su Gross</span>
+              </label>
+              <div className={`${zafraOn ? "" : "opacity-40 pointer-events-none"}`}>
+                <div className="no-print flex flex-wrap items-center gap-3 mb-2 text-[11px]">
+                  <button onClick={() => setZafra([...ZAFRA_IDEAL])} className={`px-2.5 py-1 rounded-md font-bold border ${esZafraIdeal(zafra) ? "bg-emerald-600 text-white border-emerald-600" : "bg-white text-emerald-700 border-emerald-600 hover:bg-emerald-50"}`}>
+                    {esZafraIdeal(zafra) ? "✓ Ideal" : "Ideal"}
+                  </button>
+                  <button onClick={() => setZafra([...zafraBase])} className="text-brand-purple font-semibold hover:underline">Copiar la base (mes 1)</button>
+                  <button onClick={() => setZafra(zafra.map((v, i) => (i === 0 ? v : Math.min(100, Number(v) + 3))))} className="text-brand-purple font-semibold hover:underline">+3 puntos</button>
+                  <button onClick={() => setZafra(zafra.map((v, i) => (i === 0 ? v : Math.max(0, Number(v) - 3))))} className="text-brand-primary font-semibold hover:underline">−3 puntos</button>
+                  <span className="text-brand-slate ml-auto">caídas al M2: base {f1(caidasM2(zafraBase))}% → <b className={caidasM2(zafra) < caidasM2(zafraBase) ? "text-emerald-700" : caidasM2(zafra) > caidasM2(zafraBase) ? "text-brand-primary" : "text-brand-ink"}>{f1(caidasM2(zafra))}%</b> · activas al M12: base {f1(zafraBase[12] ?? 0)}% → <b>{f1(zafra[12] ?? 0)}%</b></span>
+                </div>
+                <div className="grid grid-cols-5 sm:grid-cols-7 gap-1.5">
+                  {zafra.map((v, i) => (
+                    <label key={i} className={`text-[10px] rounded-md px-1 py-0.5 ${i === 2 ? "text-brand-primary font-bold ring-2 ring-brand-primary bg-brand-primary/5" : "text-brand-slate"}`}>
+                      <span className="flex items-center justify-between h-4">M{i}{i === 2 && <span className="px-1 rounded bg-brand-primary text-white text-[8px] font-bold leading-4">PFI</span>}</span>
+                      <NumeroInput step={0.5} value={Number(v)} onChange={(n) => setZafra(zafra.map((x, k) => (k === i ? n : x)))}
+                        className={`input !py-0.5 !px-1 text-[11px] text-right w-full ${Number(v) !== Number(zafraBase[i]) ? "border-brand-purple font-bold text-brand-purple" : ""}`} />
+                      <span className="block text-right text-[9px] text-brand-slate">base {f1(zafraBase[i] ?? 0)}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="md:col-span-2">
             <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate border-b border-brand-border pb-1 mb-2">Aplicar también a otros meses</div>
