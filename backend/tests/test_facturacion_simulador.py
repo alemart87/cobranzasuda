@@ -435,3 +435,23 @@ def test_residual_sigue_a_la_zafra():
     a_real = simular_anual({"objetivo_co": 1750}, [1900] * 12)["anual"]
     a_ideal = simular_anual({"objetivo_co": 1750, "zafra_pct": ideal}, [1900] * 12)["anual"]
     assert a_ideal["cobros_periodo"] > a_real["cobros_periodo"]
+
+
+def test_horizonte_24_meses():
+    """24 meses: los meses nuevos van al final; después del mes 12 las cohortes viejas ya no ajustan (residual 12,
+    chargeback 6) y la cola se achica respecto de 18 meses."""
+    from app.services.analyzers.facturacion_convergente import simular_convergente
+    r18 = simular_anual({"objetivo_co": 1750}, [1900] * 18, 18)
+    r24 = simular_anual({"objetivo_co": 1750}, [1900] * 24, 24)
+    assert len(r24["meses"]) == 24 and r24["anual"]["horizonte"] == 24
+    assert [f["resultado"] for f in r24["meses"][:18]] == [f["resultado"] for f in r18["meses"]]
+    assert r24["anual"]["cola_post_12"]["ultimo_mes_residual"] == 36 and r24["anual"]["cola_post_12"]["ultimo_mes_caidas"] == 30
+    # régimen: del mes 13 en adelante el resultado mensual es constante con ventas estables
+    assert len({f["resultado"] for f in r24["meses"][13:]}) == 1
+    # ventas de menos meses se completan al final con el último valor
+    r = simular_anual({"objetivo_co": 1750}, [1900] * 18 + [1500], 24)
+    assert r["ventas_por_mes"][18:] == [1500] * 6
+    # horizonte inválido cae en 12
+    assert simular_anual({}, [1900] * 30, 30)["anual"]["horizonte"] == 12
+    c = simular_convergente({"objetivo_co": 1750}, [1900] * 24, 24, gpon={"activo": True, "por_asesor_por_mes": [3]})
+    assert len(c["meses"]) == 24 and c["anual"]["horizonte"] == 24 and all(f["ventas_gpon"] > 0 for f in c["meses"])

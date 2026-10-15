@@ -589,7 +589,7 @@ def _ahorro_por_venta_vendedor(p: dict, act: float) -> float:
 _FLUJOS = ("residual", "cuota2", "legajos", "clawbacks", "clawback_bonos", "recalculo_productividad")
 
 
-HORIZONTES = (12, 18)
+HORIZONTES = (12, 18, 24)   # meses del balance; los meses nuevos se agregan al final
 
 
 # Claves que un "mes afectado" NO puede pisar: las ventas van aparte y la estructura queda fija al mes 1.
@@ -639,7 +639,7 @@ def _aplicar_afectado(base: dict, ov: dict | None) -> dict:
 def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
                   meses_afectados: dict | None = None, bonos_adicionales_por_mes: list[float] | None = None,
                   nombres_meses: list[str] | None = None, aporte_externo_por_mes: list[float] | None = None) -> dict[str, Any]:
-    """Balance de 12 o 18 meses con estructura FIJA seteada en el mes 1.
+    """Balance de 12, 18 o 24 meses con estructura FIJA seteada en el mes 1.
 
     `aporte_externo_por_mes` (simulador CONVERGENTE): resultado que otro negocio vendido por la
     MISMA estructura (GPON) deja cada mes. No entra en los flujos de pospago; solo se suma al

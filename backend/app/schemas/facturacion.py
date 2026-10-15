@@ -80,8 +80,8 @@ class GponAnualRequest(BaseModel):
 class SimuladorAnualRequest(BaseModel):
     """Simulación anual: parámetros del mes 1 (fijan estructura y objetivo) + ventas de cada mes."""
     parametros: dict[str, Any] = Field(default_factory=dict)
-    ventas_por_mes: List[float] = Field(min_length=1, max_length=18)
-    horizonte: int = 12                   # 12 o 18 meses
+    ventas_por_mes: List[float] = Field(min_length=1, max_length=24)
+    horizonte: int = 12                   # 12, 18 o 24 meses
     # Meses afectados: {"7": {"porta_pct": 30, "efectividad_pct": 85, ...}} — variaciones propias de ese mes.
     meses_afectados: dict[str, dict[str, Any]] = Field(default_factory=dict)
     bonos_adicionales_por_mes: List[float] = Field(default_factory=list)   # bono adicional a mano (Gs) por mes
@@ -106,9 +106,9 @@ class SimulacionCreate(BaseModel):
     """Simulación anual guardada: registro del trabajo (nombre, comentario, marcas, post-its)."""
     nombre: str = Field(min_length=1, max_length=160)
     comentario: Optional[str] = None
-    horizonte: int = 12
+    horizonte: int = 12                   # 12, 18 o 24 meses
     parametros: dict[str, Any] = Field(default_factory=dict)
-    ventas_por_mes: List[float] = Field(min_length=1, max_length=18)
+    ventas_por_mes: List[float] = Field(min_length=1, max_length=24)
     meses_afectados: dict[str, dict[str, Any]] = Field(default_factory=dict)
     bonos_adicionales_por_mes: List[float] = Field(default_factory=list)   # bono adicional a mano (Gs) por mes
     nombres_meses: List[str] = Field(default_factory=list)                 # nombres editables de los meses
@@ -123,7 +123,7 @@ class SimulacionUpdate(BaseModel):
     comentario: Optional[str] = None
     horizonte: Optional[int] = None
     parametros: Optional[dict[str, Any]] = None
-    ventas_por_mes: Optional[List[float]] = Field(default=None, max_length=18)
+    ventas_por_mes: Optional[List[float]] = Field(default=None, max_length=24)
     meses_afectados: Optional[dict[str, dict[str, Any]]] = None
     bonos_adicionales_por_mes: Optional[List[float]] = None
     nombres_meses: Optional[List[str]] = None
