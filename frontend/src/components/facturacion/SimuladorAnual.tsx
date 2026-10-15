@@ -28,6 +28,7 @@ import { EstructuraOperativa } from "@/components/facturacion/EstructuraOperativ
 const M = (v: number) => `${Math.round(v / 1e6)}M`;
 
 export type Negocio = "movil" | "gpon";
+export type Horizonte = 12 | 18 | 24;
 
 type EerrRow = [string, string | null, string | null, string];
 type Cfg = {
@@ -49,7 +50,7 @@ const GPON_POR_ASESOR_IDEAL = 3;
 const NEGOCIOS: Record<Negocio, Cfg> = {
   movil: {
     nombre: "Televentas Claro · pospago + GPON", titulo: "Simulador Convergente",
-    intro: "Balance a 12 o 18 meses del negocio convergente: la misma estructura vende pospago y GPON. Seteás el mes 1 (objetivo, tarifas, zafra y estructura, dimensionada con el pospago); los meses siguientes cambian las ventas de pospago y los GPON por asesor (ideal 3). GPON entra con su modelo de facturación completo (cuota 1, bono fijo, cuota 2, legajos, mora, recálculo) sin agregar dotación: solo comisión, plus y operativos por venta GPON. Cada mes liquida la facturación de los dos negocios más los ajustes de los meses anteriores.",
+    intro: "Balance a 12, 18 o 24 meses del negocio convergente: la misma estructura vende pospago y GPON. Seteás el mes 1 (objetivo, tarifas, zafra y estructura, dimensionada con el pospago); los meses siguientes cambian las ventas de pospago y los GPON por asesor (ideal 3). GPON entra con su modelo de facturación completo (cuota 1, bono fijo, cuota 2, legajos, mora, recálculo) sin agregar dotación: solo comisión, plus y operativos por venta GPON. Cada mes liquida la facturación de los dos negocios más los ajustes de los meses anteriores.",
     paramsPath: "/api/v1/facturacion/convergente/parametros", anualPath: "/api/v1/facturacion/convergente/anual",
     Variables: VariablesNegocio, campos: CAMPOS_AFECTABLES, objetivoKey: "objetivo_co", objetivoLabel: "objetivo CO", unidad: "ventas",
     textoSinBonos: "sin bono productividad ni bono efectividad", textoConBonos: "cada mes liquida según las escalas de Claro",
@@ -97,7 +98,7 @@ const NEGOCIOS: Record<Negocio, Cfg> = {
   },
   gpon: {
     nombre: "Negocio GPON · fibra y TV", titulo: "Simulador Anual GPON",
-    intro: "Balance a 12 o 18 meses del negocio GPON (fibra + TV), con motor propio calibrado con las liquidaciones GPON 385 a 389. Seteás el mes 1 (activaciones, objetivo, planes, mora y estructura); los meses siguientes solo cambian las activaciones. Cada mes liquida cuota 1 y bono fijo más los ajustes de las cohortes anteriores: cuota 2 al mes 2, legajos, mora neta de reversos y recálculo del bono al día 180. Sin residual ni portabilidad.",
+    intro: "Balance a 12, 18 o 24 meses del negocio GPON (fibra + TV), con motor propio calibrado con las liquidaciones GPON 385 a 389. Seteás el mes 1 (activaciones, objetivo, planes, mora y estructura); los meses siguientes solo cambian las activaciones. Cada mes liquida cuota 1 y bono fijo más los ajustes de las cohortes anteriores: cuota 2 al mes 2, legajos, mora neta de reversos y recálculo del bono al día 180. Sin residual ni portabilidad.",
     paramsPath: "/api/v1/facturacion/gpon/parametros", anualPath: "/api/v1/facturacion/gpon/anual",
     Variables: VariablesGpon, campos: CAMPOS_AFECTABLES_GPON, objetivoKey: "objetivo", objetivoLabel: "objetivo de líneas", unidad: "activaciones",
     textoSinBonos: "sin bono fijo", textoConBonos: "cada mes liquida el bono fijo según la escala de Claro",
@@ -311,7 +312,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const [gponAsesor, setGponAsesor] = useState<number[]>([]);     // GPON por asesor, por mes (ideal 3)
   const [gponObjetivoAuto, setGponObjetivoAuto] = useState(true); // objetivo del bono fijo = vendedores × 3
   const [seteado, setSeteado] = useState(false);
-  const [horizonte, setHorizonte] = useState<12 | 18>(12);
+  const [horizonte, setHorizonte] = useState<Horizonte>(12);
   const [ventas, setVentas] = useState<number[]>([]);
   const [nombres, setNombres] = useState<string[]>([]);       // nombres editables de los meses ("Octubre 2026")
   const [bonosAd, setBonosAd] = useState<number[]>([]);       // bono adicional a mano (Gs) por mes
@@ -409,7 +410,8 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
     setGponAsesor((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? prev[0] ?? GPON_POR_ASESOR_IDEAL));
     setSeteado(true);
   };
-  const cambiarHorizonte = (h: 12 | 18) => {
+  // Cambiar el horizonte: los meses nuevos se agregan al final copiando el último mes cargado; al acortar se recortan.
+  const cambiarHorizonte = (h: Horizonte) => {
     setHorizonte(h);
     setVentas((prev) => {
       if (!prev.length) return prev;
@@ -424,7 +426,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const setBonoAd = (i: number, v: number) => setBonosAd((prev) => prev.map((x, j) => (j === i ? Math.max(v, 0) : x)));
   const HorizonteToggle = () => (
     <div className="inline-flex rounded-md border border-brand-border overflow-hidden no-print">
-      {([12, 18] as const).map((h) => (
+      {([12, 18, 24] as const).map((h) => (
         <button key={h} onClick={() => cambiarHorizonte(h)}
           className={`px-3 py-1.5 text-xs font-bold ${horizonte === h ? "bg-brand-primary text-white" : "text-brand-graphite hover:bg-brand-bg"}`}>
           {h} meses
@@ -458,7 +460,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
     } : {},
   });
   const abrirSimulacion = (s: any) => {
-    const h = (s.horizonte === 18 ? 18 : 12) as 12 | 18;
+    const h = (s.horizonte === 24 ? 24 : s.horizonte === 18 ? 18 : 12) as Horizonte;
     const { convergente: cv, ...paramsBase } = (s.parametros || {}) as any;
     setP(paramsBase);
     if (esConvergente) {

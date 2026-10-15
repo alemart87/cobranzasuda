@@ -54,7 +54,7 @@ def _pct(num: float, den: float) -> float:
 def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
                         meses_afectados: dict | None = None, bonos_adicionales_por_mes: list[float] | None = None,
                         nombres_meses: list[str] | None = None, gpon: dict | None = None) -> dict[str, Any]:
-    """Balance convergente de 12 o 18 meses. `gpon` = {activo, parametros (GPON), por_asesor_por_mes,
+    """Balance convergente de 12, 18 o 24 meses. `gpon` = {activo, parametros (GPON), por_asesor_por_mes,
     bonos_adicionales_por_mes, meses_afectados}. Con `activo` en False devuelve la simulación de
     pospago tal cual (más las marcas de convergente), así el simulador funciona igual que antes."""
     gpon = gpon or {}
