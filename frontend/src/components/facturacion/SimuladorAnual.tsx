@@ -673,7 +673,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(0.98, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Caer 2% mensual</button>
               {negocio === "movil" && vendedoresRef > 0 && (
                 <span className="flex flex-wrap items-center gap-1 text-[11px] text-brand-graphite">
-                  · Productividad (ventas por vendedor) para los meses 2 a {horizonte}:
+                  · Productividad POSPAGO (ventas por vendedor, define la dotación) para los meses 2 a {horizonte}:
                   <NumeroInput step={0.5} min={0} value={prodTodos} onChange={setProdTodos} className="input !py-0.5 !px-1 text-[11px] text-right w-14" />
                   <button onClick={() => setAfectados((prev) => { const n = { ...prev }; for (let m = 2; m <= horizonte; m++) n[String(m)] = { ...(n[String(m)] ?? {}), costos: { ...(n[String(m)]?.costos ?? {}), ventas_por_vendedor: prodTodos } }; return n; })}
                     className="text-brand-primary font-semibold hover:underline">Aplicar</button>
@@ -692,7 +692,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   <div>
                     <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-cyan">GPON por asesor · convergente</div>
                     <div className="text-[11px] text-brand-graphite">
-                      Los mismos <b>{formatInt(vendedoresRef)}</b> vendedores venden GPON: activaciones GPON del mes = vendedores × GPON por asesor. Ideal <b>3</b> por asesor.
+                      La dotación la define pospago (mes 1 o estructura propia del mes); acá solo se carga el <b>GPON por asesor</b>. Activaciones GPON del mes = vendedores de pospago de ese mes × GPON por asesor (mes 1: <b>{formatInt(vendedoresRef)}</b> vendedores). Ideal <b>3</b> por asesor.
                       {gponOn && a ? <> En esta simulación: <b className="text-brand-cyan">{formatInt(a.ventas_gpon ?? 0)}</b> activaciones GPON en {horizonte} meses, ingreso neto GPON <b>{formatGs(a.ingreso_neto_gpon ?? 0)}</b>.</> : null}
                       {!gponActivo ? " GPON excluido: el balance es solo pospago." : null}
                     </div>
@@ -737,7 +737,15 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                         </span>
                         <NumeroInput step={0.5} min={0} value={k} onChange={(n) => setGponAsesorMes(i, n)}
                           className={`input !py-1 !px-1.5 text-sm text-right w-full ${k >= GPON_POR_ASESOR_IDEAL ? "border-brand-cyan" : ""}`} />
-                        <span className="block text-right text-[10px] text-brand-graphite font-mono">{formatInt(Math.round(vendedoresRef * k))} GPON</span>
+                        {(() => {
+                          const vendMes = Number(meses[i]?.vendedores_mes ?? meses[i]?.vendedores ?? vendedoresRef) || vendedoresRef;
+                          return (
+                            <span className={`block text-right text-[10px] font-mono ${vendMes !== vendedoresRef ? "text-brand-purple" : "text-brand-graphite"}`}
+                              title={`${formatInt(vendMes)} vendedores de pospago${vendMes !== vendedoresRef ? " (estructura propia de este mes)" : " (estructura del mes 1)"} × ${k} GPON por asesor`}>
+                              {vendMes !== vendedoresRef ? `${formatInt(vendMes)} vend × ${k} = ` : ""}{formatInt(Math.round(vendMes * k))} GPON
+                            </span>
+                          );
+                        })()}
                       </label>
                     ))}
                   </div>
