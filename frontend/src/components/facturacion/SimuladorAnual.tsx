@@ -57,21 +57,21 @@ const NEGOCIOS: Record<Negocio, Cfg> = {
     ajusteTxt: "cuota 1, cuota 2 y plus de portabilidad", ajusteHint: "Simula una renegociación con Claro. No afecta bonos ni residual; las devoluciones por chargeback siguen los montos ajustados. La comisión y el plus de los vendedores son montos fijos por venta y no cambian con el ajuste: la mejora es íntegramente margen de Voicenter.",
     ajustesTxt: "residual, cuota 2, caídas", cobrosTxt: "cuota 2 y residual", devTxt: "chargebacks, legajos y devolución de bonos", olaTxt: "caídas del chargeback, recálculo del bono, legajos",
     eerrRows: [
-      ["Ventas", "ventas", "int", "head"], ["INGRESOS DEL MES", null, null, "sep"],
+      ["Ventas", "ventas", "int", "head"], ["Vendedores del mes (dotación)", "vendedores", "int", "head"], ["INGRESOS DEL MES", null, null, "sep"],
       ["Activaciones (cuota 1)", "activaciones_cuota1", "gs", "row"], ["Plus portabilidad", "portabilidad", "gs", "row"],
       ["Bono productividad", "bono_productividad", "gs", "row"], ["Bono efectividad", "bono_efectividad", "gs", "row"], ["Bono adicional (a mano)", "bono_adicional", "gs", "row"],
       ["Facturación bruta", "facturacion_bruta", "gs", "sub"], ["AJUSTES DE COHORTES ANTERIORES", null, null, "sep"],
       ["+ Residual", "residual", "gs", "row"], ["+ Cuota 2", "cuota2", "gs", "row"], ["− Legajos", "legajos", "gs", "row"],
       ["− Devoluciones por caídas", "clawbacks", "gs", "row"], ["− Devolución bono efectividad", "clawback_bonos", "gs", "row"], ["− Recálculo bono productividad", "recalculo_productividad", "gs", "row"],
       ["INGRESO NETO LIQUIDADO", "ingreso_neto", "gs", "total"], ["COSTOS", null, null, "sep"],
-      ["Estructura fija (salarios, cargas, cobertura adicional interior)", "_fijo", "gs", "row"], ["Comisiones de vendedores (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
+      ["Estructura (salarios, cargas, cobertura adicional interior)", "_fijo", "gs", "row"], ["Comisiones de vendedores (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
       ["Plus de vendedores (sin cargas)", "_plus", "gs", "row"], ["Logística de entregas", "_logistica", "gs", "row"], ["Operativos", "_operativos", "gs", "row"],
       ["TOTAL COSTOS", "costo_total", "gs", "sub"], ["RESULTADO", "resultado", "gs", "total"], ["Margen %", "margen_pct", "pct", "pct"], ["Acumulado", "acumulado", "gs", "pct"],
     ],
     bonosCols: [["Bono productividad", "bono_productividad"], ["Bono efectividad", "bono_efectividad"]], verificado: true, observacion: true,
     pHist: (p) => p,
     eerrRowsConvergente: [
-      ["Ventas pospago", "ventas", "int", "head"], ["Activaciones GPON", "ventas_gpon", "int", "head"],
+      ["Ventas pospago", "ventas", "int", "head"], ["Activaciones GPON", "ventas_gpon", "int", "head"], ["Vendedores del mes (dotación)", "vendedores", "int", "head"],
       ["POSPAGO · INGRESOS DEL MES", null, null, "sep"],
       ["Activaciones (cuota 1)", "activaciones_cuota1", "gs", "row"], ["Plus portabilidad", "portabilidad", "gs", "row"],
       ["Bono productividad", "bono_productividad", "gs", "row"], ["Bono efectividad", "bono_efectividad", "gs", "row"], ["Bono adicional (a mano)", "bono_adicional", "gs", "row"],
@@ -86,7 +86,7 @@ const NEGOCIOS: Record<Negocio, Cfg> = {
       ["− Recálculo bono fijo GPON", "gpon_recalculo", "gs", "row"], ["− Otros reversos GPON", "gpon_otros", "gs", "row"],
       ["Ingreso neto GPON", "ingreso_neto_gpon", "gs", "sub"],
       ["INGRESO NETO CONVERGENTE", "ingreso_neto", "gs", "total"], ["COSTOS", null, null, "sep"],
-      ["Estructura fija (salarios, cargas, cobertura adicional interior)", "_fijo", "gs", "row"], ["Comisiones pospago (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
+      ["Estructura (salarios, cargas, cobertura adicional interior)", "_fijo", "gs", "row"], ["Comisiones pospago (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
       ["Plus pospago (sin cargas)", "_plus", "gs", "row"], ["Logística de entregas pospago", "_logistica", "gs", "row"], ["Operativos pospago", "_operativos", "gs", "row"],
       ["Comisiones GPON (con IPS y aguinaldo)", "_gpon_comisiones", "gs", "row"], ["Plus GPON (sin cargas)", "_gpon_plus", "gs", "row"],
       ["Recupero de documentación GPON (55.000 por venta)", "_gpon_documentacion", "gs", "row"],
@@ -105,13 +105,13 @@ const NEGOCIOS: Record<Negocio, Cfg> = {
     ajusteTxt: "cuota 1 y cuota 2", ajusteHint: "Simula una renegociación con Claro sobre las cuotas. No afecta el bono ni la penalidad de mora. La comisión y el plus de los vendedores son montos fijos por venta: la mejora es íntegramente margen de Voicenter.",
     ajustesTxt: "cuota 2, legajos, mora, recálculo", cobrosTxt: "cuota 2", devTxt: "mora, legajos y recálculo del bono", olaTxt: "mora neta de reversos, recálculo del bono fijo, legajos",
     eerrRows: [
-      ["Activaciones", "ventas", "int", "head"], ["INGRESOS DEL MES", null, null, "sep"],
+      ["Activaciones", "ventas", "int", "head"], ["Vendedores", "vendedores", "int", "head"], ["INGRESOS DEL MES", null, null, "sep"],
       ["Cuota 1", "activaciones_cuota1", "gs", "row"], ["Bono fijo", "bono_productividad", "gs", "row"], ["Bono adicional (a mano)", "bono_adicional", "gs", "row"],
       ["Facturación bruta", "facturacion_bruta", "gs", "sub"], ["AJUSTES DE COHORTES ANTERIORES", null, null, "sep"],
       ["+ Cuota 2", "cuota2", "gs", "row"], ["− Legajos", "legajos", "gs", "row"], ["− Mora neta (penalizaciones − reversos)", "mora", "gs", "row"],
       ["− Recálculo del bono fijo", "recalculo", "gs", "row"], ["− Otros reversos", "otros", "gs", "row"],
       ["INGRESO NETO LIQUIDADO", "ingreso_neto", "gs", "total"], ["COSTOS", null, null, "sep"],
-      ["Estructura fija (salarios, cargas, cobertura adicional interior)", "_fijo", "gs", "row"], ["Comisiones de vendedores (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
+      ["Estructura (salarios, cargas, cobertura adicional interior)", "_fijo", "gs", "row"], ["Comisiones de vendedores (con IPS y aguinaldo)", "_comisiones", "gs", "row"],
       ["Plus de vendedores (sin cargas)", "_plus", "gs", "row"], ["Logística de entregas", "_logistica", "gs", "row"], ["Operativos", "_operativos", "gs", "row"],
       ["TOTAL COSTOS", "costo_total", "gs", "sub"], ["RESULTADO", "resultado", "gs", "total"], ["Margen %", "margen_pct", "pct", "pct"], ["Acumulado", "acumulado", "gs", "pct"],
     ],
@@ -316,7 +316,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   // Productividad propia de un mes: queda como variación del mes (costos.ventas_por_vendedor) y dimensiona SU dotación.
   const setVpvMes = (mes: number, k: number) => setAfectados((prev) => {
     const n = { ...prev }; const ov = { ...(n[String(mes)] ?? {}) }; const c = { ...(ov.costos ?? {}) };
-    if (k > 0 && Math.abs(k - Number(p?.costos?.ventas_por_vendedor)) > 1e-9) c.ventas_por_vendedor = k; else delete c.ventas_por_vendedor;
+    if (k > 0) c.ventas_por_vendedor = k; else delete c.ventas_por_vendedor;   // k = 0 → vuelve a la estructura fija del mes 1
     if (Object.keys(c).length) ov.costos = c; else delete ov.costos;
     if (Object.keys(ov).length) n[String(mes)] = ov; else delete n[String(mes)];
     return n;
@@ -648,15 +648,19 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   <NumeroInput step={10} min={0} value={v} disabled={i === 0} onChange={(n) => setVenta(i, n)}
                     className={`input !py-1 !px-1.5 text-sm text-right w-full ${i === 0 ? "bg-brand-bg-soft" : ""}`} />
                   {negocio === "movil" && vendedoresRef > 0 && (() => {
-                    const vpvMes = Number(afectados[String(i + 1)]?.costos?.ventas_por_vendedor ?? p.costos.ventas_por_vendedor);
-                    const propia = i > 0 && afectados[String(i + 1)]?.costos?.ventas_por_vendedor != null;
-                    const vendMes = meses[i]?.headcount?.vendedores ?? (propia ? Math.ceil(v / Math.max(vpvMes, 0.01)) : vendedoresRef);
+                    const override = afectados[String(i + 1)]?.costos?.ventas_por_vendedor;
+                    const propia = i > 0 && override != null;
+                    const vendMes = meses[i]?.headcount?.vendedores ?? (propia ? Math.ceil(v / Math.max(Number(override), 0.01)) : vendedoresRef);
+                    const real = vendMes > 0 ? Math.round((v / vendMes) * 10) / 10 : 0;     // productividad real del mes con esa dotación
                     return (
                       <span className={`flex items-center justify-end gap-1 mt-0.5 text-[9px] ${propia ? "text-brand-purple font-semibold" : "text-brand-slate"}`}
-                        title="Productividad del mes (ventas por vendedor). No cambia las ventas: dimensiona la dotación de ESE mes (vendedores, supervisores, backoffice) con sus ventas y su costo fijo.">
-                        <NumeroInput step={0.5} min={0} value={vpvMes} disabled={i === 0} onChange={(k) => setVpvMes(i + 1, k)}
+                        title={propia
+                          ? `Estructura propia del mes: ${formatInt(v)} ventas ÷ ${override} por vendedor = ${formatInt(vendMes)} vendedores (con sus supervisores y backoffice). × vuelve a la estructura fija del mes 1.`
+                          : `Estructura fija del mes 1 (${formatInt(vendedoresRef)} vendedores): este mes rinde ${real} ventas por vendedor. Escribí la productividad que querés y la dotación de ESTE mes se dimensiona con sus ventas (ventas ÷ productividad). Las ventas no cambian.`}>
+                        <NumeroInput step={0.5} min={0} value={propia ? Number(override) : real} disabled={i === 0} onChange={(k) => setVpvMes(i + 1, k)}
                           className={`input !py-0 !px-1 text-[10px] text-right w-12 ${i === 0 ? "bg-brand-bg-soft" : propia ? "border-brand-purple text-brand-purple font-bold" : "border-dashed"}`} />
-                        <span>por vend. → <b>{formatInt(vendMes)}</b> vend.</span>
+                        <span>por vend. → <b>{formatInt(vendMes)}</b> vend.{propia ? "" : " (fija)"}</span>
+                        {propia && <button type="button" onClick={() => setVpvMes(i + 1, 0)} title="Volver a la estructura fija del mes 1" className="no-print text-brand-slate hover:text-brand-primary leading-none">×</button>}
                       </span>
                     );
                   })()}
