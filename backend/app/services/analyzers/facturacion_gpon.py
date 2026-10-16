@@ -299,7 +299,8 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
                 "activaciones_cuota1": c["mes0"]["activaciones_cuota1"], "portabilidad": 0,
                 "bono_productividad": c["mes0"]["bono_fijo"], "bono_fijo": c["mes0"]["bono_fijo"], "bono_efectividad": 0,
                 "bono_adicional": c["mes0"]["bono_adicional"], "facturacion_bruta": c["bruto_mes0"],
-                "ventas_por_vendedor": round(ventas[t] / vendedores_info, 2) if vendedores_info else 0}
+                "ventas_por_vendedor": round(ventas[t] / vendedores_info, 2) if vendedores_info else 0,
+                "vendedores": vendedores_info, "headcount": headcount, "estructura_propia": False}
         for f in _FLUJOS:
             fila[f] = sum(cohortes[s]["meses"][t - s][f] for s in range(t) if t - s < len(cohortes[s]["meses"]))
         fila["residual"] = 0

@@ -769,6 +769,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         fila["costos"] = costos_t
         fila["costo_total"] = costos_t["total"]
         fila["headcount"] = hc_t
+        fila["vendedores"] = hc_t["vendedores"]
         fila["estructura_propia"] = estructura_propia
         fila["resultado"] = fila["ingreso_neto"] - costos_t["total"]
         fila["margen_pct"] = round(fila["resultado"] / fila["ingreso_neto"] * 100, 1) if fila["ingreso_neto"] else 0.0
