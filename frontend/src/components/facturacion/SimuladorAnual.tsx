@@ -650,6 +650,13 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                       {gponOn && a ? <> En esta simulación: <b className="text-brand-cyan">{formatInt(a.ventas_gpon ?? 0)}</b> activaciones GPON en {horizonte} meses, ingreso neto GPON <b>{formatGs(a.ingreso_neto_gpon ?? 0)}</b>.</> : null}
                       {!gponActivo ? " GPON excluido: el balance es solo pospago." : null}
                     </div>
+                    {!gponActivo && (
+                      <div className="mt-1 text-[11px] text-brand-graphite">
+                        <b className="text-brand-ink">Agregar GPON no rompe este escenario:</b> la estructura, las ventas de pospago, los meses afectados y el bono a mano quedan exactamente iguales;
+                        GPON se suma como negocio incremental con sus propios ingresos y costos variables (solo cambian las ventas mínimas y los meses en riesgo, que pasan a mirar los dos negocios).
+                        {actual ? " Si querés conservar el escenario original, después usá \"Guardar como nueva\"." : ""}
+                      </div>
+                    )}
                   </div>
                   <div className="no-print flex flex-wrap items-center gap-3">
                     {gponOn && (
@@ -657,6 +664,12 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                         <button onClick={() => setGponAsesor((prev) => prev.map(() => GPON_POR_ASESOR_IDEAL))} className="text-[11px] text-brand-cyan font-semibold hover:underline">Ideal: 3 por asesor</button>
                         <button onClick={() => setGponAsesor((prev) => prev.map((x, i) => (i === 0 ? x : prev[0])))} className="text-[11px] text-brand-cyan font-semibold hover:underline">Igualar todos al mes 1</button>
                       </>
+                    )}
+                    {!gponActivo && (
+                      <button onClick={() => { setGponAsesor((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? prev[0] ?? GPON_POR_ASESOR_IDEAL)); if (!pg && pgDefaults) setPg(pgDefaults); setGponActivo(true); }}
+                        className="px-3 py-1.5 rounded-md text-xs font-bold bg-brand-cyan text-white hover:bg-brand-cyan/90">
+                        Agregar GPON · 3 por asesor
+                      </button>
                     )}
                     <label className="flex items-center gap-2 text-xs font-semibold text-brand-ink">
                       <input type="checkbox" checked={gponActivo} onChange={(e) => setGponActivo(e.target.checked)} className="accent-brand-cyan w-4 h-4" />
