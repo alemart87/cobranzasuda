@@ -249,13 +249,16 @@ def test_meses_afectados_en_la_anual():
         "99": {"porta_pct": 0},     # fuera del horizonte: se ignora
     })
     assert list(con["meses_afectados"].keys()) == ["7"]
-    assert "ventas_por_vendedor" not in con["meses_afectados"]["7"]["costos"]   # la estructura no se pisa
+    # ventas_por_vendedor en un mes = estructura propia de ESE mes (su dotación se dimensiona con sus ventas): 1.900 ÷ 5 = 380 vendedores
+    assert con["meses_afectados"]["7"]["costos"]["ventas_por_vendedor"] == 5
+    assert con["meses"][6]["estructura_propia"] and con["meses"][6]["headcount"]["vendedores"] == 380
+    assert not con["meses"][5]["estructura_propia"] and con["meses"][5]["headcount"]["vendedores"] == base["headcount"]["vendedores"]
     m7b, m7c = base["meses"][6], con["meses"][6]
     assert m7c["afectado"] and not base["meses"][6]["afectado"]
     assert m7c["portabilidad"] < m7b["portabilidad"]                 # menos porta → menos plus
     assert m7c["bono_efectividad"] == 0 < m7b["bono_efectividad"]    # 79% pierde el bono efectividad
     assert m7c["costos"]["operativos"] == 1900 * 20000
-    assert m7c["costos"]["headcount"] == m7b["costos"]["headcount"]  # estructura fija
+    assert m7c["costos"]["headcount"]["vendedores"] == 380 and m7b["costos"]["headcount"]["vendedores"] == 95   # estructura propia del mes 7 (1.900 ÷ 5)
     # los demás meses del mes 0 no cambian (los ajustes posteriores de la cohorte 7 sí, más adelante)
     for t in range(6):
         assert con["meses"][t]["facturacion_bruta"] == base["meses"][t]["facturacion_bruta"]
@@ -479,3 +482,25 @@ def test_zafra_propia_por_mes():
     peor = [min(v, 45) if i >= 2 else v for i, v in enumerate(ideal)]
     mal = simular_anual({"objetivo_co": 1750}, [1900] * 12, meses_afectados={"5": {"zafra_pct": peor}})
     assert mal["anual"]["resultado"] < base["anual"]["resultado"]
+
+
+def test_estructura_propia_del_mes():
+    """La productividad de un mes no mueve sus ventas: dimensiona la dotación de ESE mes (vendedores, supervisores,
+    backoffice) con sus ventas y su ratio; los demás meses siguen con la estructura fija del mes 1."""
+    from app.services.analyzers.facturacion_convergente import simular_convergente
+    base = simular_anual({"objetivo_co": 1750}, [1900] * 12)
+    con = simular_anual({"objetivo_co": 1750}, [1900] * 12, meses_afectados={"5": {"costos": {"ventas_por_vendedor": 25}}})
+    f, g = con["meses"][4], base["meses"][4]
+    assert f["estructura_propia"] and not g["estructura_propia"]
+    assert f["ventas"] == g["ventas"] == 1900 and f["facturacion_bruta"] == g["facturacion_bruta"]   # las ventas no cambian
+    assert f["headcount"]["vendedores"] == 76 and g["headcount"]["vendedores"] == 95                  # 1.900 ÷ 25 = 76
+    assert f["headcount"]["supervisores"] == 6 and f["headcount"]["backoffice"] == g["headcount"]["backoffice"]
+    assert f["costo_total"] < g["costo_total"] and f["resultado"] > g["resultado"]
+    assert f["ventas_por_vendedor"] == 25.0 and f["capacidad"] == 76 * 25
+    assert con["anual"]["meses_estructura_propia"] == [5]
+    # los otros meses no cambian
+    assert [m["costo_total"] for i, m in enumerate(con["meses"]) if i != 4] == [m["costo_total"] for i, m in enumerate(base["meses"]) if i != 4]
+    # convergente: las activaciones GPON de ese mes siguen a la dotación del mes (76 × 3)
+    c = simular_convergente({"objetivo_co": 1750}, [1900] * 12, 12, meses_afectados={"5": {"costos": {"ventas_por_vendedor": 25}}},
+                            gpon={"activo": True, "por_asesor_por_mes": [3]})
+    assert c["meses"][4]["ventas_gpon"] == 76 * 3 and c["meses"][3]["ventas_gpon"] == 95 * 3 and c["meses"][4]["vendedores_mes"] == 76

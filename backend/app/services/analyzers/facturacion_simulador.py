@@ -595,7 +595,7 @@ HORIZONTES = (12, 18, 24)   # meses del balance; los meses nuevos se agregan al 
 # Claves que un "mes afectado" NO puede pisar: las ventas van aparte y la estructura queda fija al mes 1.
 _NO_AFECTABLES = {"ventas", "_sin_breakeven", "costos"}
 _COSTOS_AFECTABLES = {"comision_por_venta", "plus_por_venta", "logistica_central",
-                      "logistica_interior", "logistica_interior_pct", "operativo_por_venta"}
+                      "logistica_interior", "logistica_interior_pct", "operativo_por_venta", "ventas_por_vendedor", "supervisor_cada_vendedores", "backoffice_cada_ventas", "coordinadores", "controllers"}  # incluye las claves de ESTRUCTURA_KEYS (estructura propia del mes)
 
 
 def _normalizar_afectados(meses_afectados: dict | None, h: int) -> dict[int, dict]:
@@ -616,6 +616,23 @@ def _normalizar_afectados(meses_afectados: dict | None, h: int) -> dict[int, dic
         if limpio:
             out[mes - 1] = limpio
     return out
+
+
+# Claves de costos que dimensionan la dotación: si un mes afectado trae alguna, ese mes tiene estructura propia.
+ESTRUCTURA_KEYS = ("ventas_por_vendedor", "supervisor_cada_vendedores", "backoffice_cada_ventas", "coordinadores", "controllers")
+
+
+def _tiene_estructura_propia(ov: dict | None) -> bool:
+    costos = (ov or {}).get("costos")
+    return isinstance(costos, dict) and any(costos.get(k) is not None for k in ESTRUCTURA_KEYS)
+
+
+def headcount_del_mes(base: dict, ov: dict | None, ventas_mes: float, headcount_base: dict) -> dict:
+    """Dotación con la que trabaja un mes: la fija del mes 1, salvo que el mes tenga estructura propia."""
+    if not _tiene_estructura_propia(ov):
+        return headcount_base
+    c = simular_facturacion({**_aplicar_afectado(base, ov), "ventas": ventas_mes, "_sin_breakeven": True})
+    return c["costos"]["headcount"]
 
 
 def _aplicar_afectado(base: dict, ov: dict | None) -> dict:
@@ -737,17 +754,29 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         fila["facturacion_bruta"] = round(fila["facturacion_bruta"])
         fila["ajustes"] = sum(fila[k] for k in _FLUJOS)
         fila["ingreso_neto"] = fila["facturacion_bruta"] + fila["ajustes"]
-        # Costos del mes: estructura fija del mes 1 + variables de las ventas del mes.
+        # Costos del mes: estructura fija del mes 1 + variables de las ventas del mes. Si el mes trae su propia
+        # productividad o ratios (variaciones en costos.ventas_por_vendedor / supervisor_cada_vendedores /
+        # backoffice_cada_ventas…), la dotación de ESE mes se dimensiona con sus ventas y sus ratios
+        # ("estructura propia del mes"): la productividad no mueve las ventas, mueve la estructura.
+        estructura_propia = t > 0 and _tiene_estructura_propia(afectados.get(t))
+        if estructura_propia:
+            dim, _ = _costos_y_margen(c["parametros"]["costos"], ventas[t], c["mes0"], c["bruto_mes0"], c["neto_6"], c["neto_12"])
+            hc_t = dim["headcount"]
+        else:
+            hc_t = headcount
         costos_t, _ = _costos_y_margen(c["parametros"]["costos"], ventas[t], c["mes0"], c["bruto_mes0"],
-                                       c["neto_6"], c["neto_12"], headcount=headcount)
+                                       c["neto_6"], c["neto_12"], headcount=hc_t)
         fila["costos"] = costos_t
         fila["costo_total"] = costos_t["total"]
+        fila["headcount"] = hc_t
+        fila["estructura_propia"] = estructura_propia
         fila["resultado"] = fila["ingreso_neto"] - costos_t["total"]
         fila["margen_pct"] = round(fila["resultado"] / fila["ingreso_neto"] * 100, 1) if fila["ingreso_neto"] else 0.0
         acumulado += fila["resultado"]
         fila["acumulado"] = acumulado
         fila["acumulado_anterior"] = acumulado - fila["resultado"]
-        fila["ventas_por_vendedor"] = round(ventas[t] / headcount["vendedores"], 1) if headcount["vendedores"] else 0
+        fila["ventas_por_vendedor"] = round(ventas[t] / hc_t["vendedores"], 1) if hc_t["vendedores"] else 0
+        fila["capacidad"] = round(hc_t["vendedores"] * float(c["parametros"]["costos"]["ventas_por_vendedor"] or 0))
         # Líneas activas: después de los 12 meses la cohorte se mantiene en su último nivel de zafra.
         fila["lineas_activas"] = round(sum(cohortes[m]["meses"][min(t - m, 12)]["lineas_activas"] for m in range(t + 1)))
         # ---- La "ola": lo que las cohortes anteriores ya dejaron comprometido para este mes, venda lo que venda ----
@@ -764,7 +793,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         def _resultado_con(v: float) -> float:
             c2 = simular_facturacion({**pm_t, "ventas": v, "bono_adicional": bonos_ad[t], "_sin_breakeven": True})
             cst, _ = _costos_y_margen(c2["parametros"]["costos"], v, c2["mes0"], c2["bruto_mes0"],
-                                      c2["neto_6"], c2["neto_12"], headcount=headcount)
+                                      c2["neto_6"], c2["neto_12"], headcount=hc_t)
             return c2["bruto_mes0"] + fila["ajustes"] + aporte_t - cst["total"]
         hi = max(ventas[t] * 3, 500.0)
         if _resultado_con(0.0) >= 0:
@@ -841,6 +870,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "ola_maxima_mes": min(meses, key=lambda f: f["ola_devoluciones"])["mes"],
         "meses_en_riesgo": [f["mes"] for f in meses if f["en_riesgo"]],
         "ventas_equilibrio_max": max((f["ventas_equilibrio"] or 0) for f in meses),
+        "meses_estructura_propia": [f["mes"] for f in meses if f["estructura_propia"]],
         # Gross (criterio Claro): promedio del período, máximo y meses fuera de la banda de referencia 22–27%.
         "bajas_gross": round(tot("bajas_gross")),
         "netas_gross": round(tot("ventas") - tot("bajas_gross")),

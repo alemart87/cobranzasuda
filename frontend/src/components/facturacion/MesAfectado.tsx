@@ -38,6 +38,11 @@ export const CAMPOS_AFECTABLES: CampoDef[] = [
   { key: "plus_por_venta", label: "Plus al vendedor por venta", step: 1000, grupo: "Costos variables", costo: true },
   { key: "logistica_interior_pct", label: "Entregas en Interior", suffix: "%", step: 5, grupo: "Costos variables", costo: true },
   { key: "operativo_por_venta", label: "Costo operativo por venta", step: 500, grupo: "Costos variables", costo: true },
+  // Estructura propia del mes: con cualquiera de estos, la dotación de ESE mes se dimensiona con sus ventas y sus ratios
+  // (la productividad no mueve las ventas: mueve la estructura y su costo fijo).
+  { key: "ventas_por_vendedor", label: "Ventas por vendedor (dimensiona la dotación del mes)", step: 0.5, grupo: "Estructura del mes", costo: true },
+  { key: "supervisor_cada_vendedores", label: "Vendedores por supervisor", step: 1, grupo: "Estructura del mes", costo: true },
+  { key: "backoffice_cada_ventas", label: "Ventas por backoffice", step: 10, grupo: "Estructura del mes", costo: true },
 ];
 
 /** Campos afectables del negocio GPON (fibra + TV). */

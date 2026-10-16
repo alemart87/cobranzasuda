@@ -428,8 +428,12 @@ neto − costos = resultado; acumulado anterior + resultado = acumulado; resulta
 **Editar el mes 1 sin perder la proyección**: "Editar mes 1" vuelve al panel de variables y, al volver a setear, se
 conservan las ventas de los meses 2..N, los meses afectados, los GPON por asesor, los nombres y los bonos a mano; solo
 cambian la estructura (ventas por vendedor, ratios), el objetivo y las variables. Cada mes de la grilla muestra además
-su **productividad** (ventas ÷ vendedores de la estructura fija) editable: cambiarla recalcula las ventas del mes
-(vendedores × ventas por vendedor), y hay un campo para aplicar una productividad a todos los meses 2..N.
+su **productividad** (ventas por vendedor) editable. Cambiarla **no mueve las ventas: dimensiona la dotación de ese mes**
+(vendedores = ventas ÷ productividad, con sus supervisores y backoffice) y su costo fijo; queda como variación del mes
+(`costos.ventas_por_vendedor`, grupo "Estructura del mes" del editor, junto con los ratios de supervisor y backoffice).
+El motor marca `estructura_propia` en esa fila, expone `headcount` y `capacidad` por mes y `anual.meses_estructura_propia`;
+en el convergente las activaciones GPON de ese mes siguen a su dotación. Hay un campo para aplicar una productividad a
+todos los meses 2..N y un botón para volver a la estructura del mes 1.
 
 **Valores iniciales y escenario IDEAL (móvil)**: el simulador anual abre con los valores iniciales definidos por la
 dirección (`frontend/src/components/facturacion/presets.ts`): 1.700 ventas y objetivo CO 1.700, efectividad 85%,
