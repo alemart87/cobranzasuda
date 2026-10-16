@@ -313,6 +313,14 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const [gponObjetivoAuto, setGponObjetivoAuto] = useState(true); // objetivo del bono fijo = vendedores × 3
   const [prodTodos, setProdTodos] = useState(18);                 // productividad (ventas por vendedor) para aplicar a los meses 2..N
   const [seteado, setSeteado] = useState(false);
+  // Productividad propia de un mes: queda como variación del mes (costos.ventas_por_vendedor) y dimensiona SU dotación.
+  const setVpvMes = (mes: number, k: number) => setAfectados((prev) => {
+    const n = { ...prev }; const ov = { ...(n[String(mes)] ?? {}) }; const c = { ...(ov.costos ?? {}) };
+    if (k > 0 && Math.abs(k - Number(p?.costos?.ventas_por_vendedor)) > 1e-9) c.ventas_por_vendedor = k; else delete c.ventas_por_vendedor;
+    if (Object.keys(c).length) ov.costos = c; else delete ov.costos;
+    if (Object.keys(ov).length) n[String(mes)] = ov; else delete n[String(mes)];
+    return n;
+  });
   const [horizonte, setHorizonte] = useState<Horizonte>(12);
   const [ventas, setVentas] = useState<number[]>([]);
   const [nombres, setNombres] = useState<string[]>([]);       // nombres editables de los meses ("Octubre 2026")
@@ -609,6 +617,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   {" "}· {cfg.objetivoLabel} <b>{formatInt(Number(p[cfg.objetivoKey]))}</b> · {p.costos.ventas_por_vendedor} ventas/vendedor
                   {a ? <> · costo fijo <b>{formatGs(a.costos_fijos_mes)}</b>/mes</> : null}
                   {gponOn && hc ? <> · <span className="text-brand-cyan">GPON <b>{asesorMes1}</b> por asesor = <b>{formatInt(hc.ventas_gpon_mes1?? Math.round(vendedoresRef * asesorMes1))}</b> activaciones/mes</span></> : null}
+                  {a?.meses_estructura_propia?.length ? <span className="ml-2 px-1.5 py-0.5 rounded bg-brand-purple text-white text-[10px] font-bold" title={`Meses con estructura propia (dotación dimensionada con sus ventas y su productividad): ${a.meses_estructura_propia.map((m: number) => nombreMes(m - 1)).join(", ")}`}>{a.meses_estructura_propia.length} mes(es) con estructura propia</span> : null}
                   {esConvergente && !gponActivo ? <span className="ml-2 px-1.5 py-0.5 rounded bg-brand-border text-brand-graphite text-[10px] font-bold">SIN GPON</span> : null}
                   {p.bonos_activos === false ? <span className="ml-2 px-1.5 py-0.5 rounded bg-brand-ink text-white text-[10px] font-bold">SIN BONOS</span> : null}
                 </div>
@@ -638,14 +647,19 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   </span>
                   <NumeroInput step={10} min={0} value={v} disabled={i === 0} onChange={(n) => setVenta(i, n)}
                     className={`input !py-1 !px-1.5 text-sm text-right w-full ${i === 0 ? "bg-brand-bg-soft" : ""}`} />
-                  {negocio === "movil" && vendedoresRef > 0 && (
-                    <span className="flex items-center justify-end gap-1 mt-0.5 text-[9px] text-brand-slate" title="Productividad del mes: ventas ÷ vendedores de la estructura fija. Editala y las ventas del mes se recalculan (vendedores × ventas por vendedor).">
-                      <NumeroInput step={0.5} min={0} value={Math.round((v / vendedoresRef) * 10) / 10} disabled={i === 0}
-                        onChange={(k) => setVenta(i, Math.round(k * vendedoresRef))}
-                        className={`input !py-0 !px-1 text-[10px] text-right w-12 ${i === 0 ? "bg-brand-bg-soft" : "border-dashed"}`} />
-                      <span>por vend.</span>
-                    </span>
-                  )}
+                  {negocio === "movil" && vendedoresRef > 0 && (() => {
+                    const vpvMes = Number(afectados[String(i + 1)]?.costos?.ventas_por_vendedor ?? p.costos.ventas_por_vendedor);
+                    const propia = i > 0 && afectados[String(i + 1)]?.costos?.ventas_por_vendedor != null;
+                    const vendMes = meses[i]?.headcount?.vendedores ?? (propia ? Math.ceil(v / Math.max(vpvMes, 0.01)) : vendedoresRef);
+                    return (
+                      <span className={`flex items-center justify-end gap-1 mt-0.5 text-[9px] ${propia ? "text-brand-purple font-semibold" : "text-brand-slate"}`}
+                        title="Productividad del mes (ventas por vendedor). No cambia las ventas: dimensiona la dotación de ESE mes (vendedores, supervisores, backoffice) con sus ventas y su costo fijo.">
+                        <NumeroInput step={0.5} min={0} value={vpvMes} disabled={i === 0} onChange={(k) => setVpvMes(i + 1, k)}
+                          className={`input !py-0 !px-1 text-[10px] text-right w-12 ${i === 0 ? "bg-brand-bg-soft" : propia ? "border-brand-purple text-brand-purple font-bold" : "border-dashed"}`} />
+                        <span>por vend. → <b>{formatInt(vendMes)}</b> vend.</span>
+                      </span>
+                    );
+                  })()}
                 </label>
               ))}
             </div>
@@ -654,12 +668,14 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(1.02, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Crecer 2% mensual</button>
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(0.98, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Caer 2% mensual</button>
               {negocio === "movil" && vendedoresRef > 0 && (
-                <span className="flex items-center gap-1 text-[11px] text-brand-graphite">
-                  · Productividad para los meses 2 a {horizonte}:
+                <span className="flex flex-wrap items-center gap-1 text-[11px] text-brand-graphite">
+                  · Productividad (ventas por vendedor) para los meses 2 a {horizonte}:
                   <NumeroInput step={0.5} min={0} value={prodTodos} onChange={setProdTodos} className="input !py-0.5 !px-1 text-[11px] text-right w-14" />
-                  <span>por vendedor</span>
-                  <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prodTodos * vendedoresRef))))} className="text-brand-primary font-semibold hover:underline">Aplicar</button>
-                  <span className="text-brand-slate">(= {formatInt(Math.round(prodTodos * vendedoresRef))} ventas/mes con {formatInt(vendedoresRef)} vendedores)</span>
+                  <button onClick={() => setAfectados((prev) => { const n = { ...prev }; for (let m = 2; m <= horizonte; m++) n[String(m)] = { ...(n[String(m)] ?? {}), costos: { ...(n[String(m)]?.costos ?? {}), ventas_por_vendedor: prodTodos } }; return n; })}
+                    className="text-brand-primary font-semibold hover:underline">Aplicar</button>
+                  <button onClick={() => setAfectados((prev) => { const n: Afectados = {}; for (const [m, ov] of Object.entries(prev)) { const c = { ...(ov?.costos ?? {}) }; delete c.ventas_por_vendedor; const o = { ...ov }; if (Object.keys(c).length) o.costos = c; else delete o.costos; if (Object.keys(o).length) n[m] = o; } return n; })}
+                    className="text-brand-slate font-semibold hover:underline">Volver a la estructura del mes 1</button>
+                  <span className="text-brand-slate">(dimensiona la dotación de cada mes con sus ventas: no cambia las ventas)</span>
                 </span>
               )}
               <span className="text-[11px] text-brand-slate ml-auto">✎ sobre un mes = variaciones propias de ese mes (menos porta, otra efectividad, otro mix…)</span>
@@ -804,9 +820,9 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   
               <section className="card p-5">
                 <h2 className="font-display text-lg text-brand-ink uppercase mb-1">Ventas vs estructura fija</h2>
-                <p className="text-xs text-brand-slate mb-3">{negocio === "gpon" ? "Activaciones" : "Ventas"} de cada mes contra el {cfg.objetivoLabel} y la capacidad de la estructura ({hc?.vendedores} vendedores × {p.costos.ventas_por_vendedor}).</p>
+                <p className="text-xs text-brand-slate mb-3">{negocio === "gpon" ? "Activaciones" : "Ventas"} de cada mes contra el {cfg.objetivoLabel} y la capacidad de la estructura ({hc?.vendedores} vendedores × {p.costos.ventas_por_vendedor}{a?.meses_estructura_propia?.length ? `; ${a.meses_estructura_propia.length} mes(es) con estructura propia, con su propia capacidad` : ""}).</p>
                 <ResponsiveContainer width="100%" height={260}>
-                  <ComposedChart data={meses.map((m: any) => ({ ...m, capacidad: (hc?.vendedores ?? 0) * Number(p.costos.ventas_por_vendedor) }))} margin={{ top: 8, right: 12 }}>
+                  <ComposedChart data={meses.map((m: any) => ({ ...m, capacidad: m.capacidad ?? (hc?.vendedores ?? 0) * Number(p.costos.ventas_por_vendedor) }))} margin={{ top: 8, right: 12 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="mes" fontSize={10} tickFormatter={(v: number) => nombreCorto(v - 1)} />
                     <YAxis yAxisId="l" fontSize={10} />

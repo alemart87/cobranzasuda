@@ -19,7 +19,8 @@ from typing import Any
 
 from .facturacion_gpon import PARAMETROS_GPON_DEFAULT, parametros_gpon, simular_gpon_anual
 from .facturacion_simulador import (
-    HORIZONTES, PARAMETROS_DEFAULT, parametros_con_defaults, simular_anual, simular_facturacion,
+    HORIZONTES, PARAMETROS_DEFAULT, _normalizar_afectados, headcount_del_mes, parametros_con_defaults, simular_anual,
+    simular_facturacion,
 )
 
 GPON_POR_ASESOR_IDEAL = 3.0
@@ -81,7 +82,11 @@ def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizo
     por_asesor = [max(float(x or 0), 0) for x in (gpon.get("por_asesor_por_mes") or [])][:h]
     while len(por_asesor) < h:
         por_asesor.append(por_asesor[-1] if por_asesor else GPON_POR_ASESOR_IDEAL)
-    ventas_gpon = [float(round(vendedores * k)) for k in por_asesor]
+    # Activaciones GPON del mes = vendedores de ESE mes × GPON por asesor. Si un mes tiene estructura propia
+    # (variaciones en ventas por vendedor u otros ratios), su dotación se dimensiona con sus ventas de pospago.
+    afect_movil = _normalizar_afectados(meses_afectados, h)
+    vendedores_mes = [int(headcount_del_mes(base, afect_movil.get(t), ventas[t], headcount).get("vendedores") or 0) for t in range(h)]
+    ventas_gpon = [float(round(vendedores_mes[t] * k)) for t, k in enumerate(por_asesor)]
 
     pg = parametros_gpon(gpon.get("parametros"))
     pg["negocio"] = "GPON"
@@ -109,6 +114,7 @@ def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizo
         fila["facturacion_bruta_movil"] = fm["facturacion_bruta"]
         fila["ventas_gpon"] = fg["ventas"]
         fila["gpon_por_asesor"] = round(por_asesor[t], 2)
+        fila["vendedores_mes"] = vendedores_mes[t]
         fila["gpon_activaciones_cuota1"] = fg["activaciones_cuota1"]
         fila["gpon_bono_fijo"] = fg["bono_fijo"]
         fila["gpon_bono_adicional"] = fg["bono_adicional"]
