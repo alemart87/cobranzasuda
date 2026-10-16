@@ -425,6 +425,12 @@ lo que las últimas cohortes todavía tienen por cobrar (residual, cuota 2) y po
 por flujo y deriva lo demás de los redondeados, así cada puente cierra exacto: bruta + ajustes = neto;
 neto − costos = resultado; acumulado anterior + resultado = acumulado; resultado + cola = resultado final.
 
+**Editar el mes 1 sin perder la proyección**: "Editar mes 1" vuelve al panel de variables y, al volver a setear, se
+conservan las ventas de los meses 2..N, los meses afectados, los GPON por asesor, los nombres y los bonos a mano; solo
+cambian la estructura (ventas por vendedor, ratios), el objetivo y las variables. Cada mes de la grilla muestra además
+su **productividad** (ventas ÷ vendedores de la estructura fija) editable: cambiarla recalcula las ventas del mes
+(vendedores × ventas por vendedor), y hay un campo para aplicar una productividad a todos los meses 2..N.
+
 **Valores iniciales y escenario IDEAL (móvil)**: el simulador anual abre con los valores iniciales definidos por la
 dirección (`frontend/src/components/facturacion/presets.ts`): 1.700 ventas y objetivo CO 1.700, efectividad 85%,
 bono efectividad cobrado 87,5%, estado A 100%, porta 90%, y estructura de 17 ventas por vendedor, 1 supervisor cada 14,

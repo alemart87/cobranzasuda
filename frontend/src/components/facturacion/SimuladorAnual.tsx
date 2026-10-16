@@ -311,6 +311,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const [gponActivo, setGponActivo] = useState(true);             // incluir GPON en el balance
   const [gponAsesor, setGponAsesor] = useState<number[]>([]);     // GPON por asesor, por mes (ideal 3)
   const [gponObjetivoAuto, setGponObjetivoAuto] = useState(true); // objetivo del bono fijo = vendedores × 3
+  const [prodTodos, setProdTodos] = useState(18);                 // productividad (ventas por vendedor) para aplicar a los meses 2..N
   const [seteado, setSeteado] = useState(false);
   const [horizonte, setHorizonte] = useState<Horizonte>(12);
   const [ventas, setVentas] = useState<number[]>([]);
@@ -402,9 +403,12 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
     return () => clearTimeout(timer.current);
   }, [seteado, p, ventas, horizonte, afectados, bonosAd, nombres, simular, gponReq]);
 
+  // Setear (o volver a setear) el mes 1: fija la estructura con las variables cargadas y CONSERVA todo lo trabajado
+  // en la proyección (ventas de los meses 2..N, meses afectados, GPON por asesor, nombres y bonos a mano).
+  // Solo el mes 1 toma las ventas del panel; los meses nuevos (si el horizonte creció) copian el último.
   const setear = () => {
     const v1 = Number(p.ventas) || 0;
-    setVentas([v1, ...Array(horizonte - 1).fill(v1)]);
+    setVentas((prev) => Array.from({ length: horizonte }, (_, i) => (i === 0 ? v1 : prev[i] ?? prev[prev.length - 1] ?? v1)));
     setBonosAd((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? 0));
     setNombres((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? ""));
     setGponAsesor((prev) => Array.from({ length: horizonte }, (_, i) => prev[i] ?? prev[0] ?? GPON_POR_ASESOR_IDEAL));
@@ -583,7 +587,11 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               <button onClick={setear} disabled={!(Number(p.ventas) > 0)} className="btn-primary !px-6 !py-3 text-base shadow-lg disabled:opacity-50">
                 Setear mes 1 y fijar la estructura →
               </button>
-              <p className="text-[11px] text-brand-slate mt-3">Después vas a cargar solo las {cfg.unidad} de los meses 2 a {horizonte}. Podés volver a editar el mes 1 cuando quieras.</p>
+              <p className="text-[11px] text-brand-slate mt-3">
+                {ventas.length
+                  ? <>Al volver a setear se conservan las {cfg.unidad} que ya cargaste en los meses 2 a {horizonte}, los meses afectados, los GPON por asesor, los nombres y los bonos a mano: solo cambian la estructura, el objetivo y las variables del mes 1.</>
+                  : <>Después vas a cargar solo las {cfg.unidad} de los meses 2 a {horizonte}. Podés volver a editar el mes 1 cuando quieras sin perder lo cargado.</>}
+              </p>
             </section>
           </div>
         </div>
@@ -605,7 +613,8 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   {p.bonos_activos === false ? <span className="ml-2 px-1.5 py-0.5 rounded bg-brand-ink text-white text-[10px] font-bold">SIN BONOS</span> : null}
                 </div>
               </div>
-              <button onClick={editarMes1} className="no-print text-sm text-brand-graphite border border-brand-border rounded px-3 py-2 hover:border-brand-primary">Editar mes 1</button>
+              <button onClick={editarMes1} title="Cambiá la estructura (ventas por vendedor, ratios), el objetivo o cualquier variable. Las ventas por mes, los meses afectados, GPON y los bonos a mano se conservan."
+                className="no-print text-sm text-brand-graphite border border-brand-border rounded px-3 py-2 hover:border-brand-primary">Editar mes 1 <span className="text-[10px] text-brand-slate">· conserva la proyección</span></button>
             </div>
             <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate mb-2">{negocio === "gpon" ? "Activaciones por mes" : "Ventas efectivas por mes"}</div>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-12 gap-2">
@@ -629,6 +638,14 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   </span>
                   <NumeroInput step={10} min={0} value={v} disabled={i === 0} onChange={(n) => setVenta(i, n)}
                     className={`input !py-1 !px-1.5 text-sm text-right w-full ${i === 0 ? "bg-brand-bg-soft" : ""}`} />
+                  {negocio === "movil" && vendedoresRef > 0 && (
+                    <span className="flex items-center justify-end gap-1 mt-0.5 text-[9px] text-brand-slate" title="Productividad del mes: ventas ÷ vendedores de la estructura fija. Editala y las ventas del mes se recalculan (vendedores × ventas por vendedor).">
+                      <NumeroInput step={0.5} min={0} value={Math.round((v / vendedoresRef) * 10) / 10} disabled={i === 0}
+                        onChange={(k) => setVenta(i, Math.round(k * vendedoresRef))}
+                        className={`input !py-0 !px-1 text-[10px] text-right w-12 ${i === 0 ? "bg-brand-bg-soft" : "border-dashed"}`} />
+                      <span>por vend.</span>
+                    </span>
+                  )}
                 </label>
               ))}
             </div>
@@ -636,6 +653,15 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : prev[0])))} className="text-[11px] text-brand-primary font-semibold hover:underline">Igualar todos al mes 1</button>
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(1.02, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Crecer 2% mensual</button>
               <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prev[0] * Math.pow(0.98, i)))))} className="text-[11px] text-brand-primary font-semibold hover:underline">Caer 2% mensual</button>
+              {negocio === "movil" && vendedoresRef > 0 && (
+                <span className="flex items-center gap-1 text-[11px] text-brand-graphite">
+                  · Productividad para los meses 2 a {horizonte}:
+                  <NumeroInput step={0.5} min={0} value={prodTodos} onChange={setProdTodos} className="input !py-0.5 !px-1 text-[11px] text-right w-14" />
+                  <span>por vendedor</span>
+                  <button onClick={() => setVentas((prev) => prev.map((x, i) => (i === 0 ? x : Math.round(prodTodos * vendedoresRef))))} className="text-brand-primary font-semibold hover:underline">Aplicar</button>
+                  <span className="text-brand-slate">(= {formatInt(Math.round(prodTodos * vendedoresRef))} ventas/mes con {formatInt(vendedoresRef)} vendedores)</span>
+                </span>
+              )}
               <span className="text-[11px] text-brand-slate ml-auto">✎ sobre un mes = variaciones propias de ese mes (menos porta, otra efectividad, otro mix…)</span>
             </div>
 
