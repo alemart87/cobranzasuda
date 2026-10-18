@@ -589,7 +589,17 @@ def _ahorro_por_venta_vendedor(p: dict, act: float) -> float:
 _FLUJOS = ("residual", "cuota2", "legajos", "clawbacks", "clawback_bonos", "recalculo_productividad")
 
 
-HORIZONTES = (12, 18, 24)   # meses del balance; los meses nuevos se agregan al final
+HORIZONTES = (12, 18, 24)   # horizontes "rápidos"; cualquier mes entre HORIZONTE_MIN y HORIZONTE_MAX es válido (botón +1 mes)
+HORIZONTE_MIN, HORIZONTE_MAX = 12, 60
+
+
+def horizonte_valido(h) -> int:
+    """Meses del balance: 12 a 60 (los meses nuevos se agregan al final); fuera de rango cae en 12."""
+    try:
+        h = int(h or 12)
+    except (TypeError, ValueError):
+        return 12
+    return h if HORIZONTE_MIN <= h <= HORIZONTE_MAX else 12
 
 
 # Claves que un "mes afectado" NO puede pisar: las ventas van aparte y la estructura queda fija al mes 1.
@@ -673,7 +683,7 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
       legajos, chargebacks, devolución de bonos): así funciona la liquidación real.
     """
     base = parametros_con_defaults(params)
-    h = int(horizonte) if int(horizonte or 12) in HORIZONTES else 12
+    h = horizonte_valido(horizonte)
     ventas = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:h]
     while len(ventas) < h:
         ventas.append(ventas[-1] if ventas else float(base["ventas"]))

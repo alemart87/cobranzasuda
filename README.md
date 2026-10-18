@@ -415,7 +415,7 @@ cuota 1, cuota 2 y porta (también sus devoluciones) y no toca bonos, residual n
 la cifra que decide); "queda a 12 meses" (residual completo); peso de los bonos sobre la facturación; cierre
 (devoluciones y cobros a 12 meses, gana o pierde).
 
-**Simulación anual (12, 18 o 24 meses; los meses nuevos se agregan al final copiando el último)**: el mes 1 fija la estructura y el objetivo; cada mes es una cohorte. El mes
+**Simulación anual (12 a 60 meses: atajos 12 / 18 / 24 y botones +1 / −1 que agregan o quitan un mes al final copiando el último)**: el mes 1 fija la estructura y el objetivo; cada mes es una cohorte. El mes
 calendario *t* liquida su propio mes 0 más los flujos de todas las cohortes anteriores en la edad que les toca.
 Nombres de mes editables, bono adicional por mes, y **meses afectados** (un mes puede tener porta, efectividad,
 objetivo, mix, ajuste, bonos, legajos, caídas, recupero, costos variables o **su propia zafra**: con ella se calculan

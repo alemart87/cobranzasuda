@@ -19,7 +19,7 @@ from typing import Any
 
 from .facturacion_gpon import PARAMETROS_GPON_DEFAULT, parametros_gpon, simular_gpon_anual
 from .facturacion_simulador import (
-    HORIZONTES, PARAMETROS_DEFAULT, _normalizar_afectados, headcount_del_mes, parametros_con_defaults, simular_anual,
+    PARAMETROS_DEFAULT, _normalizar_afectados, headcount_del_mes, horizonte_valido, parametros_con_defaults, simular_anual,
     simular_facturacion,
 )
 
@@ -61,7 +61,7 @@ def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizo
     gpon = gpon or {}
     activo = bool(gpon.get("activo", True))
     base = parametros_con_defaults(params)
-    h = int(horizonte) if int(horizonte or 12) in HORIZONTES else 12
+    h = horizonte_valido(horizonte)
     ventas = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:h]
     while len(ventas) < h:
         ventas.append(ventas[-1] if ventas else float(base["ventas"]))

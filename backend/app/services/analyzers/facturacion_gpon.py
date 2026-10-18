@@ -267,7 +267,8 @@ def simular_gpon_anual(params: dict | None, ventas_por_mes: list[float], horizon
     operativos y logística por venta). `vendedores_compartidos`: vendedores reales de esa
     estructura, para informar activaciones GPON por asesor."""
     base = parametros_gpon(params)
-    h = int(horizonte) if int(horizonte) in (12, 18, 24) else 12
+    from .facturacion_simulador import horizonte_valido
+    h = horizonte_valido(horizonte)
     ventas = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:h]
     while len(ventas) < h:
         ventas.append(ventas[-1] if ventas else float(base["ventas"]))

@@ -28,7 +28,9 @@ import { EstructuraOperativa } from "@/components/facturacion/EstructuraOperativ
 const M = (v: number) => `${Math.round(v / 1e6)}M`;
 
 export type Negocio = "movil" | "gpon";
-export type Horizonte = 12 | 18 | 24;
+export type Horizonte = number;   // 12 a 60 meses; 12/18/24 son los atajos, +1/−1 agrega o quita un mes al final
+const HORIZONTE_MIN = 12, HORIZONTE_MAX = 60;
+const clampHorizonte = (h: number) => Math.min(HORIZONTE_MAX, Math.max(HORIZONTE_MIN, Math.round(Number(h) || 12)));
 
 type EerrRow = [string, string | null, string | null, string];
 type Cfg = {
@@ -423,7 +425,8 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
     setSeteado(true);
   };
   // Cambiar el horizonte: los meses nuevos se agregan al final copiando el último mes cargado; al acortar se recortan.
-  const cambiarHorizonte = (h: Horizonte) => {
+  const cambiarHorizonte = (hRaw: Horizonte) => {
+    const h = clampHorizonte(hRaw);
     setHorizonte(h);
     setVentas((prev) => {
       if (!prev.length) return prev;
@@ -437,13 +440,18 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const setNombre = (i: number, v: string) => setNombres((prev) => prev.map((x, j) => (j === i ? v.slice(0, 40) : x)));
   const setBonoAd = (i: number, v: number) => setBonosAd((prev) => prev.map((x, j) => (j === i ? Math.max(v, 0) : x)));
   const HorizonteToggle = () => (
-    <div className="inline-flex rounded-md border border-brand-border overflow-hidden no-print">
-      {([12, 18, 24] as const).map((h) => (
-        <button key={h} onClick={() => cambiarHorizonte(h)}
-          className={`px-3 py-1.5 text-xs font-bold ${horizonte === h ? "bg-brand-primary text-white" : "text-brand-graphite hover:bg-brand-bg"}`}>
-          {h} meses
-        </button>
-      ))}
+    <div className="inline-flex items-center gap-1 no-print">
+      <div className="inline-flex rounded-md border border-brand-border overflow-hidden">
+        {([12, 18, 24] as const).map((h) => (
+          <button key={h} onClick={() => cambiarHorizonte(h)}
+            className={`px-3 py-1.5 text-xs font-bold ${horizonte === h ? "bg-brand-primary text-white" : "bg-white text-brand-graphite hover:bg-brand-bg"}`}>{h} meses</button>
+        ))}
+      </div>
+      <div className="inline-flex items-center rounded-md border border-brand-border overflow-hidden" title="Agregar o quitar un mes al final (los meses nuevos copian el último cargado)">
+        <button onClick={() => cambiarHorizonte(horizonte - 1)} disabled={horizonte <= HORIZONTE_MIN} className="px-2.5 py-1.5 text-sm font-bold text-brand-graphite hover:bg-brand-bg disabled:opacity-30">−</button>
+        <span className={`px-2 text-xs font-bold ${[12, 18, 24].includes(horizonte) ? "text-brand-slate" : "text-brand-primary"}`}>{horizonte} m</span>
+        <button onClick={() => cambiarHorizonte(horizonte + 1)} disabled={horizonte >= HORIZONTE_MAX} className="px-2.5 py-1.5 text-sm font-bold text-brand-graphite hover:bg-brand-bg disabled:opacity-30">+</button>
+      </div>
     </div>
   );
   const editarMes1 = () => { setSeteado(false); setRes(null); };
@@ -472,7 +480,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
     } : {},
   });
   const abrirSimulacion = (s: any) => {
-    const h = (s.horizonte === 24 ? 24 : s.horizonte === 18 ? 18 : 12) as Horizonte;
+    const h = clampHorizonte(Number(s.horizonte) || 12);
     const { convergente: cv, ...paramsBase } = (s.parametros || {}) as any;
     setP(paramsBase);
     if (esConvergente) {
