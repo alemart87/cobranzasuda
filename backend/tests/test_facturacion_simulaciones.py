@@ -51,10 +51,17 @@ async def test_registro_de_simulaciones():
         assert (s["postits"][0]["x"], s["postits"][0]["y"]) == (120.0, 340.5)   # posición en el lienzo
         assert s["created_by_nombre"]
 
-        # horizonte inválido
+        # horizonte inválido (válidos: 12 a 60 meses, el botón +1 agrega un mes al final)
         r = await ac.post("/api/v1/facturacion/simulaciones", headers=h, json={
-            "nombre": "x", "horizonte": 15, "parametros": {}, "ventas_por_mes": [1]})
+            "nombre": "x", "horizonte": 7, "parametros": {}, "ventas_por_mes": [1]})
         assert r.status_code == 400
+        r = await ac.post("/api/v1/facturacion/simulaciones", headers=h, json={
+            "nombre": "x", "horizonte": 61, "parametros": {}, "ventas_por_mes": [1]})
+        assert r.status_code == 400
+        r = await ac.post("/api/v1/facturacion/simulaciones", headers=h, json={
+            "nombre": "25 meses", "horizonte": 25, "parametros": {}, "ventas_por_mes": [1] * 25})
+        assert r.status_code == 201 and r.json()["horizonte"] == 25
+        await ac.delete(f"/api/v1/facturacion/simulaciones/{r.json()['id']}", headers=h)   # no ensuciar la lista de abajo
 
         # listar (sin parámetros) y obtener (con parámetros)
         lst = (await ac.get("/api/v1/facturacion/simulaciones", headers=h)).json()["simulaciones"]

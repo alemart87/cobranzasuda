@@ -454,8 +454,9 @@ def test_horizonte_24_meses():
     # ventas de menos meses se completan al final con el último valor
     r = simular_anual({"objetivo_co": 1750}, [1900] * 18 + [1500], 24)
     assert r["ventas_por_mes"][18:] == [1500] * 6
-    # horizonte inválido cae en 12
-    assert simular_anual({}, [1900] * 30, 30)["anual"]["horizonte"] == 12
+    # cualquier horizonte entre 12 y 60 vale (botón +1 mes); fuera de rango cae en 12
+    assert simular_anual({}, [1900] * 25, 25)["anual"]["horizonte"] == 25 and len(simular_anual({}, [1900] * 25, 25)["meses"]) == 25
+    assert simular_anual({}, [1900] * 61, 61)["anual"]["horizonte"] == 12 and simular_anual({}, [1900] * 7, 7)["anual"]["horizonte"] == 12
     c = simular_convergente({"objetivo_co": 1750}, [1900] * 24, 24, gpon={"activo": True, "por_asesor_por_mes": [3]})
     assert len(c["meses"]) == 24 and c["anual"]["horizonte"] == 24 and all(f["ventas_gpon"] > 0 for f in c["meses"])
 

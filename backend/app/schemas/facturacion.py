@@ -70,8 +70,8 @@ class SimuladorRequest(BaseModel):
 class GponAnualRequest(BaseModel):
     """Proyección anual GPON: parámetros del mes 1 + activaciones de cada mes (mismas utilidades que pospago)."""
     parametros: dict[str, Any] = Field(default_factory=dict)
-    ventas_por_mes: List[float] = Field(min_length=1, max_length=24)
-    horizonte: int = 12                   # 12, 18 o 24 meses
+    ventas_por_mes: List[float] = Field(min_length=1, max_length=60)
+    horizonte: int = 12                   # 12 a 60 meses (los meses nuevos se agregan al final)
     meses_afectados: dict[str, dict[str, Any]] = Field(default_factory=dict)
     bonos_adicionales_por_mes: List[float] = Field(default_factory=list)
     nombres_meses: List[str] = Field(default_factory=list)
@@ -80,8 +80,8 @@ class GponAnualRequest(BaseModel):
 class SimuladorAnualRequest(BaseModel):
     """Simulación anual: parámetros del mes 1 (fijan estructura y objetivo) + ventas de cada mes."""
     parametros: dict[str, Any] = Field(default_factory=dict)
-    ventas_por_mes: List[float] = Field(min_length=1, max_length=24)
-    horizonte: int = 12                   # 12, 18 o 24 meses
+    ventas_por_mes: List[float] = Field(min_length=1, max_length=60)
+    horizonte: int = 12                   # 12 a 60 meses (los meses nuevos se agregan al final)
     # Meses afectados: {"7": {"porta_pct": 30, "efectividad_pct": 85, ...}} — variaciones propias de ese mes.
     meses_afectados: dict[str, dict[str, Any]] = Field(default_factory=dict)
     bonos_adicionales_por_mes: List[float] = Field(default_factory=list)   # bono adicional a mano (Gs) por mes
@@ -106,9 +106,9 @@ class SimulacionCreate(BaseModel):
     """Simulación anual guardada: registro del trabajo (nombre, comentario, marcas, post-its)."""
     nombre: str = Field(min_length=1, max_length=160)
     comentario: Optional[str] = None
-    horizonte: int = 12                   # 12, 18 o 24 meses
+    horizonte: int = 12                   # 12 a 60 meses
     parametros: dict[str, Any] = Field(default_factory=dict)
-    ventas_por_mes: List[float] = Field(min_length=1, max_length=24)
+    ventas_por_mes: List[float] = Field(min_length=1, max_length=60)
     meses_afectados: dict[str, dict[str, Any]] = Field(default_factory=dict)
     bonos_adicionales_por_mes: List[float] = Field(default_factory=list)   # bono adicional a mano (Gs) por mes
     nombres_meses: List[str] = Field(default_factory=list)                 # nombres editables de los meses
@@ -123,7 +123,7 @@ class SimulacionUpdate(BaseModel):
     comentario: Optional[str] = None
     horizonte: Optional[int] = None
     parametros: Optional[dict[str, Any]] = None
-    ventas_por_mes: Optional[List[float]] = Field(default=None, max_length=24)
+    ventas_por_mes: Optional[List[float]] = Field(default=None, max_length=60)
     meses_afectados: Optional[dict[str, dict[str, Any]]] = None
     bonos_adicionales_por_mes: Optional[List[float]] = None
     nombres_meses: Optional[List[str]] = None

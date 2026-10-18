@@ -415,7 +415,7 @@ cuota 1, cuota 2 y porta (también sus devoluciones) y no toca bonos, residual n
 la cifra que decide); "queda a 12 meses" (residual completo); peso de los bonos sobre la facturación; cierre
 (devoluciones y cobros a 12 meses, gana o pierde).
 
-**Simulación anual (12, 18 o 24 meses; los meses nuevos se agregan al final copiando el último)**: el mes 1 fija la estructura y el objetivo; cada mes es una cohorte. El mes
+**Simulación anual (12 a 60 meses: atajos 12 / 18 / 24 y botones +1 / −1 que agregan o quitan un mes al final copiando el último)**: el mes 1 fija la estructura y el objetivo; cada mes es una cohorte. El mes
 calendario *t* liquida su propio mes 0 más los flujos de todas las cohortes anteriores en la edad que les toca.
 Nombres de mes editables, bono adicional por mes, y **meses afectados** (un mes puede tener porta, efectividad,
 objetivo, mix, ajuste, bonos, legajos, caídas, recupero, costos variables o **su propia zafra**: con ella se calculan
@@ -630,7 +630,8 @@ staff es convergente, cada asesor vende pospago y GPON. Motor en `facturacion_co
 - **Simulador convergente** (`/televentas-claro/simulador-anual`, antes "simulador anual"): pospago + GPON por la misma estructura (ver 4c); 12 o 18 meses con cohortes superpuestas, EERR mes a mes,
   meses afectados, bono adicional por mes, gráficos, historia animada del negocio con hitos y alertas, y **registro
   del trabajo** (simulaciones guardadas con nombre y comentario, notas tipificadas, ítems marcados y post-its
-  arrastrables), en una barra lateral ocultable. Todo se imprime como informe.
+  arrastrables, **duplicar** una simulación como copia independiente "Copia de …" que se abre para seguir trabajando),
+  en una barra lateral ocultable. Todo se imprime como informe.
 - **Reportes de liquidación** (`/televentas-claro`): carga del `.txt`, resumen por concepto, comparación entre
   liquidaciones con descomposición del delta, y **Gross y netas con el criterio de Claro** (abajo).
 - **Gross y netas (criterio Claro)**. Los gráficos de Claro "Ventas Móv", "Netas Móv", "Desc Gross" y "%Gross/Vta"

@@ -226,8 +226,8 @@ async def gpon_simulador_run(payload: SimuladorRequest, user: CurrentUser = Depe
 @router.post("/gpon/anual")
 async def gpon_anual_run(payload: GponAnualRequest, user: CurrentUser = Depends(require_facturacion_access)) -> dict:
     """Proyección anual GPON (12, 18 o 24 meses), multicohorte, con cola posterior."""
-    if payload.horizonte not in (12, 18, 24):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12, 18 o 24 meses.")
+    if not 12 <= payload.horizonte <= 60:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe estar entre 12 y 60 meses.")
     try:
         return simular_gpon_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte,
                                   payload.bonos_adicionales_por_mes, payload.nombres_meses, payload.meses_afectados)
@@ -254,8 +254,8 @@ async def simulador_anual_run(payload: SimuladorAnualRequest,
     meses 2..12 solo cambian las ventas. Balance mensual con los ajustes de todas
     las cohortes, EERR anual y cola pendiente después del mes 12."""
     try:
-        if payload.horizonte not in (12, 18, 24):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12, 18 o 24 meses.")
+        if not 12 <= payload.horizonte <= 60:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe estar entre 12 y 60 meses.")
         return simular_anual(payload.parametros, payload.ventas_por_mes, payload.horizonte, payload.meses_afectados,
                              payload.bonos_adicionales_por_mes, payload.nombres_meses)
     except (TypeError, ValueError, KeyError) as exc:
@@ -276,8 +276,8 @@ async def convergente_anual_run(payload: ConvergenteAnualRequest,
     """Balance convergente (12, 18 o 24 meses): pospago como el simulador anual + GPON vendido por los mismos
     asesores (activaciones GPON = vendedores × GPON por asesor), con el modelo de facturación GPON completo
     (cuota 1, bono fijo, cuota 2, legajos, mora, recálculo, otros) y sin duplicar estructura."""
-    if payload.horizonte not in (12, 18, 24):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12, 18 o 24 meses.")
+    if not 12 <= payload.horizonte <= 60:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe estar entre 12 y 60 meses.")
     try:
         return simular_convergente(payload.parametros, payload.ventas_por_mes, payload.horizonte, payload.meses_afectados,
                                    payload.bonos_adicionales_por_mes, payload.nombres_meses, payload.gpon.model_dump())
@@ -372,8 +372,8 @@ async def listar_simulaciones(user: CurrentUser = Depends(require_facturacion_ac
 async def crear_simulacion(payload: SimulacionCreate, request: Request,
                            user: CurrentUser = Depends(require_facturacion_access),
                            db: AsyncSession = Depends(get_db)) -> dict:
-    if payload.horizonte not in (12, 18, 24):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12, 18 o 24 meses.")
+    if not 12 <= payload.horizonte <= 60:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe estar entre 12 y 60 meses.")
     s = FacturacionSimulacion(
         nombre=payload.nombre.strip(), comentario=(payload.comentario or "").strip() or None,
         horizonte=payload.horizonte, parametros=payload.parametros, ventas_por_mes=payload.ventas_por_mes,
@@ -415,8 +415,8 @@ async def actualizar_simulacion(simulacion_id: str, payload: SimulacionUpdate, r
     if payload.comentario is not None:
         s.comentario = payload.comentario.strip() or None
     if payload.horizonte is not None:
-        if payload.horizonte not in (12, 18, 24):
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe ser 12, 18 o 24 meses.")
+        if not 12 <= payload.horizonte <= 60:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe estar entre 12 y 60 meses.")
         s.horizonte = payload.horizonte
     if payload.parametros is not None:
         s.parametros = payload.parametros
