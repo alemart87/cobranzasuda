@@ -171,6 +171,34 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
     if (r) { if (actual?.id === s.id) cerrar(); cargarLista(); }
   };
 
+  /** Duplicar: crea una copia independiente ("Copia de …") con todo: variables, ventas, meses afectados, GPON, bonos a
+   *  mano, nombres, marcas, post-its y notas. Desde la barra de la abierta copia el estado ACTUAL (incluye cambios sin
+   *  guardar); desde la lista copia lo guardado. Abre la copia para seguir trabajando sobre ella. */
+  const duplicar = async (s: any, desdeActual = false) => {
+    const full = desdeActual && actual?.id === s.id && listo
+      ? { ...actual, ...getSnapshot(), marcas, postits, notas }
+      : await run(() => apiFetch<any>(`/api/v1/facturacion/simulaciones/${s.id}`));
+    if (!full) return;
+    const nombreCopia = `Copia de ${full.nombre}`.slice(0, 160);
+    const sinId = (arr: any[]) => (arr ?? []).map(({ id: _id, ...resto }: any) => resto);
+    setGuardando(true);
+    const nueva = await run(() => apiFetch<any>("/api/v1/facturacion/simulaciones", {
+      method: "POST", body: JSON.stringify({
+        nombre: nombreCopia, comentario: full.comentario ?? null, horizonte: full.horizonte,
+        parametros: full.parametros ?? {}, ventas_por_mes: full.ventas_por_mes ?? [], meses_afectados: full.meses_afectados ?? {},
+        bonos_adicionales_por_mes: full.bonos_adicionales_por_mes ?? [], nombres_meses: full.nombres_meses ?? [],
+        marcas: full.marcas ?? [], postits: sinId(full.postits), notas: sinId(full.notas), resumen: full.resumen ?? {},
+      }),
+    }), `Duplicada como "${nombreCopia}". Estás trabajando sobre la copia; la original queda intacta.`);
+    setGuardando(false);
+    if (!nueva) return;
+    skipSync.current = true;
+    onAbrir(nueva);
+    setActual(nueva); setMarcas(nueva.marcas ?? []); setPostits(nueva.postits ?? []); setNotas(nueva.notas ?? []);
+    setForm(null); setVerGuardadas(false);
+    cargarLista();
+  };
+
   const agregarPostit = () => {
     if (!piTexto.trim()) return;
     const n = postits.length;
@@ -251,6 +279,8 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
               <button onClick={guardarCambios} disabled={guardando || !listo} className={`px-2.5 py-1 rounded text-[11px] font-bold disabled:opacity-40 ${sinGuardar ? "bg-brand-orange text-white" : "bg-white/15 hover:bg-white/25"}`}>{guardando ? "Guardando…" : "Guardar cambios"}</button>
               <button onClick={() => abrirForm("nueva")} disabled={!listo} className="px-2.5 py-1 rounded text-[11px] font-bold bg-white/15 hover:bg-white/25 disabled:opacity-40">Guardar como nueva</button>
               <button onClick={() => abrirForm("editar")} className="px-2.5 py-1 rounded text-[11px] font-bold bg-white/15 hover:bg-white/25">Nombre / comentario</button>
+              <button onClick={() => duplicar(actual, true)} disabled={guardando} title="Crea una copia con el estado actual (incluye cambios sin guardar) y la abre; la original queda como estaba"
+                className="px-2.5 py-1 rounded text-[11px] font-bold bg-white/15 hover:bg-white/25 disabled:opacity-40">Duplicar</button>
               <button onClick={() => eliminar(actual)} className="px-2.5 py-1 rounded text-[11px] font-bold bg-brand-primary hover:bg-brand-primary/90">Eliminar</button>
               <button onClick={cerrar} title="Quitar la simulación guardada de pantalla (no la borra)" className="px-2 py-1 text-[11px] text-white/70 hover:text-white">Cerrar simulación</button>
             </>
@@ -380,6 +410,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
                         </div>
                         <div className="mt-2 flex gap-2">
                           {!activa && <button onClick={() => abrir(s.id)} className="btn-primary !py-1.5 !px-4 text-sm">Abrir</button>}
+                          <button onClick={() => duplicar(s)} className="px-3 py-1.5 text-sm font-semibold text-brand-graphite hover:text-brand-purple">Duplicar</button>
                           <button onClick={() => eliminar(s)} className="px-3 py-1.5 text-sm font-semibold text-brand-slate hover:text-brand-primary">Eliminar</button>
                         </div>
                       </li>
@@ -422,6 +453,7 @@ export function RegistroSimulaciones({ abierta, setAbierta, listo, getSnapshot, 
                           <td className="px-3 py-2 text-right text-brand-slate whitespace-nowrap">{fecha(s.created_at)}<div className="text-[10px]">{s.created_by_nombre}</div></td>
                           <td className="px-4 py-2 text-right whitespace-nowrap">
                             {!activa && <button onClick={() => abrir(s.id)} className="font-bold text-brand-primary hover:underline mr-3">Abrir</button>}
+                            <button onClick={() => duplicar(s)} title="Crear una copia independiente de esta simulación y abrirla" className="font-semibold text-brand-graphite hover:text-brand-purple hover:underline">Duplicar</button>
                             <button onClick={() => eliminar(s)} className="font-semibold text-brand-slate hover:text-brand-primary hover:underline">Eliminar</button>
                           </td>
                         </tr>

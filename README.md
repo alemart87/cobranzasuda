@@ -630,7 +630,8 @@ staff es convergente, cada asesor vende pospago y GPON. Motor en `facturacion_co
 - **Simulador convergente** (`/televentas-claro/simulador-anual`, antes "simulador anual"): pospago + GPON por la misma estructura (ver 4c); 12 o 18 meses con cohortes superpuestas, EERR mes a mes,
   meses afectados, bono adicional por mes, gráficos, historia animada del negocio con hitos y alertas, y **registro
   del trabajo** (simulaciones guardadas con nombre y comentario, notas tipificadas, ítems marcados y post-its
-  arrastrables), en una barra lateral ocultable. Todo se imprime como informe.
+  arrastrables, **duplicar** una simulación como copia independiente "Copia de …" que se abre para seguir trabajando),
+  en una barra lateral ocultable. Todo se imprime como informe.
 - **Reportes de liquidación** (`/televentas-claro`): carga del `.txt`, resumen por concepto, comparación entre
   liquidaciones con descomposición del delta, y **Gross y netas con el criterio de Claro** (abajo).
 - **Gross y netas (criterio Claro)**. Los gráficos de Claro "Ventas Móv", "Netas Móv", "Desc Gross" y "%Gross/Vta"
