@@ -6,7 +6,8 @@ PLAN = [1900] * 12
 
 
 def test_rotacion_sin_reponer_acaba_el_equipo_en_5_meses():
-    cfg = staff_con_defaults({"rotacion_pct": 20, "postulantes_por_mes": 0})
+    assert staff_con_defaults({})["rotacion_base"] == "actual"          # por defecto: % del staff consolidado del mes
+    cfg = staff_con_defaults({"rotacion_pct": 20, "postulantes_por_mes": 0, "rotacion_base": "inicial"})
     f = dinamica_staff(cfg, 8, 23, [1900] * 8, 95, 20)
     assert [r["staff_cierre"] for r in f[:5]] == [76, 57, 38, 19, 0]
     assert all(r["staff_cierre"] == 0 and r["bajas_rotacion"] == 0 for r in f[5:])
