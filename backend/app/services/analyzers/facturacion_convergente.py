@@ -54,7 +54,9 @@ def _pct(num: float, den: float) -> float:
 
 def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
                         meses_afectados: dict | None = None, bonos_adicionales_por_mes: list[float] | None = None,
-                        nombres_meses: list[str] | None = None, gpon: dict | None = None) -> dict[str, Any]:
+                        nombres_meses: list[str] | None = None, gpon: dict | None = None,
+                        headcount_fijo: dict | None = None, vendedores_por_mes: list[float] | None = None,
+                        ventas_gpon_por_mes: list[float] | None = None, sin_equilibrio: bool = False) -> dict[str, Any]:
     """Balance convergente de 12, 18 o 24 meses. `gpon` = {activo, parametros (GPON), por_asesor_por_mes,
     bonos_adicionales_por_mes, meses_afectados}. Con `activo` en False devuelve la simulación de
     pospago tal cual (más las marcas de convergente), así el simulador funciona igual que antes."""
@@ -68,11 +70,15 @@ def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizo
 
     # Estructura del mes 1 (la misma regla que simular_anual): dimensionada con el pospago.
     m1 = simular_facturacion({**base, "ventas": ventas[0], "_sin_breakeven": True})
-    headcount = dict(m1["costos"]["headcount"])
-    vendedores = int(headcount.get("vendedores") or 0)
+    headcount = dict(headcount_fijo or m1["costos"]["headcount"])
+    vend_override = [max(float(v or 0), 0.0) for v in (vendedores_por_mes or [])]
+    if vend_override:                       # zona de staff: los vendedores salen de la dinámica de dotación
+        headcount["vendedores"] = round(vend_override[0], 2)
+    vendedores = int(round(float(headcount.get("vendedores") or 0)))
+    extra = {"headcount_fijo": headcount_fijo, "vendedores_por_mes": vendedores_por_mes, "sin_equilibrio": sin_equilibrio}
 
     if not activo:
-        movil = simular_anual(base, ventas, h, meses_afectados, bonos_adicionales_por_mes, nombres_meses)
+        movil = simular_anual(base, ventas, h, meses_afectados, bonos_adicionales_por_mes, nombres_meses, **extra)
         movil["negocio"] = "CONVERGENTE"
         movil["gpon"] = None
         movil["convergente"] = {"activo": False, "vendedores": vendedores, "por_asesor_ideal": GPON_POR_ASESOR_IDEAL}
@@ -85,8 +91,15 @@ def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizo
     # Activaciones GPON del mes = vendedores de ESE mes × GPON por asesor. Si un mes tiene estructura propia
     # (variaciones en ventas por vendedor u otros ratios), su dotación se dimensiona con sus ventas de pospago.
     afect_movil = _normalizar_afectados(meses_afectados, h)
-    vendedores_mes = [int(headcount_del_mes(base, afect_movil.get(t), ventas[t], headcount).get("vendedores") or 0) for t in range(h)]
-    ventas_gpon = [float(round(vendedores_mes[t] * k)) for t, k in enumerate(por_asesor)]
+    if vend_override:
+        vendedores_mes = [round(vend_override[min(t, len(vend_override) - 1)], 2) for t in range(h)]
+    else:
+        vendedores_mes = [int(headcount_del_mes(base, afect_movil.get(t), ventas[t], headcount).get("vendedores") or 0) for t in range(h)]
+    if ventas_gpon_por_mes is not None:     # zona de staff: GPON = presentes × GPON por asesor
+        vg = [max(float(x or 0), 0.0) for x in ventas_gpon_por_mes][:h]
+        ventas_gpon = [float(round(vg[min(t, len(vg) - 1)])) if vg else 0.0 for t in range(h)]
+    else:
+        ventas_gpon = [float(round(vendedores_mes[t] * k)) for t, k in enumerate(por_asesor)]
 
     pg = parametros_gpon(gpon.get("parametros"))
     pg["negocio"] = "GPON"
@@ -101,7 +114,7 @@ def simular_convergente(params: dict | None, ventas_por_mes: list[float], horizo
     # Lo que GPON deja cada mes (ingreso neto GPON − costos variables GPON): cubre estructura junto con pospago.
     aporte = [f["ingreso_neto"] - f["costo_total"] for f in gp["meses"]]
     movil = simular_anual(base, ventas, h, meses_afectados, bonos_adicionales_por_mes, nombres_meses,
-                          aporte_externo_por_mes=aporte)
+                          aporte_externo_por_mes=aporte, **extra)
 
     meses: list[dict[str, Any]] = []
     acum = 0

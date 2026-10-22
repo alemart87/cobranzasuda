@@ -628,6 +628,14 @@ def _normalizar_afectados(meses_afectados: dict | None, h: int) -> dict[int, dic
     return out
 
 
+def _headcount_con_vendedores(hc: dict, vendedores: float) -> dict:
+    """Estructura del plan con otra cantidad de vendedores (zona de staff): el resto de la dotación no cambia."""
+    v = round(max(float(vendedores or 0), 0.0), 2)
+    out = {**hc, "vendedores": v}
+    out["total"] = round(v + sum(float(hc.get(k) or 0) for k in ("supervisores", "backoffice", "coordinadores", "controllers", "subgerencia")), 2)
+    return out
+
+
 # Claves de costos que dimensionan la dotación: si un mes afectado trae alguna, ese mes tiene estructura propia.
 ESTRUCTURA_KEYS = ("ventas_por_vendedor", "supervisor_cada_vendedores", "backoffice_cada_ventas", "coordinadores", "controllers")
 
@@ -665,8 +673,15 @@ def _aplicar_afectado(base: dict, ov: dict | None) -> dict:
 
 def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
                   meses_afectados: dict | None = None, bonos_adicionales_por_mes: list[float] | None = None,
-                  nombres_meses: list[str] | None = None, aporte_externo_por_mes: list[float] | None = None) -> dict[str, Any]:
+                  nombres_meses: list[str] | None = None, aporte_externo_por_mes: list[float] | None = None,
+                  headcount_fijo: dict | None = None, vendedores_por_mes: list[float] | None = None,
+                  sin_equilibrio: bool = False) -> dict[str, Any]:
     """Balance de 12, 18 o 24 meses con estructura FIJA seteada en el mes 1.
+
+    Zona de staff (escenario aparte, no toca la proyección): `headcount_fijo` es la estructura del plan
+    (supervisores, backoffice, coordinación, controllers) y `vendedores_por_mes` la dotación de vendedores
+    que resulta de la rotación, la capacitación y las incorporaciones; cada mes paga esos vendedores.
+    `sin_equilibrio` evita la bisección de ventas mínimas (no se usa en ese escenario).
 
     `aporte_externo_por_mes` (simulador CONVERGENTE): resultado que otro negocio vendido por la
     MISMA estructura (GPON) deja cada mes. No entra en los flujos de pospago; solo se suma al
@@ -691,7 +706,10 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
 
     # Estructura del mes 1 (queda fija).
     m1 = simular_facturacion({**base, "_sin_breakeven": True})
-    headcount = m1["costos"]["headcount"]
+    headcount = dict(headcount_fijo) if headcount_fijo else m1["costos"]["headcount"]
+    vend_override = [max(float(v or 0), 0.0) for v in (vendedores_por_mes or [])]
+    if vend_override:
+        headcount = _headcount_con_vendedores(headcount, vend_override[0])
 
     # Meses afectados: cohortes con variaciones propias (la estructura sigue fija).
     afectados = _normalizar_afectados(meses_afectados, h)
@@ -768,8 +786,10 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
         # productividad o ratios (variaciones en costos.ventas_por_vendedor / supervisor_cada_vendedores /
         # backoffice_cada_ventas…), la dotación de ESE mes se dimensiona con sus ventas y sus ratios
         # ("estructura propia del mes"): la productividad no mueve las ventas, mueve la estructura.
-        estructura_propia = t > 0 and _tiene_estructura_propia(afectados.get(t))
-        if estructura_propia:
+        estructura_propia = t > 0 and not vend_override and _tiene_estructura_propia(afectados.get(t))
+        if vend_override:
+            hc_t = _headcount_con_vendedores(headcount, vend_override[min(t, len(vend_override) - 1)])
+        elif estructura_propia:
             dim, _ = _costos_y_margen(c["parametros"]["costos"], ventas[t], c["mes0"], c["bruto_mes0"], c["neto_6"], c["neto_12"])
             hc_t = dim["headcount"]
         else:
@@ -807,7 +827,9 @@ def simular_anual(params: dict | None, ventas_por_mes: list[float], horizonte: i
                                       c2["neto_6"], c2["neto_12"], headcount=hc_t)
             return c2["bruto_mes0"] + fila["ajustes"] + aporte_t - cst["total"]
         hi = max(ventas[t] * 3, 500.0)
-        if _resultado_con(0.0) >= 0:
+        if sin_equilibrio:
+            fila["ventas_equilibrio"] = 0
+        elif _resultado_con(0.0) >= 0:
             fila["ventas_equilibrio"] = 0
         elif _resultado_con(hi) < 0:
             fila["ventas_equilibrio"] = None      # ni triplicando las ventas cierra este mes

@@ -102,6 +102,12 @@ class ConvergenteAnualRequest(SimuladorAnualRequest):
     gpon: ConvergenteGpon = Field(default_factory=ConvergenteGpon)
 
 
+class ConvergenteStaffRequest(ConvergenteAnualRequest):
+    """Zona de staff: el mismo pedido del convergente + la dinámica de dotación (rotación, postulantes,
+    capacitación, calidad de reclutamiento a 90 días, ausentismo). Es un escenario aparte."""
+    staff: dict[str, Any] = Field(default_factory=dict)
+
+
 class SimulacionCreate(BaseModel):
     """Simulación anual guardada: registro del trabajo (nombre, comentario, marcas, post-its)."""
     nombre: str = Field(min_length=1, max_length=160)

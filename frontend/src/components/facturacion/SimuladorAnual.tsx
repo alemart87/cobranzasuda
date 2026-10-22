@@ -17,6 +17,7 @@ import { NumeroInput } from "@/components/facturacion/NumeroInput";
 import { Marca, Marcable, Pin, Postit, RegistroSimulaciones, Snapshot } from "@/components/facturacion/RegistroSimulaciones";
 import { VariablesNegocio } from "@/components/facturacion/VariablesNegocio";
 import { VariablesGpon } from "@/components/facturacion/VariablesGpon";
+import { VariablesStaff, ZonaStaff } from "@/components/facturacion/StaffDotacion";
 import { AJUSTE_OPTIMIZAR_PCT, aplicarBonoUnico, aplicarPreset, BONO_UNICO_ESCALA, PRESET_INICIAL_MOVIL, quitarBonoUnico, ZAFRA_IDEAL } from "@/components/facturacion/presets";
 import { CAMPOS_AFECTABLES, CAMPOS_AFECTABLES_GPON, CampoDef } from "@/components/facturacion/MesAfectado";
 import { Lectura } from "@/components/televentas/Lectura";
@@ -366,6 +367,7 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   const sinDescProd = negocio === "movil" && p?.devolver_bono_productividad === false;
   const sinDescEfec = negocio === "movil" && p?.devolver_bono_efectividad === false;
   const [resConDesc, setResConDesc] = useState<any>(null);   // misma simulación CON los descuentos, para comparar
+  const [staffRes, setStaffRes] = useState<any>(null);       // zona de staff: escenario aparte con la dinámica de dotación
 
   // ---- Convergente: derivados ----
   const gponOn = esConvergente && gponActivo && !!pg;
@@ -398,6 +400,12 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
       ...(gq ? { gpon: { ...gq, meses_afectados: sep.gpon } } : {}) });
     apiFetch<any>(cfg.anualPath, { method: "POST", body: body(params) })
       .then((d) => { setRes(d); setError(null); }).catch((e) => setError(e.message));
+    // Zona de staff (solo convergente): mismo pedido + la dinámica de dotación; no toca la proyección.
+    if (cfg.anualPath.includes("/convergente/")) {
+      const b = JSON.parse(body(params));
+      apiFetch<any>("/api/v1/facturacion/convergente/staff", { method: "POST", body: JSON.stringify({ ...b, staff: params?.staff ?? {} }) })
+        .then((d) => setStaffRes(d)).catch(() => setStaffRes(null));
+    }
     if (params?.devolver_bono_productividad === false || params?.devolver_bono_efectividad === false) {
       apiFetch<any>(cfg.anualPath, { method: "POST", body: body({ ...params, devolver_bono_productividad: true, devolver_bono_efectividad: true }) })
         .then((d) => setResConDesc(d)).catch(() => setResConDesc(null));
@@ -585,6 +593,16 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
                   </>
                 )}
               </section>
+            )}
+            {esConvergente && (
+              <details className="rounded-md border-2 border-brand-purple/60 bg-brand-purple/5 p-3">
+                <summary className="cursor-pointer select-none text-[10px] uppercase tracking-wider2 font-bold text-brand-purple">
+                  Staff, rotación y capacitación <span className="normal-case tracking-normal font-normal text-brand-slate">· escenario aparte, no cambia la proyección</span>
+                </summary>
+                <div className="mt-3">
+                  <VariablesStaff p={p} setP={setP} vendedoresPlan={vendedoresMes1} ventasMes1={Number(p.ventas) || 0} />
+                </div>
+              </details>
             )}
           </div>
           <div className="lg:col-span-3">
@@ -870,6 +888,14 @@ export function SimuladorAnual({ negocio }: { negocio: Negocio }) {
   
             </Bloque>
             </div>
+          )}
+
+          {esConvergente && res && a && (
+            <Bloque titulo="Staff, rotación y capacitación · plan de dotación" accent="purple" abierto
+              hint={staffRes?.anual ? `staff ${formatInt(Math.round(staffRes.anual.staff_inicial))} → ${formatInt(Math.round(staffRes.anual.staff_final))} · margen con staff ${staffRes.anual.margen_pct ?? "—"}% contra ${a.margen_pct}% de la proyección` : "escenario aparte: no cambia la proyección"}>
+              <ZonaStaff p={p} setP={setP} staffRes={staffRes} plan={res} horizonte={horizonte} nombreMes={nombreMes} nombreCorto={nombreCorto}
+                vendedoresPlan={Number(hc?.vendedores ?? vendedoresMes1)} />
+            </Bloque>
           )}
 
           <NotasSimulacion notas={notas} setNotas={setNotas} nombres={ventas.map((_, i) => nombreMes(i))} guardaSola={!!actual} soloImpresion />
