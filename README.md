@@ -623,6 +623,36 @@ staff es convergente, cada asesor vende pospago y GPON. Motor en `facturacion_co
 - Tests: `backend/tests/test_facturacion_convergente.py` (misma dotación, costos GPON solo variables, suma exacta de los
   dos negocios con mora/cuota 2/recálculo, GPON apagado = pospago, equilibrio con aporte GPON, por asesor variable).
 
+### 4d. Zona de staff: rotación, reclutamiento, capacitación y ausentismo
+
+En el simulador convergente, debajo de los gráficos, el bloque **"Staff, rotación y capacitación · plan de dotación"**
+es un **escenario aparte: la proyección no cambia**. Motor `facturacion_staff.py`, endpoint
+`POST /api/v1/facturacion/convergente/staff` (el mismo pedido del convergente + `staff`). La configuración vive en
+`parametros.staff` (el motor de la proyección la ignora) y se guarda con la simulación; se edita en el mes 1
+(desplegable "Staff, rotación y capacitación") y en la zona de la simulación abierta, también por mes.
+
+```
+staff al cierre   = staff al inicio − bajas por rotación − nuevos que se van antes de 90 días + aprobados
+bajas rotación    = rotación × dotación inicial (lineal: 20 % sin reponer → 5 meses) · o × staff consolidado del mes
+aprobados         = postulantes × calidad de capacitación, al terminar la capacitación (días hábiles)
+bajas 90 días     = aprobados × (100 − calidad de reclutamiento a 90 días) %, repartidas en sus 3 primeros meses
+staff productivo  = consolidado + en prueba + nuevos × (días que venden ÷ días del mes)
+presentes         = productivo × (1 − ausentismo)                       (12 % por defecto)
+ventas del staff  = presentes × ventas por vendedor presente            (o como máximo las del plan)
+GPON del staff    = presentes × GPON por asesor
+necesaria         = ventas del plan ÷ (ventas por vendedor presente × (1 − ausentismo))
+reposición        = rotación × dotación inicial ÷ (calidad capacitación × calidad 90 días) postulantes por mes
+```
+
+Con esas ventas y esos vendedores se corre el convergente completo (facturación, bonos por objetivo, chargebacks,
+GPON); supervisores, backoffice, coordinación y controllers son los del plan. Costos propios: capacitación (postulantes
+× días × salario diario × % pagado, con IPS y aguinaldo, en el mes en que entran) y reclutamiento por postulante. La
+zona muestra la dinámica mes a mes, staff contra dotación necesaria, y el **margen en Gs y en %** de la proyección
+contra el del staff, con la diferencia por mes y del período. Defaults (a reemplazar por datos reales): staff inicial =
+dotación del plan, rotación 10 %, 20 postulantes, capacitación 50 %, calidad a 90 días 70 %, 10 días de capacitación
+pagados al 100 %, ausentismo 12 %, ventas por vendedor presente = ventas por vendedor del mes 1. Tests:
+`backend/tests/test_facturacion_staff.py`.
+
 ### 5. Herramientas del módulo
 
 - **Simulador mensual** (`/televentas-claro/simulador`): una cohorte; EERR a mes 0 / 6 / 12 meses, estructura

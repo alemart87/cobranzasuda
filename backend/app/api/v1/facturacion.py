@@ -25,10 +25,11 @@ from ...models.facturacion_upload import FacturacionUpload
 from ...schemas.facturacion import (
     CompareRequest, CompareResponse, FacturacionReportDetail, FacturacionReportList,
     FacturacionReportSummary, FacturacionUploadList, FacturacionUploadRead, PublishRequest,
-    ConvergenteAnualRequest, GponAnualRequest, SimulacionCreate, SimulacionUpdate, SimuladorAnualRequest, SimuladorRequest,
+    ConvergenteAnualRequest, ConvergenteStaffRequest, GponAnualRequest, SimulacionCreate, SimulacionUpdate, SimuladorAnualRequest, SimuladorRequest,
 )
 from ...services.analyzers.facturacion_compare import compare_facturacion
 from ...services.analyzers.facturacion_convergente import CONVERGENTE_DEFAULT, simular_convergente
+from ...services.analyzers.facturacion_staff import STAFF_DEFAULT, simular_staff
 from ...services.analyzers.facturacion_gpon import PARAMETROS_GPON_DEFAULT, simular_gpon, simular_gpon_anual
 from ...services.analyzers.facturacion_simulador import PARAMETROS_DEFAULT, simular_anual, simular_facturacion
 from ...services.audit_service import record_action
@@ -267,7 +268,8 @@ async def simulador_anual_run(payload: SimuladorAnualRequest,
 async def convergente_parametros(user: CurrentUser = Depends(require_facturacion_access)) -> dict:
     """Variables de pospago (estructura, zafra, bonos…) + variables GPON (planes, cuota 2, mora, bono fijo)
     + configuración convergente (GPON por asesor ideal)."""
-    return {"parametros": PARAMETROS_DEFAULT, "parametros_gpon": PARAMETROS_GPON_DEFAULT, "convergente": CONVERGENTE_DEFAULT}
+    return {"parametros": PARAMETROS_DEFAULT, "parametros_gpon": PARAMETROS_GPON_DEFAULT, "convergente": CONVERGENTE_DEFAULT,
+            "staff": STAFF_DEFAULT}
 
 
 @router.post("/convergente/anual")
@@ -282,6 +284,21 @@ async def convergente_anual_run(payload: ConvergenteAnualRequest,
         return simular_convergente(payload.parametros, payload.ventas_por_mes, payload.horizonte, payload.meses_afectados,
                                    payload.bonos_adicionales_por_mes, payload.nombres_meses, payload.gpon.model_dump())
     except (TypeError, ValueError, KeyError) as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
+
+
+@router.post("/convergente/staff")
+async def convergente_staff_run(payload: ConvergenteStaffRequest,
+                                user: CurrentUser = Depends(require_facturacion_access)) -> dict:
+    """Zona de staff: dotación de vendedores mes a mes (rotación, postulantes, capacitación, calidad de
+    reclutamiento a 90 días, ausentismo), ventas que esa dotación puede hacer y margen del escenario.
+    No modifica la proyección: es un escenario aparte para comparar."""
+    if not 12 <= payload.horizonte <= 60:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe estar entre 12 y 60 meses.")
+    try:
+        return simular_staff(payload.parametros, payload.ventas_por_mes, payload.horizonte, payload.meses_afectados,
+                             payload.bonos_adicionales_por_mes, payload.nombres_meses, payload.gpon.model_dump(), payload.staff)
+    except (TypeError, ValueError, KeyError, ZeroDivisionError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 
 
