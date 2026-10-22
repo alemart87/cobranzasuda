@@ -639,6 +639,9 @@ bajas 90 días     = aprobados × (100 − calidad de reclutamiento a 90 días) 
 staff productivo  = consolidado + en prueba + nuevos × (días que venden ÷ días del mes)
 presentes         = productivo × (1 − ausentismo)                       (12 % por defecto)
 ventas del staff  = presentes × ventas por vendedor presente            (o como máximo las del plan)
+                    un nuevo, en su primer mes vendiendo (23 días desde que termina la capacitación), vende como
+                    máximo 10 (`tope_ventas_nuevo`, `meses_rampa`); si la capacitación termina a mitad de mes, el
+                    tope sigue en el mes siguiente hasta completar esos días
 GPON del staff    = presentes × GPON por asesor
 necesaria         = ventas del plan ÷ (ventas por vendedor presente × (1 − ausentismo))
 reposición        = rotación × dotación inicial ÷ (calidad capacitación × calidad 90 días) postulantes por mes
@@ -648,7 +651,10 @@ Con esas ventas y esos vendedores se corre el convergente completo (facturación
 GPON); supervisores, backoffice, coordinación y controllers son los del plan. Costos propios: capacitación (postulantes
 × días × salario diario × % pagado, con IPS y aguinaldo, en el mes en que entran) y reclutamiento por postulante. La
 zona muestra la dinámica mes a mes, staff contra dotación necesaria, y el **margen en Gs y en %** de la proyección
-contra el del staff, con la diferencia por mes y del período. Defaults (a reemplazar por datos reales): staff inicial =
+contra el del staff, con la diferencia por mes y del período. Debajo del gráfico de staff está el **margen final** para
+el CEO (proyección, staff real y diferencia, del período y con todo lo pendiente), y una tabla de **sensibilidad a los días
+de capacitación** (0, 5, 10, 15, 20 y 30 días y el cargado): menos días vendiendo el mes que ingresan, más costo por
+postulante y el tope del nuevo corrido más tarde. Defaults (a reemplazar por datos reales): staff inicial =
 dotación del plan, rotación 10 %, 20 postulantes, capacitación 50 %, calidad a 90 días 70 %, 10 días de capacitación
 pagados al 100 %, ausentismo 12 %, ventas por vendedor presente = ventas por vendedor del mes 1. Tests:
 `backend/tests/test_facturacion_staff.py`.

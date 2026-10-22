@@ -14,6 +14,7 @@ export const STAFF_UI_DEFAULT = {
   postulantes_por_mes: 20, postulantes_lista: [] as (number | null)[], efectividad_capacitacion_pct: 50,
   calidad_reclutamiento_90_pct: 70, dias_capacitacion: 10, ausentismo_pct: 12, productividad_presente: null as number | null,
   pago_capacitacion_pct: 100, costo_reclutamiento_postulante: 0, ventas_modo: "capacidad",
+  tope_ventas_nuevo: 10, meses_rampa: 1,
 };
 
 export const staffDe = (p: any) => ({ ...STAFF_UI_DEFAULT, ...(p?.staff ?? {}) });
@@ -68,6 +69,9 @@ export function VariablesStaff({ p, setP, vendedoresPlan, ventasMes1 }: { p: any
           <Campo label="Calidad de reclutamiento a 90 días" hint="% de los aprobados que sigue a los 90 días (el resto se va en sus 3 primeros meses)" value={Number(s.calidad_reclutamiento_90_pct)} onChange={(v) => set("calidad_reclutamiento_90_pct", v)} step={5} suffix="%" />
           <Campo label="Duración de la capacitación" hint={`días hábiles sin vender; con ${formatInt(Number(p?.costos?.dias_mes) || 23)} días al mes, los nuevos venden ${f1(Math.max(0, (Number(p?.costos?.dias_mes) || 23) - Number(s.dias_capacitacion)))} días el mes que ingresan`}
             value={Number(s.dias_capacitacion)} onChange={(v) => set("dias_capacitacion", v)} step={1} suffix="d" />
+          <Campo label="Ventas máximas de un nuevo en su primer mes" hint={`desde que termina la capacitación; después vende como un vendedor más (${f1(prod)}) · 0 = sin tope`}
+            value={Number(s.tope_ventas_nuevo)} onChange={(v) => set("tope_ventas_nuevo", v)} step={1} />
+          <Campo label="Meses con ese tope" hint="1 = su primer mes vendiendo (23 días desde que termina la capacitación) · máximo 3" value={Number(s.meses_rampa)} onChange={(v) => set("meses_rampa", Math.min(Math.max(v, 0), 3))} step={1} />
           <Campo label="Pago durante la capacitación" hint="% del salario diario del operador, por postulante, con IPS y aguinaldo" value={Number(s.pago_capacitacion_pct)} onChange={(v) => set("pago_capacitacion_pct", v)} step={10} suffix="%" />
           <Campo label="Costo de reclutamiento por postulante" hint="Gs: avisos, entrevistas, exámenes · 0 = sin costo" value={Number(s.costo_reclutamiento_postulante)} onChange={(v) => set("costo_reclutamiento_postulante", v)} step={10000} />
           <label className="flex items-center gap-2 text-[11px] text-brand-graphite pl-1">
@@ -124,6 +128,7 @@ export function ZonaStaff({ p, setP, staffRes, plan, horizonte, nombreMes, nombr
     ["Brecha (productivo − necesaria)", (f) => `${f.brecha > 0 ? "+" : ""}${f1(f.brecha)}`],
     ["Ventas del plan (pospago)", (f) => formatInt(f.ventas_plan), "text-brand-slate"],
     ["Ventas que hace el staff (pospago)", (f) => formatInt(f.ventas), "font-semibold"],
+    ["  de las cuales venden los nuevos (< 90 días)", (f) => f.ventas_nuevos ? `${f1(f.ventas_nuevos)} · ${f1(f.venta_por_nuevo ?? 0)} c/u` : "0", "text-brand-slate"],
     ["GPON que hace el staff", (f) => formatInt(f.ventas_gpon ?? 0)],
   ];
 
@@ -178,8 +183,11 @@ export function ZonaStaff({ p, setP, staffRes, plan, horizonte, nombreMes, nombr
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          {a && pa && <MargenFinal a={a} pa={pa} horizonte={horizonte} />}
         </div>
       </div>
+
+      {staffRes?.sensibilidad_dias?.length > 0 && <SensibilidadDias filas={staffRes.sensibilidad_dias} pa={pa} p={p} s={s} />}
 
       <div className="rounded-md border border-brand-border bg-white overflow-x-auto">
         <div className="px-4 pt-3 flex flex-wrap items-baseline justify-between gap-2">
@@ -295,6 +303,76 @@ export function ZonaStaff({ p, setP, staffRes, plan, horizonte, nombreMes, nombr
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Lo que mira el CEO: resultado y margen del período y final (con cola), proyección contra staff real. */
+function MargenFinal({ a, pa, horizonte }: { a: any; pa: any; horizonte: number }) {
+  const finalPlanPct = pa?.veredicto?.pct_sobre_ingreso ?? null;
+  const dif = a.resultado - pa.resultado;
+  const difFinal = a.resultado_con_cola - pa.resultado_con_cola;
+  const difPts = a.margen_pct != null && pa.margen_pct != null ? a.margen_pct - pa.margen_pct : null;
+  const Card = ({ titulo, r, m, rf, mf, color }: { titulo: string; r: number; m: number | null; rf: number; mf: number | null; color: string }) => (
+    <div className="rounded-md border-2 bg-white px-4 py-3" style={{ borderColor: color }}>
+      <div className="text-[10px] uppercase tracking-wider2 font-bold" style={{ color }}>{titulo}</div>
+      <div className={`font-display text-3xl leading-tight ${r >= 0 ? "text-emerald-700" : "text-brand-primary"}`}>{formatGs(r)}</div>
+      <div className="text-sm font-semibold text-brand-ink">margen {pct(m)} · {horizonte} meses</div>
+      <div className="mt-1 text-[11px] text-brand-slate">final con todo lo pendiente: <b className={rf >= 0 ? "text-emerald-700" : "text-brand-primary"}>{formatGs(rf)}</b> ({pct(mf)})</div>
+    </div>
+  );
+  return (
+    <div className="rounded-md border border-brand-border bg-brand-bg-soft p-3">
+      <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-ink mb-2">Margen final · cómo queda con estas variables</div>
+      <div className="grid md:grid-cols-3 gap-3">
+        <Card titulo="Proyección (plan)" r={pa.resultado} m={pa.margen_pct} rf={pa.resultado_con_cola} mf={finalPlanPct} color="#9CA3AF" />
+        <Card titulo="Con el staff real" r={a.resultado} m={a.margen_pct} rf={a.resultado_con_cola} mf={a.margen_final_pct} color="#662483" />
+        <div className={`rounded-md border-2 px-4 py-3 ${dif >= 0 ? "border-emerald-600 bg-emerald-50" : "border-brand-primary bg-brand-primary/5"}`}>
+          <div className={`text-[10px] uppercase tracking-wider2 font-bold ${dif >= 0 ? "text-emerald-700" : "text-brand-primary"}`}>Diferencia por el staff</div>
+          <div className={`font-display text-3xl leading-tight ${dif >= 0 ? "text-emerald-700" : "text-brand-primary"}`}>{dif >= 0 ? "+" : ""}{formatGs(dif)}</div>
+          <div className="text-sm font-semibold text-brand-ink">{difPts == null ? "—" : `${difPts >= 0 ? "+" : ""}${difPts.toLocaleString("es-PY", { maximumFractionDigits: 1 })} puntos de margen`}</div>
+          <div className="mt-1 text-[11px] text-brand-slate">final con todo lo pendiente: <b>{difFinal >= 0 ? "+" : ""}{formatGs(difFinal)}</b></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Cómo mueve el margen la duración de la capacitación, con todo lo demás igual. */
+function SensibilidadDias({ filas, pa, p, s }: { filas: any[]; pa: any; p: any; s: any }) {
+  const dias = Number(p?.costos?.dias_mes) || 23;
+  const salarioDia = (Number(p?.costos?.salario_hora) || 0) * (Number(p?.costos?.horas_dia) || 0);
+  const carga = 1 + (Number(p?.costos?.ips_pct) || 0) / 100 + (p?.costos?.aguinaldo ? 1 / 12 : 0);
+  const costoPostulante = Number(s.dias_capacitacion) * salarioDia * (Number(s.pago_capacitacion_pct) / 100) * carga;
+  const mejor = filas.reduce((b, x) => (x.resultado > b.resultado ? x : b), filas[0]);
+  return (
+    <div className="rounded-md border border-brand-border bg-white p-4">
+      <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate mb-1">Cómo afectan los días de capacitación</div>
+      <ul className="list-disc pl-5 text-[11px] text-brand-graphite space-y-0.5 mb-3">
+        <li><b>Menos días vendiendo:</b> con {f1(Number(s.dias_capacitacion))} días sobre {dias}, el mes que ingresan los nuevos venden {f1(Math.max(0, dias - Number(s.dias_capacitacion)))} días; con {dias} días o más empiezan a vender el mes siguiente.</li>
+        <li><b>Más costo:</b> cada postulante cuesta {formatGs(Math.round(costoPostulante))} de capacitación ({f1(Number(s.dias_capacitacion))} días × salario diario × {f1(Number(s.pago_capacitacion_pct))}%, con cargas); se pagan todos los postulantes, aprueben o no.</li>
+        <li><b>El tope del nuevo</b> ({f1(Number(s.tope_ventas_nuevo))} ventas en su primer mes) corre desde que termina la capacitación: una capacitación más larga lo corre más tarde.</li>
+      </ul>
+      <div className="overflow-x-auto">
+        <table className="w-full text-[12px] min-w-[560px]">
+          <thead><tr className="text-[9px] uppercase tracking-wider2 text-brand-slate border-b border-brand-border">
+            <th className="px-2 py-1 text-left">Días de capacitación</th><th className="px-2 py-1 text-right">Ventas pospago</th><th className="px-2 py-1 text-right">Costo capacitación</th>
+            <th className="px-2 py-1 text-right">Resultado</th><th className="px-2 py-1 text-right">Margen</th><th className="px-2 py-1 text-right">contra la proyección</th>
+          </tr></thead>
+          <tbody>
+            {filas.map((x) => (
+              <tr key={x.dias} className={`border-b border-brand-border/40 ${x.actual ? "bg-brand-purple/10 font-bold" : ""}`}>
+                <td className="px-2 py-1">{f1(x.dias)} días{x.actual ? " · cargado" : ""}{x.dias === mejor.dias ? " · mejor" : ""}</td>
+                <td className="px-2 py-1 text-right font-mono">{formatInt(x.ventas)}</td>
+                <td className="px-2 py-1 text-right font-mono">{M(x.costo_capacitacion)}</td>
+                <td className={`px-2 py-1 text-right font-mono ${x.resultado >= 0 ? "text-emerald-700" : "text-brand-primary"}`}>{M(x.resultado)}</td>
+                <td className="px-2 py-1 text-right font-mono">{pct(x.margen_pct)}</td>
+                <td className={`px-2 py-1 text-right font-mono ${x.resultado - (pa?.resultado ?? 0) >= 0 ? "text-emerald-700" : "text-brand-primary"}`}>{x.resultado - (pa?.resultado ?? 0) >= 0 ? "+" : ""}{M(x.resultado - (pa?.resultado ?? 0))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

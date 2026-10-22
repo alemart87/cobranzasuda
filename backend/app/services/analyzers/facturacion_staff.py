@@ -15,7 +15,8 @@ Dinámica de un mes (vendedores):
 
     staff productivo   = el que vende ese mes; los que ingresan venden solo los días que quedan tras la capacitación
     presentes          = staff productivo × (1 − ausentismo)
-    ventas posibles    = presentes × ventas por vendedor presente   (pospago)
+    ventas posibles    = presentes × ventas por vendedor presente   (pospago); un nuevo, en su primer mes vendiendo
+                         (desde que termina la capacitación), vende como máximo el tope del nuevo ingreso (10)
     GPON posibles      = presentes × GPON por asesor
     dotación necesaria = ventas del plan ÷ (ventas por vendedor presente × (1 − ausentismo))
 
@@ -46,6 +47,10 @@ STAFF_DEFAULT: dict[str, Any] = {
     "pago_capacitacion_pct": 100.0,          # % del salario diario que se paga durante la capacitación
     "costo_reclutamiento_postulante": 0,     # Gs por postulante (avisos, entrevistas, exámenes)
     "ventas_modo": "capacidad",              # "capacidad": vende lo que puede el staff · "tope_plan": como máximo las ventas del plan
+    # Rampa del nuevo ingreso: en su primer mes vendiendo (los primeros `meses_rampa` × días del mes que vende,
+    # contados desde que termina la capacitación) un nuevo vende como máximo `tope_ventas_nuevo` por mes.
+    "tope_ventas_nuevo": 10,
+    "meses_rampa": 1,
 }
 
 
@@ -89,6 +94,19 @@ def dinamica_staff(cfg: dict, h: int, dias_mes: float, ventas_plan: list[float],
     if j > 0 and abs(d_cap - j * dias) < 1e-9:
         f = 1.0
 
+    # Rampa: los primeros `rampa_dias` días que vende un nuevo, vende a razón de min(productividad, tope) por mes.
+    rampa_dias = min(max(float(cfg.get("meses_rampa") or 0), 0.0), 3.0) * dias
+    tope = float(cfg.get("tope_ventas_nuevo") or 0)
+    venta_presente = productividad * (1 - aus)                       # lo que vende en el mes un vendedor (con ausentismo)
+    venta_rampa = min(venta_presente, tope) if tope > 0 else venta_presente
+
+    def ventas_nuevo(edad: int) -> tuple[float, float]:
+        """(ventas de un nuevo en el mes de edad `edad` desde que ingresa, fracción del mes que vende)."""
+        dias_mes_v = f * dias if edad == 0 else dias
+        antes = 0.0 if edad == 0 else f * dias + (edad - 1) * dias
+        en_rampa = min(max(rampa_dias - antes, 0.0), dias_mes_v)
+        return (en_rampa * venta_rampa + (dias_mes_v - en_rampa) * venta_presente) / dias, dias_mes_v / dias
+
     consolidado = float(staff_inicial)
     cohortes: list[dict] = []      # nuevos en período de prueba: {ingreso, aprobados, restantes}
     filas: list[dict[str, Any]] = []
@@ -101,6 +119,7 @@ def dinamica_staff(cfg: dict, h: int, dias_mes: float, ventas_plan: list[float],
             cohortes.append({"ingreso": t, "aprobados": aprob, "restantes": aprob})
         b90_viejos = b90_nuevos = 0.0
         prueba_vieja = nuevos = 0.0
+        ventas_nuevos = productivo_nuevos = 0.0
         for c in cohortes:
             edad = t - c["ingreso"]
             if 0 <= edad <= 2:
@@ -112,11 +131,14 @@ def dinamica_staff(cfg: dict, h: int, dias_mes: float, ventas_plan: list[float],
                 else:
                     b90_viejos += baja
                     prueba_vieja += c["restantes"]
+                v1, frac = ventas_nuevo(edad)
+                ventas_nuevos += c["restantes"] * v1
+                productivo_nuevos += c["restantes"] * frac
         en_prueba = prueba_vieja + nuevos
         cierre = consolidado + en_prueba
-        productivo = consolidado + prueba_vieja + nuevos * f
+        productivo = consolidado + productivo_nuevos
         presentes = productivo * (1 - aus)
-        cap = presentes * productividad
+        cap = consolidado * venta_presente + ventas_nuevos
         necesaria = ventas_plan[t] / (productividad * (1 - aus)) if productividad > 0 and aus < 1 else 0.0
         k = (gpon_por_asesor or [0.0])[min(t, len(gpon_por_asesor or [0.0]) - 1)] if gpon_por_asesor else 0.0
         filas.append({
@@ -134,6 +156,8 @@ def dinamica_staff(cfg: dict, h: int, dias_mes: float, ventas_plan: list[float],
             "brecha": round(productivo - necesaria, 1),
             "ventas_plan": round(ventas_plan[t]),
             "ventas_capacidad": round(cap),
+            "ventas_nuevos": round(ventas_nuevos, 1),
+            "venta_por_nuevo": round(ventas_nuevos / en_prueba, 1) if en_prueba > 0 else None,
             "gpon_capacidad": round(presentes * k),
             "rotacion_pct": round(rot[t] * 100, 1),
         })
@@ -147,7 +171,7 @@ def dinamica_staff(cfg: dict, h: int, dias_mes: float, ventas_plan: list[float],
 def simular_staff(params: dict | None, ventas_por_mes: list[float], horizonte: int = 12,
                   meses_afectados: dict | None = None, bonos_adicionales_por_mes: list[float] | None = None,
                   nombres_meses: list[str] | None = None, gpon: dict | None = None,
-                  staff: dict | None = None) -> dict[str, Any]:
+                  staff: dict | None = None, con_sensibilidad: bool = False) -> dict[str, Any]:
     base = parametros_con_defaults(params)
     h = horizonte_valido(horizonte)
     plan = [max(float(v or 0), 0) for v in (ventas_por_mes or [])][:h]
@@ -203,6 +227,8 @@ def simular_staff(params: dict | None, ventas_por_mes: list[float], horizonte: i
     extra = tot_cap + tot_rec
     resultado = a["resultado"] - extra
     final = a["resultado_con_cola"] - extra
+    cola_total = (a.get("cola_post_12") or {}).get("total", 0)
+    ingreso_final = a["ingreso_neto"] + cola_total
     e, q = _pct(cfg["efectividad_capacitacion_pct"], 50), _pct(cfg["calidad_reclutamiento_90_pct"], 70)
     rot_base = float(cfg["rotacion_pct"]) / 100.0 * staff_ini
     reposicion = math.ceil(rot_base / (e * q)) if e * q > 0 else None
@@ -211,6 +237,7 @@ def simular_staff(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "costos": a["costos"] + extra, "costo_capacitacion": tot_cap, "costo_reclutamiento": tot_rec,
         "resultado": resultado, "margen_pct": round(resultado / a["ingreso_neto"] * 100, 1) if a["ingreso_neto"] > 0 else None,
         "resultado_con_cola": final,
+        "margen_final_pct": round(final / ingreso_final * 100, 1) if ingreso_final > 0 else None,
         "staff_inicial": round(staff_ini, 1), "staff_final": filas[-1]["staff_cierre"],
         "staff_minimo": min(f["staff_cierre"] for f in filas),
         "mes_sin_staff": next((f["mes"] for f in filas if f["staff_cierre"] <= 0.5), None),
@@ -224,5 +251,18 @@ def simular_staff(params: dict | None, ventas_por_mes: list[float], horizonte: i
         "dotacion_necesaria_mes1": filas[0]["dotacion_necesaria"],
         "productividad_presente": round(prod, 2), "ausentismo_pct": float(cfg["ausentismo_pct"]),
     }
-    return {"configuracion": {**cfg, "staff_inicial": round(staff_ini, 1), "productividad_presente": round(prod, 2)},
-            "headcount_plan": hc_plan, "meses": filas, "anual": anual}
+    out = {"configuracion": {**cfg, "staff_inicial": round(staff_ini, 1), "productividad_presente": round(prod, 2)},
+           "headcount_plan": hc_plan, "meses": filas, "anual": anual}
+    if con_sensibilidad:
+        # Cómo mueve el margen la duración de la capacitación (todo lo demás igual).
+        actual = float(cfg["dias_capacitacion"] or 0)
+        filas_s = []
+        for d in sorted({0.0, 5.0, 10.0, 15.0, 20.0, 30.0, actual}):
+            r = simular_staff(params, ventas_por_mes, horizonte, meses_afectados, bonos_adicionales_por_mes, nombres_meses,
+                              gpon, {**cfg, "staff_inicial": staff_ini, "dias_capacitacion": d})
+            ra = r["anual"]
+            filas_s.append({"dias": d, "actual": abs(d - actual) < 1e-9, "ventas": ra["ventas"], "staff_final": ra["staff_final"],
+                            "costo_capacitacion": ra["costo_capacitacion"], "resultado": ra["resultado"], "margen_pct": ra["margen_pct"],
+                            "resultado_con_cola": ra["resultado_con_cola"], "margen_final_pct": ra["margen_final_pct"]})
+        out["sensibilidad_dias"] = filas_s
+    return out
