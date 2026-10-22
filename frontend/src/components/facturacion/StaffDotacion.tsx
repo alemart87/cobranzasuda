@@ -1,6 +1,7 @@
 "use client";
 
-import { Bar, CartesianGrid, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Bar, CartesianGrid, Cell, ComposedChart, Legend, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { dominiosAlineados } from "./ejes";
 import { formatGs, formatInt } from "@/lib/format";
 import { Campo } from "./Campo";
 import { NumeroInput } from "./NumeroInput";
@@ -10,7 +11,7 @@ import { NumeroInput } from "./NumeroInput";
  *  simulación; el motor de la proyección la ignora). */
 
 export const STAFF_UI_DEFAULT = {
-  staff_inicial: null as number | null, rotacion_pct: 10, rotacion_base: "inicial", rotacion_por_mes: [] as (number | null)[],
+  staff_inicial: null as number | null, rotacion_pct: 10, rotacion_base: "actual", rotacion_por_mes: [] as (number | null)[],
   postulantes_por_mes: 20, postulantes_lista: [] as (number | null)[], efectividad_capacitacion_pct: 50,
   calidad_reclutamiento_90_pct: 70, dias_capacitacion: 10, ausentismo_pct: 12, productividad_presente: null as number | null,
   pago_capacitacion_pct: 100, costo_reclutamiento_postulante: 0, ventas_modo: "capacidad",
@@ -183,7 +184,7 @@ export function ZonaStaff({ p, setP, staffRes, plan, horizonte, nombreMes, nombr
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          {a && pa && <MargenFinal a={a} pa={pa} horizonte={horizonte} />}
+          {filas.length > 0 && pm.length > 0 && <MargenMensual filas={filas} pm={pm} nombreMes={nombreMes} nombreCorto={nombreCorto} />}
         </div>
       </div>
 
@@ -284,18 +285,6 @@ export function ZonaStaff({ p, setP, staffRes, plan, horizonte, nombreMes, nombr
             </tbody>
           </table>
           <div className="px-4 py-3">
-            <ResponsiveContainer width="100%" height={200}>
-              <ComposedChart data={data} margin={{ top: 8, right: 12, left: -8 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="mes" fontSize={9} tickFormatter={(v: number) => nombreCorto(v - 1)} />
-                <YAxis fontSize={9} tickFormatter={(v: number) => `${v}%`} />
-                <Tooltip labelFormatter={(l) => nombreMes(Number(l) - 1)} formatter={(v: any, n: any) => [pct(Number(v)), n]} />
-                <Legend wrapperStyle={{ fontSize: 10 }} />
-                <ReferenceLine y={0} stroke="#0F1116" />
-                <Line dataKey="margen_plan" name="Margen de la proyección" stroke="#9CA3AF" strokeWidth={2} strokeDasharray="5 3" dot={false} />
-                <Line dataKey="margen_staff" name="Margen con staff real" stroke="#662483" strokeWidth={2.5} dot={{ r: 2.5 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
             <p className="text-[11px] text-brand-slate mt-2">
               El costo de capacitación se carga en el mes en que entran los postulantes (días × salario diario × % pagado, con IPS y aguinaldo). Supervisores, backoffice,
               coordinación y controllers son los del plan; solo cambian los vendedores. Si el staff cae por debajo de lo necesario, bajan las ventas y pueden perderse los bonos por objetivo.
@@ -307,32 +296,72 @@ export function ZonaStaff({ p, setP, staffRes, plan, horizonte, nombreMes, nombr
   );
 }
 
-/** Lo que mira el CEO: resultado y margen del período y final (con cola), proyección contra staff real. */
-function MargenFinal({ a, pa, horizonte }: { a: any; pa: any; horizonte: number }) {
-  const finalPlanPct = pa?.veredicto?.pct_sobre_ingreso ?? null;
-  const dif = a.resultado - pa.resultado;
-  const difFinal = a.resultado_con_cola - pa.resultado_con_cola;
-  const difPts = a.margen_pct != null && pa.margen_pct != null ? a.margen_pct - pa.margen_pct : null;
-  const Card = ({ titulo, r, m, rf, mf, color }: { titulo: string; r: number; m: number | null; rf: number; mf: number | null; color: string }) => (
-    <div className="rounded-md border-2 bg-white px-4 py-3" style={{ borderColor: color }}>
-      <div className="text-[10px] uppercase tracking-wider2 font-bold" style={{ color }}>{titulo}</div>
-      <div className={`font-display text-3xl leading-tight ${r >= 0 ? "text-emerald-700" : "text-brand-primary"}`}>{formatGs(r)}</div>
-      <div className="text-sm font-semibold text-brand-ink">margen {pct(m)} · {horizonte} meses</div>
-      <div className="mt-1 text-[11px] text-brand-slate">final con todo lo pendiente: <b className={rf >= 0 ? "text-emerald-700" : "text-brand-primary"}>{formatGs(rf)}</b> ({pct(mf)})</div>
-    </div>
-  );
+/** Margen MES A MES: cómo mueve el movimiento de gente el resultado y el margen de cada mes, contra la proyección. */
+function MargenMensual({ filas, pm, nombreMes, nombreCorto }: { filas: any[]; pm: any[]; nombreMes: (i: number) => string; nombreCorto: (i: number) => string }) {
+  const clamp = (v: any) => (v == null || !Number.isFinite(Number(v)) ? null : Math.max(-100, Math.min(100, Number(v))));
+  const data = filas.map((f, i) => {
+    const rp = Number(pm[i]?.resultado ?? 0), rs = Number(f.resultado ?? 0);
+    return {
+      mes: f.mes, res_plan: rp / 1e6, res_staff: rs / 1e6, dif: (rs - rp) / 1e6,
+      m_plan: clamp(pm[i]?.margen_pct), m_staff: clamp(f.margen_pct), m_plan_real: pm[i]?.margen_pct, m_staff_real: f.margen_pct,
+      entran: Number(f.aprobados || 0), salen: -(Number(f.bajas_rotacion || 0) + Number(f.bajas_90 || 0)), staff: f.staff_cierre,
+    };
+  });
+  const ejes1 = dominiosAlineados(data.flatMap((d) => [d.res_plan, d.res_staff]), data.flatMap((d) => [d.m_plan ?? 0, d.m_staff ?? 0]));
+  const ejes2 = dominiosAlineados(data.flatMap((d) => [d.entran, d.salen]), data.map((d) => d.dif));
+  const Tip = ({ active, payload, label }: any) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload;
+    return (
+      <div className="rounded-md border border-brand-border bg-white px-3 py-2 text-[11px] shadow">
+        <div className="font-bold text-brand-ink mb-1">{nombreMes(Number(label) - 1)}</div>
+        <div>Resultado proyección: <b>{M(d.res_plan * 1e6)}</b> ({pct(d.m_plan_real)})</div>
+        <div>Resultado con staff: <b className={d.res_staff >= 0 ? "text-emerald-700" : "text-brand-primary"}>{M(d.res_staff * 1e6)}</b> ({pct(d.m_staff_real)})</div>
+        <div>Diferencia: <b className={d.dif >= 0 ? "text-emerald-700" : "text-brand-primary"}>{d.dif >= 0 ? "+" : ""}{M(d.dif * 1e6)}</b></div>
+        <div className="mt-1 text-brand-slate">Staff al cierre {f1(d.staff)} · entran {f1(d.entran)} · salen {f1(-d.salen)}</div>
+      </div>
+    );
+  };
   return (
-    <div className="rounded-md border border-brand-border bg-brand-bg-soft p-3">
-      <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-ink mb-2">Margen final · cómo queda con estas variables</div>
-      <div className="grid md:grid-cols-3 gap-3">
-        <Card titulo="Proyección (plan)" r={pa.resultado} m={pa.margen_pct} rf={pa.resultado_con_cola} mf={finalPlanPct} color="#9CA3AF" />
-        <Card titulo="Con el staff real" r={a.resultado} m={a.margen_pct} rf={a.resultado_con_cola} mf={a.margen_final_pct} color="#662483" />
-        <div className={`rounded-md border-2 px-4 py-3 ${dif >= 0 ? "border-emerald-600 bg-emerald-50" : "border-brand-primary bg-brand-primary/5"}`}>
-          <div className={`text-[10px] uppercase tracking-wider2 font-bold ${dif >= 0 ? "text-emerald-700" : "text-brand-primary"}`}>Diferencia por el staff</div>
-          <div className={`font-display text-3xl leading-tight ${dif >= 0 ? "text-emerald-700" : "text-brand-primary"}`}>{dif >= 0 ? "+" : ""}{formatGs(dif)}</div>
-          <div className="text-sm font-semibold text-brand-ink">{difPts == null ? "—" : `${difPts >= 0 ? "+" : ""}${difPts.toLocaleString("es-PY", { maximumFractionDigits: 1 })} puntos de margen`}</div>
-          <div className="mt-1 text-[11px] text-brand-slate">final con todo lo pendiente: <b>{difFinal >= 0 ? "+" : ""}{formatGs(difFinal)}</b></div>
-        </div>
+    <div className="space-y-4">
+      <div className="rounded-md border-2 border-brand-purple/60 bg-white p-3">
+        <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-purple">Margen mes a mes · proyección contra staff real</div>
+        <div className="text-[10px] text-brand-slate mb-1">Barras: resultado del mes en millones de Gs (gris = proyección; violeta o rojo = con el staff real). Líneas: margen % del mes (eje derecho).</div>
+        <ResponsiveContainer width="100%" height={280}>
+          <ComposedChart data={data} margin={{ top: 8, right: 8, left: -4 }}>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="mes" fontSize={9} tickFormatter={(v: number) => nombreCorto(v - 1)} />
+            <YAxis yAxisId="g" fontSize={9} domain={ejes1.izq} tickFormatter={(v: number) => `${Math.round(v)} M`} allowDataOverflow />
+            <YAxis yAxisId="p" orientation="right" fontSize={9} domain={ejes1.der} ticks={ejes1.ticksDer} tickFormatter={(v: number) => `${Math.round(v)}%`} allowDataOverflow />
+            <Tooltip content={<Tip />} />
+            <Legend wrapperStyle={{ fontSize: 10 }} />
+            <ReferenceLine yAxisId="g" y={0} stroke="#0F1116" />
+            <Bar yAxisId="g" dataKey="res_plan" name="Resultado proyección" fill="#9CA3AF" fillOpacity={0.45} />
+            <Bar yAxisId="g" dataKey="res_staff" name="Resultado con staff">
+              {data.map((d) => <Cell key={d.mes} fill={d.res_staff >= 0 ? "#662483" : "#E6332A"} />)}
+            </Bar>
+            <Line yAxisId="p" dataKey="m_plan" name="Margen % proyección" stroke="#6B7280" strokeWidth={2} strokeDasharray="5 3" dot={false} connectNulls />
+            <Line yAxisId="p" dataKey="m_staff" name="Margen % con staff" stroke="#662483" strokeWidth={2.5} dot={{ r: 2.5 }} connectNulls />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="rounded-md border border-brand-border bg-white p-3">
+        <div className="text-[10px] uppercase tracking-wider2 font-bold text-brand-slate">Movimiento de gente y su efecto en el resultado del mes</div>
+        <div className="text-[10px] text-brand-slate mb-1">Barras: vendedores que entran (verde) y que salen por rotación o antes de los 90 días (rojo). Línea: diferencia del resultado del mes contra la proyección, en millones de Gs (eje derecho).</div>
+        <ResponsiveContainer width="100%" height={220}>
+          <ComposedChart data={data} margin={{ top: 8, right: 8, left: -12 }} stackOffset="sign">
+            <CartesianGrid strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="mes" fontSize={9} tickFormatter={(v: number) => nombreCorto(v - 1)} />
+            <YAxis yAxisId="n" fontSize={9} domain={ejes2.izq} allowDataOverflow />
+            <YAxis yAxisId="d" orientation="right" fontSize={9} domain={ejes2.der} ticks={ejes2.ticksDer} tickFormatter={(v: number) => `${Math.round(v)} M`} allowDataOverflow />
+            <Tooltip content={<Tip />} />
+            <Legend wrapperStyle={{ fontSize: 10 }} />
+            <ReferenceLine yAxisId="n" y={0} stroke="#0F1116" />
+            <Bar yAxisId="n" dataKey="entran" name="Entran" stackId="mov" fill="#10B981" />
+            <Bar yAxisId="n" dataKey="salen" name="Salen" stackId="mov" fill="#E6332A" fillOpacity={0.8} />
+            <Line yAxisId="d" dataKey="dif" name="Diferencia de resultado contra la proyección (M Gs)" stroke="#0F1116" strokeWidth={2} dot={{ r: 2 }} />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

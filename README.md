@@ -633,7 +633,7 @@ es un **escenario aparte: la proyección no cambia**. Motor `facturacion_staff.p
 
 ```
 staff al cierre   = staff al inicio − bajas por rotación − nuevos que se van antes de 90 días + aprobados
-bajas rotación    = rotación × dotación inicial (lineal: 20 % sin reponer → 5 meses) · o × staff consolidado del mes
+bajas rotación    = rotación × staff consolidado del mes (default) · o × dotación inicial (lineal: 20 % sin reponer → 5 meses)
 aprobados         = postulantes × calidad de capacitación, al terminar la capacitación (días hábiles)
 bajas 90 días     = aprobados × (100 − calidad de reclutamiento a 90 días) %, repartidas en sus 3 primeros meses
 staff productivo  = consolidado + en prueba + nuevos × (días que venden ÷ días del mes)
@@ -651,8 +651,9 @@ Con esas ventas y esos vendedores se corre el convergente completo (facturación
 GPON); supervisores, backoffice, coordinación y controllers son los del plan. Costos propios: capacitación (postulantes
 × días × salario diario × % pagado, con IPS y aguinaldo, en el mes en que entran) y reclutamiento por postulante. La
 zona muestra la dinámica mes a mes, staff contra dotación necesaria, y el **margen en Gs y en %** de la proyección
-contra el del staff, con la diferencia por mes y del período. Debajo del gráfico de staff está el **margen final** para
-el CEO (proyección, staff real y diferencia, del período y con todo lo pendiente), y una tabla de **sensibilidad a los días
+contra el del staff, con la diferencia por mes y del período. Debajo del gráfico de staff está el **margen mes a mes** (barras de
+resultado en Gs y líneas de margen %, proyección contra staff real) y el gráfico de **movimiento de gente** (entran y
+salen por mes) con la diferencia de resultado de cada mes; más abajo una tabla de **sensibilidad a los días
 de capacitación** (0, 5, 10, 15, 20 y 30 días y el cargado): menos días vendiendo el mes que ingresan, más costo por
 postulante y el tope del nuevo corrido más tarde. Defaults (a reemplazar por datos reales): staff inicial =
 dotación del plan, rotación 10 %, 20 postulantes, capacitación 50 %, calidad a 90 días 70 %, 10 días de capacitación

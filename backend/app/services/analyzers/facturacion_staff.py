@@ -35,7 +35,7 @@ from .facturacion_simulador import horizonte_valido, parametros_con_defaults, si
 STAFF_DEFAULT: dict[str, Any] = {
     "staff_inicial": None,                   # vendedores al arrancar; None = la dotación del mes 1 del plan
     "rotacion_pct": 10.0,                    # % mensual que se va
-    "rotacion_base": "inicial",              # "inicial": % de la dotación inicial (20% sin reponer → 5 meses) · "actual": % del staff consolidado del mes
+    "rotacion_base": "actual",               # "actual" (default): % del staff consolidado de cada mes · "inicial": % de la dotación inicial (20% sin reponer → 5 meses)
     "rotacion_por_mes": [],                  # override por mes (None = usa rotacion_pct)
     "postulantes_por_mes": 20,               # postulantes que entran a capacitación cada mes
     "postulantes_lista": [],                 # override por mes (None = usa postulantes_por_mes)
@@ -87,7 +87,7 @@ def dinamica_staff(cfg: dict, h: int, dias_mes: float, ventas_plan: list[float],
     q = _pct(cfg["calidad_reclutamiento_90_pct"], 70)
     aus = _pct(cfg["ausentismo_pct"], 12)
     d_cap = max(float(cfg["dias_capacitacion"] or 0), 0.0)
-    base_inicial = (cfg.get("rotacion_base") or "inicial") != "actual"
+    base_inicial = (cfg.get("rotacion_base") or "actual") == "inicial"
     # Los postulantes del mes t terminan la capacitación en el mes t + j y venden f del mes en que ingresan.
     j = int(d_cap // dias) if d_cap > 0 else 0
     f = (dias - (d_cap - j * dias)) / dias if d_cap > 0 else 1.0
