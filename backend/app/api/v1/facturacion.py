@@ -297,7 +297,8 @@ async def convergente_staff_run(payload: ConvergenteStaffRequest,
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "El horizonte debe estar entre 12 y 60 meses.")
     try:
         return simular_staff(payload.parametros, payload.ventas_por_mes, payload.horizonte, payload.meses_afectados,
-                             payload.bonos_adicionales_por_mes, payload.nombres_meses, payload.gpon.model_dump(), payload.staff)
+                             payload.bonos_adicionales_por_mes, payload.nombres_meses, payload.gpon.model_dump(), payload.staff,
+                             con_sensibilidad=True)
     except (TypeError, ValueError, KeyError, ZeroDivisionError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Parámetros inválidos: {exc}")
 

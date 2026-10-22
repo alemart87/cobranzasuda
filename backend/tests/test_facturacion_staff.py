@@ -65,3 +65,26 @@ def test_escenario_staff_no_toca_la_proyeccion_y_mide_el_margen():
     assert all(x["ventas"] <= 1900 for x in tope["meses"])
     # postulantes por mes para reponer: 10 % de 95 ÷ (50 % × 70 %) = 27,1 → 28
     assert sin["anual"]["postulantes_reposicion"] == 28
+
+
+def test_tope_del_nuevo_ingreso_y_dias_de_capacitacion():
+    """Un nuevo vende como máximo 10 en su primer mes vendiendo (desde que termina la capacitación); más días de
+    capacitación = menos días vendiendo el mes que ingresa y más costo."""
+    base = {"rotacion_pct": 0, "postulantes_por_mes": 20, "efectividad_capacitacion_pct": 50,
+            "calidad_reclutamiento_90_pct": 100, "ausentismo_pct": 0}
+    f0 = dinamica_staff(staff_con_defaults({**base, "dias_capacitacion": 0}), 3, 23, [1900] * 3, 95, 18)
+    assert f0[0]["ventas_nuevos"] == 100 and f0[0]["venta_por_nuevo"] == 10            # 10 nuevos × 10 (tope)
+    assert f0[1]["ventas_nuevos"] == 10 * 18 + 10 * 10                                 # la 1ª cohorte ya vende 18
+    f10 = dinamica_staff(staff_con_defaults({**base, "dias_capacitacion": 10}), 2, 23, [1900] * 2, 95, 18)
+    assert abs(f10[0]["ventas_nuevos"] - 10 * 10 * 13 / 23) < 0.1                      # 13 días vendiendo, al tope
+    assert abs(f10[1]["ventas_nuevos"] - (10 * (10 * 10 + 13 * 18) / 23 + 10 * 10 * 13 / 23)) < 0.2
+    sin_tope = dinamica_staff(staff_con_defaults({**base, "dias_capacitacion": 0, "tope_ventas_nuevo": 0}), 1, 23, [1900], 95, 18)
+    assert sin_tope[0]["ventas_nuevos"] == 180
+    # sensibilidad: más días de capacitación → más costo de capacitación
+    params = {"objetivo_co": 1900, "costos": {"ventas_por_vendedor": 20}}
+    r = simular_staff(params, PLAN, 12, gpon={"activo": False}, staff={}, con_sensibilidad=True)
+    sens = {x["dias"]: x for x in r["sensibilidad_dias"]}
+    assert sens[30]["costo_capacitacion"] > sens[10]["costo_capacitacion"] > sens[0]["costo_capacitacion"] == 0
+    assert sens[0]["ventas"] >= sens[10]["ventas"] >= sens[30]["ventas"]
+    assert any(x["actual"] for x in r["sensibilidad_dias"])
+    assert r["anual"]["margen_final_pct"] is not None
